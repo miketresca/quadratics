@@ -37,7 +37,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             data: {session}
           } = await supabase.auth.getSession();
           if (!session?.access_token) {
-            throw new Error("Your session expired. Sign in again.");
+            throw new Error("Sign in to run an equation.");
           }
           accessToken = session.access_token;
         }
@@ -69,11 +69,28 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       <div className="mx-auto w-full max-w-3xl rounded-md border border-zinc-800/90 bg-[#080c12]/90 p-4 shadow-2xl shadow-black/40 backdrop-blur sm:p-5">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div className="font-mono text-sm text-emerald-300">quadratic_input</div>
-          <div className="hidden font-mono text-xs text-zinc-600 sm:block">sympy {"->"} script</div>
+          <div className="group relative">
+            <button
+              aria-describedby="avatar-api-key-help"
+              aria-label="AI avatar setup information"
+              className="flex h-7 w-7 items-center justify-center rounded border border-zinc-800 bg-zinc-950/50 text-zinc-500 transition hover:border-emerald-400/60 hover:text-emerald-300"
+              type="button"
+            >
+              <InfoIcon />
+            </button>
+            <div
+              className="pointer-events-none absolute right-0 top-9 z-20 hidden w-72 rounded-md border border-zinc-700 bg-[#101621] p-3 text-sm leading-6 text-zinc-200 shadow-2xl shadow-black/50 group-hover:block"
+              id="avatar-api-key-help"
+              role="tooltip"
+            >
+              For AI avatar generations, add your HeyGen API key from the account menu. Open your profile in the top right,
+              choose API keys, then paste the key from your HeyGen dashboard.
+            </div>
+          </div>
         </div>
 
         <form action={onSubmit} className="grid gap-4">
-          <div className="flex min-h-16 items-center rounded-md border border-zinc-700/90 bg-[#101621] focus-within:border-emerald-400/80">
+          <div className="flex min-h-16 items-center rounded-md border border-zinc-700/90 bg-[#101621]">
             <label className="sr-only" htmlFor="equation">
               Equation
             </label>
@@ -95,7 +112,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             <span className="mr-1 uppercase tracking-wide">try</span>
             {sampleEquations.map((sample) => (
               <button
-                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-left text-zinc-300 hover:border-sky-400/70 hover:text-white"
+                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-left text-zinc-300 hover:border-emerald-400/70 hover:text-emerald-300"
                 disabled={disabled}
                 key={sample}
                 onClick={() => setEquationValue(sample)}
@@ -107,7 +124,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           </div>
 
           <div className="flex flex-col gap-3 rounded-md border border-zinc-800 bg-zinc-950/25 p-2 sm:flex-row sm:items-center">
-            <label className="flex min-h-11 flex-1 items-center gap-3 rounded-md border border-transparent px-3 text-sm text-zinc-500 focus-within:border-emerald-400/70">
+            <label className="flex min-h-11 flex-1 items-center gap-3 rounded-md border border-transparent px-3 text-sm text-zinc-500">
               <span className="font-mono text-xs uppercase tracking-wide">Instructor</span>
               <select className="min-w-0 flex-1 bg-transparent text-zinc-100 outline-none" name="instructorId" defaultValue="male">
                 {instructors.map((instructor) => (
@@ -125,7 +142,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                 <label className="cursor-pointer overflow-hidden rounded-md">
                   <input className="peer sr-only" name="outputMode" type="radio" value="video_audio" defaultChecked />
                   <span className="flex h-8 items-center justify-center border border-zinc-800 bg-zinc-950/50 px-2 text-zinc-400 transition peer-checked:text-emerald-300">
-                    Video + audio
+                    AI Avatar
                   </span>
                 </label>
                 <label className="cursor-pointer overflow-hidden rounded-md">
@@ -157,5 +174,15 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       ) : null}
       {lesson ? <LessonResult lesson={lesson} script={script} /> : null}
     </div>
+  );
+}
+
+function InfoIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 10.5v5" strokeLinecap="round" />
+      <path d="M12 7.5h.01" strokeLinecap="round" />
+    </svg>
   );
 }

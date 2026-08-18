@@ -1,4 +1,3 @@
-import {redirect} from "next/navigation";
 import type {CurrentUser} from "@quadratics/types";
 
 import {signOut} from "@/app/auth/actions";
@@ -10,6 +9,14 @@ import {createClient} from "@/lib/supabase/server";
 export default async function AppPage() {
   const accessToken = devAuthBypass ? "dev" : null;
   let sessionToken = accessToken;
+  let sessionUserFallback: CurrentUser | null = devAuthBypass
+    ? {
+        id: "00000000-0000-0000-0000-000000000001",
+        email: "dev@example.com",
+        displayName: null,
+        creditBalance: 0
+      }
+    : null;
 
   if (!devAuthBypass) {
     const supabase = await createClient();
@@ -17,21 +24,20 @@ export default async function AppPage() {
       data: {session}
     } = await supabase.auth.getSession();
 
-    if (!session?.access_token) {
-      redirect("/login");
-    }
-
-    sessionToken = session.access_token;
+    sessionToken = session?.access_token ?? null;
+    sessionUserFallback = session?.user
+      ? {
+          id: session.user.id,
+          email: session.user.email ?? "user@example.com",
+          displayName: null,
+          creditBalance: 0
+        }
+      : null;
   }
 
   const user =
     sessionToken !== null
-      ? await getMe(sessionToken).catch(() => ({
-          id: "00000000-0000-0000-0000-000000000001",
-          email: "dev@example.com",
-          displayName: null,
-          creditBalance: 0
-        }))
+      ? await getMe(sessionToken).catch(() => sessionUserFallback)
       : null;
 
   return (
@@ -41,14 +47,14 @@ export default async function AppPage() {
         <div className="flex items-center gap-2">
           <a
             aria-label="Open quadratics GitHub repository"
-            className="flex h-10 w-10 items-center justify-center rounded border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-sky-400/70 hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-emerald-400/70 hover:text-emerald-300"
             href="https://github.com/miketresca/quadratics"
             rel="noreferrer"
             target="_blank"
           >
             <GithubIcon />
           </a>
-          <AccountMenu canSignOut={!devAuthBypass} user={user} />
+          <AccountMenu isDevBypass={devAuthBypass} user={user} />
         </div>
       </header>
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-4 py-24 sm:px-6">
@@ -58,12 +64,13 @@ export default async function AppPage() {
   );
 }
 
-function AccountMenu({canSignOut, user}: {canSignOut: boolean; user: CurrentUser | null}) {
+function AccountMenu({isDevBypass, user}: {isDevBypass: boolean; user: CurrentUser | null}) {
   const label = accountLabel(user);
+  const canSignOut = !isDevBypass && user !== null;
 
   return (
     <details className="group relative">
-      <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-200 hover:border-sky-400/70 hover:text-white [&::-webkit-details-marker]:hidden">
+      <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-200 hover:border-emerald-400/70 hover:text-emerald-300 [&::-webkit-details-marker]:hidden">
         <span className="max-w-36 truncate">{label}</span>
         <span className="text-zinc-500 transition group-open:rotate-180">⌄</span>
       </summary>
@@ -87,9 +94,15 @@ function AccountMenu({canSignOut, user}: {canSignOut: boolean; user: CurrentUser
               Sign out
             </button>
           </form>
-        ) : (
+        ) : isDevBypass ? (
           <div className="mt-2 border-t border-zinc-800 px-2 pt-3 font-mono text-xs text-emerald-300">
             local_auth_bypass
+          </div>
+        ) : (
+          <div className="mt-2 border-t border-zinc-800 pt-2">
+            <a className="block rounded px-2 py-2 text-sm text-zinc-200 hover:bg-zinc-900" href="/login">
+              Sign in to run equations
+            </a>
           </div>
         )}
       </div>
@@ -104,7 +117,7 @@ function accountLabel(user: CurrentUser | null) {
   if (user?.email) {
     return user.email.split("@")[0];
   }
-  return "Account";
+  return "Sign in";
 }
 
 function GithubIcon() {
