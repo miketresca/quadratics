@@ -1,16 +1,20 @@
 "use client";
 
-import type {Lesson, LessonScript} from "@quadratics/types";
+import type {Lesson, LessonNarration, LessonScript} from "@quadratics/types";
 import {useState} from "react";
 
 import {flattenLessonMathLines} from "@/lib/lesson-view";
 
 export function LessonResult({
   lesson,
+  narration,
+  narrationLoading = false,
   script,
   scriptLoading = false
 }: {
   lesson: Lesson | null;
+  narration?: LessonNarration;
+  narrationLoading?: boolean;
   script?: LessonScript;
   scriptLoading?: boolean;
 }) {
@@ -64,6 +68,12 @@ export function LessonResult({
             <ScriptLog script={script} />
           ) : scriptLoading ? (
             <PendingLog accent="sky" className="mt-6" title="teacher_script" />
+          ) : null}
+
+          {narration ? (
+            <NarrationLog narration={narration} />
+          ) : narrationLoading ? (
+            <PendingLog accent="fuchsia" className="mt-6" title="elevenlabs_audio" />
           ) : null}
         </>
       )}
@@ -143,17 +153,51 @@ function ScriptLog({script}: {script: LessonScript}) {
   );
 }
 
+function NarrationLog({narration}: {narration: LessonNarration}) {
+  return (
+    <div className="mt-6 rounded border border-fuchsia-400/35 bg-fuchsia-950/10 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <h3 className="font-mono text-sm uppercase tracking-wide text-fuchsia-300">elevenlabs_audio</h3>
+        <span className="font-mono text-xs text-zinc-500">
+          {narration.status}
+          {narration.durationSeconds ? ` / ${Math.round(narration.durationSeconds)}s` : ""}
+        </span>
+      </div>
+      {narration.status === "completed" && narration.audioBase64 ? (
+        <div className="mt-4 grid gap-3">
+          <audio className="w-full" controls src={`data:${narration.audioMimeType ?? "audio/mpeg"};base64,${narration.audioBase64}`}>
+            <track kind="captions" />
+          </audio>
+          <p className="break-words font-mono text-xs text-zinc-500">
+            voice: {narration.voiceId ?? "unknown"} / timing chars:{" "}
+            {narration.normalizedAlignment?.characters.length ?? narration.alignment?.characters.length ?? 0}
+          </p>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-300">
+          {narration.unsupportedReason ?? "Audio generation is not available for this script."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function PendingLog({
   accent = "zinc",
   className = "",
   title
 }: {
-  accent?: "sky" | "zinc";
+  accent?: "fuchsia" | "sky" | "zinc";
   className?: string;
   title: string;
 }) {
-  const titleColor = accent === "sky" ? "text-sky-300" : "text-zinc-100";
-  const borderColor = accent === "sky" ? "border-sky-400/35 bg-sky-950/10" : "border-zinc-700/80 bg-zinc-950/55";
+  const titleColor = accent === "sky" ? "text-sky-300" : accent === "fuchsia" ? "text-fuchsia-300" : "text-zinc-100";
+  const borderColor =
+    accent === "sky"
+      ? "border-sky-400/35 bg-sky-950/10"
+      : accent === "fuchsia"
+        ? "border-fuchsia-400/35 bg-fuchsia-950/10"
+        : "border-zinc-700/80 bg-zinc-950/55";
 
   return (
     <div className={`${className} rounded border ${borderColor} p-4 backdrop-blur`}>

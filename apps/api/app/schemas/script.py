@@ -4,6 +4,7 @@ from pydantic import Field, field_validator, model_validator
 
 from app.schemas.common import ApiModel
 from app.schemas.lesson import LessonResponse, SolutionMethod
+from app.schemas.narration import LessonNarration
 
 ScriptStatus = Literal["completed", "unsupported", "failed"]
 OutputMode = Literal["video_audio", "audio"]
@@ -54,3 +55,13 @@ class ScriptEquationRequest(ApiModel):
 class ScriptEquationResponse(ApiModel):
     lesson: LessonResponse
     script: LessonScript
+
+
+class NarrationEquationRequest(ApiModel):
+    script: LessonScript
+    instructor_id: str | None = None
+    output_mode: OutputMode = "audio"
+
+
+class NarrationEquationResponse(ApiModel):
+    narration: LessonNarration

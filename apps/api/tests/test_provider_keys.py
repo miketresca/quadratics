@@ -1,6 +1,7 @@
 import pytest
 from cryptography.fernet import Fernet
 
+from app.core.config import Settings, get_settings
 from app.services.provider_keys.crypto import ProviderKeyCipher, key_hint
 
 
@@ -25,7 +26,15 @@ async def test_provider_keys_reject_unauthenticated(client):
 
 
 @pytest.mark.asyncio
-async def test_provider_keys_require_storage_configuration(authenticated_client):
-    response = await authenticated_client.get("/api/v1/provider-keys")
+async def test_provider_keys_require_storage_configuration(app, authenticated_client):
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        supabase_url="",
+        supabase_service_role_key="",
+        provider_keys_encryption_key="",
+    )
+    try:
+        response = await authenticated_client.get("/api/v1/provider-keys")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 503

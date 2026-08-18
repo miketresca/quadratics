@@ -35,12 +35,15 @@ SCRIPT_GENERATION_ENABLED=true
 SCRIPT_WORD_BUDGET=150
 ```
 
-Script generation is narration text only. It does not call ElevenLabs, HeyGen, or Motion Canvas.
+Script generation is narration text only. Audio-only output then prepares that script for ElevenLabs and requests MP3 audio with character timing metadata.
 
-ElevenLabs will use the platform API key from the API service environment:
+ElevenLabs uses the platform API key and per-instructor voice IDs from the API service environment:
 
 ```env
 ELEVENLABS_API_KEY=
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_MALE_VOICE_ID=
+ELEVENLABS_FEMALE_VOICE_ID=
 ```
 
 HeyGen keys are user-provided through the account menu API key modal. They are encrypted server-side and stored in Supabase. Set this Railway API environment variable before enabling saves:

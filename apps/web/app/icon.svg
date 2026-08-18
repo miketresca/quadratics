@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="8" fill="#07090d"/>
+  <g fill="#6ee7b7" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace" font-size="28" font-weight="600">
+    <text x="12" y="43">.</text>
+    <text x="29" y="43">x</text>
+    <text x="12" y="23">y</text>
+    <text x="29" y="23">z</text>
+  </g>
+</svg>

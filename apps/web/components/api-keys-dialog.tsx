@@ -77,7 +77,15 @@ export function ApiKeysDialog() {
         API keys
       </button>
       {open ? (
-        <div className="fixed inset-0 z-50 bg-black/50 px-4 py-20 backdrop-blur-sm" role="presentation">
+        <div
+          className="fixed inset-0 z-50 bg-black/50 px-4 py-20 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setOpen(false);
+            }
+          }}
+          role="presentation"
+        >
           <section
             aria-modal="true"
             className="ml-auto w-full max-w-xl rounded-md border border-zinc-800 bg-[#090d13] p-4 shadow-2xl shadow-black/70"

@@ -3,7 +3,9 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.routes import equations
 from app.core.config import Settings, get_settings
+from app.schemas.narration import AudioAlignment
 from app.schemas.script import LessonScript, ScriptSegment
+from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
 from app.services.scripts.base import ScriptGenerationRequest, ScriptProvider
 
 
@@ -52,6 +54,26 @@ class RecordingScriptProvider(ScriptProvider):
                 ),
             ],
             provider_metadata={"provider": "recording-test"},
+        )
+
+
+class RecordingNarrationProvider(NarrationProvider):
+    def __init__(self) -> None:
+        self.requests: list[NarrationRequest] = []
+
+    async def generate(self, request: NarrationRequest) -> NarrationResult:
+        self.requests.append(request)
+        return NarrationResult(
+            provider="elevenlabs",
+            audio_base64="ZmFrZS1tcDM=",
+            audio_mime_type="audio/mpeg",
+            duration_seconds=3.2,
+            normalized_alignment=AudioAlignment(
+                characters=["H", "i"],
+                character_start_times_seconds=[0, 0.2],
+                character_end_times_seconds=[0.2, 0.4],
+            ),
+            provider_metadata={"model": "eleven_multilingual_v2"},
         )
 
 
@@ -120,6 +142,82 @@ async def test_script_endpoint_can_use_injected_provider_when_generation_is_enab
     assert provider.requests
     assert provider.requests[0].lesson["steps"][0]["id"] == "factor"
     assert provider.requests[0].output_mode == "audio"
+
+
+@pytest.mark.asyncio
+async def test_narration_endpoint_generates_audio_for_completed_audio_script(
+    app,
+    authenticated_client,
+    monkeypatch,
+):
+    provider = RecordingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
+
+    script = RecordingScriptProvider()
+    completed_script = await script.generate_lesson_script(
+        ScriptGenerationRequest(
+            lesson={},
+            instructor_id="male",
+            output_mode="audio",
+            prompt="",
+            word_budget=150,
+        )
+    )
+
+    try:
+        response = await authenticated_client.post(
+            "/api/v1/equations/narration",
+            json={
+                "script": completed_script.model_dump(mode="json", by_alias=True),
+                "instructorId": "male",
+                "outputMode": "audio",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["narration"]["status"] == "completed"
+    assert body["narration"]["audioBase64"] == "ZmFrZS1tcDM="
+    assert body["narration"]["voiceId"] == "male-voice"
+    assert 'break time="0.7s"' in provider.requests[0].text
+
+
+@pytest.mark.asyncio
+async def test_narration_endpoint_returns_unsupported_without_voice_id(app, authenticated_client):
+    script = RecordingScriptProvider()
+    completed_script = await script.generate_lesson_script(
+        ScriptGenerationRequest(
+            lesson={},
+            instructor_id="male",
+            output_mode="audio",
+            prompt="",
+            word_budget=150,
+        )
+    )
+
+    app.dependency_overrides[get_settings] = lambda: Settings(elevenlabs_api_key="test-key")
+    try:
+        response = await authenticated_client.post(
+            "/api/v1/equations/narration",
+            json={
+                "script": completed_script.model_dump(mode="json", by_alias=True),
+                "instructorId": "male",
+                "outputMode": "audio",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["narration"]["status"] == "unsupported"
+    assert "voice is not configured" in body["narration"]["unsupportedReason"]
 
 
 @pytest.mark.asyncio

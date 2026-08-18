@@ -1,4 +1,5 @@
 import type {Lesson, SolutionMethod} from "./lesson";
+import type {LessonNarration} from "./narration";
 
 export type ScriptStatus = "completed" | "unsupported" | "failed";
 export type OutputMode = "video_audio" | "audio";
@@ -33,4 +34,14 @@ export interface ScriptEquationRequest {
 export interface ScriptEquationResponse {
   lesson: Lesson;
   script: LessonScript;
+}
+
+export interface NarrationEquationRequest {
+  script: LessonScript;
+  instructorId?: string | null;
+  outputMode?: OutputMode;
+}
+
+export interface NarrationEquationResponse {
+  narration: LessonNarration;
 }

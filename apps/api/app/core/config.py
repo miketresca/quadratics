@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     script_generation_enabled: bool = False
     script_word_budget: int = 150
     provider_keys_encryption_key: str = ""
+    elevenlabs_api_key: str = ""
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_male_voice_id: str = ""
+    elevenlabs_female_voice_id: str = ""
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

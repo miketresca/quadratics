@@ -3,6 +3,7 @@ import type {CurrentUser} from "@quadratics/types";
 import {signIn, signOut} from "@/app/auth/actions";
 import {ApiKeysDialog} from "@/components/api-keys-dialog";
 import {EquationForm} from "@/components/equation-form";
+import {OutsideCloseDetails} from "@/components/outside-close-details";
 import {getMe} from "@/lib/api";
 import {createClient} from "@/lib/supabase/server";
 
@@ -75,7 +76,7 @@ function AccountMenu({
   const canSignOut = user !== null;
 
   return (
-    <details className="group relative" open={loginError !== null}>
+    <OutsideCloseDetails className="group relative" initialOpen={loginError !== null}>
       <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-200 hover:border-emerald-400/70 hover:text-emerald-300 [&::-webkit-details-marker]:hidden">
         <span className="max-w-36 truncate">{label}</span>
         <span className="text-zinc-500 transition group-open:rotate-180">⌄</span>
@@ -89,9 +90,6 @@ function AccountMenu({
         </div>
         {user !== null ? (
           <>
-            <button className="mt-2 w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
-              Profile settings
-            </button>
             <ApiKeysDialog />
             <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
               Usage
@@ -138,7 +136,7 @@ function AccountMenu({
           </form>
         )}
       </div>
-    </details>
+    </OutsideCloseDetails>
   );
 }
 
