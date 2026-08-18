@@ -29,7 +29,7 @@ def _payload_to_user(payload: dict[str, Any]) -> AuthenticatedUser:
 
 
 async def verify_supabase_token(token: str, settings: Settings) -> AuthenticatedUser:
-    if settings.dev_auth_bypass and token == "dev":
+    if _dev_auth_bypass_enabled(settings) and token == "dev":
         return AuthenticatedUser(id=settings.dev_auth_user_id, email=settings.dev_auth_email)
 
     if settings.supabase_jwks_url:
@@ -68,6 +68,11 @@ async def verify_supabase_token(token: str, settings: Settings) -> Authenticated
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Supabase JWT verification is not configured",
     )
+
+
+def _dev_auth_bypass_enabled(settings: Settings) -> bool:
+    local_environments = {"dev", "development", "local", "test"}
+    return settings.dev_auth_bypass and settings.app_environment.lower() in local_environments
 
 
 async def _get_signing_key(jwk_client: PyJWKClient, token: str) -> Any:

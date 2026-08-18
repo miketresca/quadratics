@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "dev": "turbo dev",
+    "dev": "turbo dev --filter=@quadratics/api --filter=@quadratics/web --filter=@quadratics/video --only",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",

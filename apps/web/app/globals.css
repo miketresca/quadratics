@@ -21,3 +21,19 @@ input,
 select {
   font: inherit;
 }
+
+math-field.math-equation-input {
+  --caret-color: #34d399;
+  --contains-highlight-background-color: rgba(52, 211, 153, 0.18);
+  --selection-background-color: rgba(52, 211, 153, 0.28);
+  min-height: 4rem;
+}
+
+math-field.math-equation-input::part(menu-toggle),
+math-field.math-equation-input::part(virtual-keyboard-toggle) {
+  display: none;
+}
+
+math-field.math-equation-input::part(placeholder) {
+  color: #71717a;
+}

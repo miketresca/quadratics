@@ -1,6 +1,10 @@
 import type {Lesson} from "@quadratics/types";
 
+import {flattenLessonMathLines} from "@/lib/lesson-view";
+
 export function LessonResult({lesson}: {lesson: Lesson}) {
+  const solutionLines = flattenLessonMathLines(lesson);
+
   return (
     <section className="mx-auto mt-6 max-w-3xl" aria-live="polite">
       <div className="rounded border border-zinc-700/80 bg-zinc-950/55 p-4 backdrop-blur">
@@ -35,19 +39,18 @@ export function LessonResult({lesson}: {lesson: Lesson}) {
         ) : null}
       </div>
 
-      {lesson.steps.length > 0 ? (
-        <ol className="mt-6 grid gap-4">
-          {lesson.steps.map((step) => (
-            <li key={step.id} className="rounded border border-zinc-700/80 bg-zinc-950/45 p-4">
-              <h3 className="font-medium text-zinc-100">{step.title}</h3>
-              <ul className="mt-3 grid gap-2 font-mono text-sm text-zinc-300">
-                {step.mathLines.map((line) => (
-                  <li key={line.id}>{line.expression}</li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ol>
+      {solutionLines.length > 0 ? (
+        <div className="mt-6 rounded border border-emerald-400/35 bg-emerald-950/10 p-4">
+          <h3 className="font-mono text-sm uppercase tracking-wide text-emerald-300">solution_lines</h3>
+          <ol className="mt-4 grid gap-2 font-mono text-sm text-zinc-100">
+            {solutionLines.map((line, index) => (
+              <li className="flex gap-3" key={`${line.id}-${index}`}>
+                <span className="select-none text-zinc-500">{index + 1}</span>
+                <span>{line.expression}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       ) : null}
     </section>
   );

@@ -28,6 +28,7 @@
       "stepType": "solve_factors",
       "mathLines": [
         {"id": "first_factor", "expression": "2*x - 1 = 0", "latex": "2 x - 1 = 0"},
+        {"id": "first_isolate_x_term", "expression": "2*x = 1", "latex": "2 x = 1"},
         {"id": "first_solution", "expression": "x = 1/2", "latex": "x = \\frac{1}{2}"},
         {"id": "second_factor", "expression": "x - 3 = 0", "latex": "x - 3 = 0"},
         {"id": "second_solution", "expression": "x = 3", "latex": "x = 3"}

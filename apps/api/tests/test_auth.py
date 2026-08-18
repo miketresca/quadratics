@@ -37,9 +37,19 @@ async def test_dev_token_requires_explicit_bypass():
 
 @pytest.mark.asyncio
 async def test_dev_auth_bypass_accepts_dev_token():
-    settings = Settings(dev_auth_bypass=True)
+    settings = Settings(app_environment="development", dev_auth_bypass=True)
 
     user = await verify_supabase_token("dev", settings)
 
     assert user.id == "00000000-0000-0000-0000-000000000001"
     assert user.email == "dev@example.com"
+
+
+@pytest.mark.asyncio
+async def test_dev_auth_bypass_rejects_dev_token_in_production():
+    settings = Settings(app_environment="production", dev_auth_bypass=True)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_supabase_token("dev", settings)
+
+    assert exc_info.value.status_code == 401

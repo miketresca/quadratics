@@ -29,7 +29,10 @@ NEXT_PUBLIC_DEV_AUTH_BYPASS=true
 DEV_AUTH_BYPASS=true
 ```
 
-Then run the API and web app. The web app uses `Bearer dev`, and the API accepts it only when `DEV_AUTH_BYPASS=true`.
+Then run the API and web app with `pnpm dev`. The web app uses `Bearer dev`, and the API accepts it only when `DEV_AUTH_BYPASS=true` in a local development environment.
+Keep `DEV_AUTH_BYPASS=false` outside local development; production-mode API requests using `Bearer dev` must be rejected.
+
+The API must be running for equation submission to work. If only the web app is running, the composer will render but submit will show a fetch failure.
 
 ## Commands
 

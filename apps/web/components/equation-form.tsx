@@ -6,6 +6,7 @@ import {useRef, useState, useTransition} from "react";
 
 import {CreditBalance} from "@/components/credit-balance";
 import {LessonResult} from "@/components/lesson-result";
+import {MathEquationInput} from "@/components/math-equation-input";
 import {getMe, solveEquation} from "@/lib/api";
 import {devAuthBypass} from "@/lib/env";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
@@ -14,6 +15,7 @@ import {createClient} from "@/lib/supabase/client";
 export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
   const [user, setUser] = useState(initialUser);
   const [viewState, setViewState] = useState<SolveViewState>({kind: "idle"});
+  const [equationValue, setEquationValue] = useState("");
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -30,6 +32,9 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
       const equation = String(formData.get("equation") ?? "");
       const instructorId = String(formData.get("instructorId") ?? "male");
       setViewState({kind: "submitting"});
+      if (process.env.NODE_ENV === "development" || devAuthBypass) {
+        console.info("[quadratics] submitting equation", {equation, instructorId});
+      }
 
       try {
         let accessToken = "dev";
@@ -44,6 +49,14 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
           accessToken = session.access_token;
         }
         const lesson = await solveEquation({accessToken, equation, instructorId});
+        if (process.env.NODE_ENV === "development" || devAuthBypass) {
+          const lineCount = lesson.steps.reduce((count, step) => count + step.mathLines.length, 0);
+          console.info("[quadratics] received lesson", {
+            status: lesson.status,
+            method: lesson.method,
+            lineCount
+          });
+        }
         setViewState(stateForLesson(lesson as Lesson));
         await refreshUser(accessToken);
       } catch (error) {
@@ -69,13 +82,10 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
             <label className="sr-only" htmlFor="equation">
               Equation
             </label>
-            <input
-              className="min-w-0 flex-1 bg-transparent px-4 py-4 font-mono text-lg text-zinc-100 outline-none placeholder:text-zinc-500 sm:px-5 sm:text-xl"
-              id="equation"
-              name="equation"
-              placeholder="2*x^2 - 7*x + 3 = 0"
-              defaultValue="2*x^2 - 7*x + 3 = 0"
-              required
+            <MathEquationInput
+              disabled={disabled}
+              value={equationValue}
+              onEquationChange={(visibleValue) => setEquationValue(visibleValue)}
             />
             <button
               className="mr-2 flex h-11 w-11 items-center justify-center rounded border border-zinc-700 bg-zinc-900 text-xl text-zinc-200 hover:border-emerald-400 hover:text-white disabled:opacity-50"
@@ -112,7 +122,10 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
               className="h-12 rounded border border-zinc-700 px-4 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-50"
               type="reset"
               disabled={disabled}
-              onClick={() => setViewState({kind: "idle"})}
+              onClick={() => {
+                setEquationValue("");
+                setViewState({kind: "idle"});
+              }}
             >
               Reset
             </button>

@@ -1,0 +1,12 @@
+{
+  "name": "@quadratics/api",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "uv run --project . python -m py_compile app/main.py",
+    "dev": "uv run --project . uvicorn app.main:app --reload --app-dir . --host 127.0.0.1 --port 8000",
+    "lint": "uv run --project . ruff check",
+    "typecheck": "uv run --project . python -m py_compile app/main.py",
+    "test": "uv run --project . pytest"
+  }
+}
