@@ -47,14 +47,23 @@ SCRIPT_WORD_BUDGET=150
 
 Script generation is narration text only. It does not call ElevenLabs, HeyGen, or Motion Canvas.
 
-ElevenLabs and HeyGen provider keys are not consumed yet. Set future production keys on the API service, not in browser storage:
+ElevenLabs will use the platform API key from the API service environment:
 
 ```env
 ELEVENLABS_API_KEY=
-HEYGEN_API_KEY=
 ```
 
-The account menu includes an API key modal as a UI placeholder. It is intentionally not connected to persistence until encrypted server-side storage exists.
+HeyGen keys are user-provided through the account menu API key modal. They are encrypted server-side and stored in Supabase. Set this Railway API environment variable before enabling saves:
+
+```env
+PROVIDER_KEYS_ENCRYPTION_KEY=
+```
+
+Generate the value with:
+
+```sh
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
 ## Commands
 

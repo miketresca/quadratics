@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import equations, health, users
+from app.api.routes import equations, health, provider_keys, users
 from app.core.config import get_settings
 
 
@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(users.router, prefix="/api/v1")
+    app.include_router(provider_keys.router, prefix="/api/v1")
     app.include_router(equations.router, prefix="/api/v1")
     return app
 

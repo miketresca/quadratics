@@ -1,3 +1,4 @@
+cryptography>=44.0,<47.0
 fastapi>=0.116,<1.0
 httpx>=0.28,<1.0
 openai>=2.0,<3.0

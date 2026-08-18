@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     openai_script_model: str = "gpt-5-mini"
     script_generation_enabled: bool = False
     script_word_budget: int = 150
+    provider_keys_encryption_key: str = ""
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
@@ -40,7 +41,11 @@ class Settings(BaseSettings):
             if not isinstance(parsed, list):
                 raise ValueError("ALLOWED_ORIGINS JSON must be a list")
             return parsed
-        return [_strip_wrapping_quotes(origin.strip()) for origin in stripped.split(",") if origin.strip()]
+        return [
+            _strip_wrapping_quotes(origin.strip())
+            for origin in stripped.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache
