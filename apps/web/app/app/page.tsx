@@ -4,7 +4,6 @@ import {signIn, signOut} from "@/app/auth/actions";
 import {ApiKeysDialog} from "@/components/api-keys-dialog";
 import {EquationForm} from "@/components/equation-form";
 import {getMe} from "@/lib/api";
-import {devAuthBypass} from "@/lib/env";
 import {createClient} from "@/lib/supabase/server";
 
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -16,18 +15,10 @@ export default async function AppPage({
 }) {
   const params = await searchParams;
   const loginError = params.auth_error === "invalid_credentials" ? "Username or password was not accepted." : null;
-  const accessToken = devAuthBypass ? "dev" : null;
-  let sessionToken = accessToken;
-  let sessionUserFallback: CurrentUser | null = devAuthBypass
-    ? {
-        id: "00000000-0000-0000-0000-000000000001",
-        email: "dev@example.com",
-        displayName: null,
-        creditBalance: 0
-      }
-    : null;
+  let sessionToken: string | null = null;
+  let sessionUserFallback: CurrentUser | null = null;
 
-  if (!devAuthBypass && supabaseConfigured) {
+  if (supabaseConfigured) {
     const supabase = await createClient();
     const {
       data: {session}
@@ -63,7 +54,7 @@ export default async function AppPage({
           >
             <GithubIcon />
           </a>
-          <AccountMenu isDevBypass={devAuthBypass} loginError={loginError} user={user} />
+          <AccountMenu loginError={loginError} user={user} />
         </div>
       </header>
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-start justify-center px-4 pb-24 pt-32 sm:px-6 sm:pt-36">
@@ -74,16 +65,14 @@ export default async function AppPage({
 }
 
 function AccountMenu({
-  isDevBypass,
   loginError,
   user
 }: {
-  isDevBypass: boolean;
   loginError: string | null;
   user: CurrentUser | null;
 }) {
   const label = accountLabel(user);
-  const canSignOut = !isDevBypass && user !== null;
+  const canSignOut = user !== null;
 
   return (
     <details className="group relative" open={loginError !== null}>
@@ -98,7 +87,7 @@ function AccountMenu({
             {user ? "authenticated session" : "Authentication required to submit"}
           </div>
         </div>
-        {user !== null || isDevBypass ? (
+        {user !== null ? (
           <>
             <button className="mt-2 w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
               Profile settings
@@ -115,10 +104,6 @@ function AccountMenu({
               Sign out
             </button>
           </form>
-        ) : isDevBypass ? (
-          <div className="mt-2 border-t border-zinc-800 px-2 pt-3 font-mono text-xs text-emerald-300">
-            local_auth_bypass
-          </div>
         ) : (
           <form action={signIn} className="grid gap-3 pt-3">
             <label className="grid gap-1.5">

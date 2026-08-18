@@ -4,7 +4,6 @@ import type {ProviderKeyMetadata} from "@quadratics/types";
 import {useState, useTransition} from "react";
 
 import {deleteProviderKey, listProviderKeys, saveProviderKey} from "@/lib/api";
-import {devAuthBypass} from "@/lib/env";
 import {createClient} from "@/lib/supabase/client";
 
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -163,9 +162,6 @@ export function ApiKeysDialog() {
 }
 
 async function getAccessToken() {
-  if (devAuthBypass) {
-    return "dev";
-  }
   if (!supabaseConfigured) {
     throw new Error("Sign in to manage API keys.");
   }

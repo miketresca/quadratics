@@ -154,20 +154,13 @@ async def test_script_endpoint_rejects_unauthenticated_requests(client):
 
 
 @pytest.mark.asyncio
-async def test_script_endpoint_rejects_dev_token_without_local_environment(app):
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        dev_auth_bypass=True,
-        app_environment="production",
-    )
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post(
-                "/api/v1/equations/script",
-                headers={"Authorization": "Bearer dev"},
-                json={"equation": "2*x^2 - 7*x + 3"},
-            )
-    finally:
-        app.dependency_overrides.pop(get_settings, None)
+async def test_script_endpoint_rejects_dev_token(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/equations/script",
+            headers={"Authorization": "Bearer dev"},
+            json={"equation": "2*x^2 - 7*x + 3"},
+        )
 
     assert response.status_code == 401
 

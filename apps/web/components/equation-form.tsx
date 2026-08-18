@@ -7,7 +7,6 @@ import {useRef, useState, useTransition} from "react";
 import {LessonResult} from "@/components/lesson-result";
 import {MathEquationInput} from "@/components/math-equation-input";
 import {generateEquationScript, solveEquation} from "@/lib/api";
-import {devAuthBypass} from "@/lib/env";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
 import {createClient} from "@/lib/supabase/client";
 
@@ -26,28 +25,25 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       const instructorId = String(formData.get("instructorId") ?? "male");
       const outputMode = String(formData.get("outputMode") ?? "video_audio") as OutputMode;
       setViewState({kind: "submitting"});
-      if (process.env.NODE_ENV === "development" || devAuthBypass) {
+      if (process.env.NODE_ENV === "development") {
         console.info("[quadratics] submitting equation", {equation, instructorId, outputMode});
       }
 
       try {
-        let accessToken = "dev";
-        if (!devAuthBypass) {
-          if (!supabaseConfigured) {
-            throw new Error("Sign in to run an equation.");
-          }
-          const supabase = createClient();
-          const {
-            data: {session}
-          } = await supabase.auth.getSession();
-          if (!session?.access_token) {
-            throw new Error("Sign in to run an equation.");
-          }
-          accessToken = session.access_token;
+        if (!supabaseConfigured) {
+          throw new Error("Sign in to run an equation.");
         }
+        const supabase = createClient();
+        const {
+          data: {session}
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error("Sign in to run an equation.");
+        }
+        const accessToken = session.access_token;
         const lessonResponse = await solveEquation({accessToken, equation, instructorId});
         const lesson = lessonResponse as Lesson;
-        if (process.env.NODE_ENV === "development" || devAuthBypass) {
+        if (process.env.NODE_ENV === "development") {
           const lineCount = lesson.steps.reduce((count, step) => count + step.mathLines.length, 0);
           console.info("[quadratics] received lesson", {
             status: lesson.status,
@@ -59,12 +55,12 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
         try {
           const response = await generateEquationScript({accessToken, equation, instructorId, outputMode});
           const {lesson: scriptedLesson, script} = response;
-          if (process.env.NODE_ENV === "development" || devAuthBypass) {
+          if (process.env.NODE_ENV === "development") {
             console.info("[quadratics] received script", script);
           }
           setViewState(stateForLesson(scriptedLesson as Lesson, script));
         } catch (scriptError) {
-          if (process.env.NODE_ENV === "development" || devAuthBypass) {
+          if (process.env.NODE_ENV === "development") {
             console.error("[quadratics] script generation failed", scriptError);
           }
           setViewState(stateForLesson(lesson));

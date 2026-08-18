@@ -22,19 +22,9 @@ Quadratics is a scaffold for generating short educational videos that explain ho
 
 Copy `.env.example` and app-specific `.env.example` files to local `.env` files. Browser variables must use the `NEXT_PUBLIC_` prefix only when they are safe to expose.
 
-For local UI work before Supabase is configured, set:
-
-```env
-NEXT_PUBLIC_DEV_AUTH_BYPASS=true
-DEV_AUTH_BYPASS=true
-```
-
-Then run the API and web app with `pnpm dev`. The web app uses `Bearer dev`, and the API accepts it only when `DEV_AUTH_BYPASS=true` in a local development environment.
-Keep `DEV_AUTH_BYPASS=false` outside local development; production-mode API requests using `Bearer dev` must be rejected.
-
 The API must be running for equation submission to work. If only the web app is running, the composer will render but submit will show a fetch failure.
 
-The app shell at `/app` is public. Users must sign in only when they submit an equation. The login widget asks for a username and password; internally, the server action maps username `alice` to the Supabase Auth email `alice@quadratics.xyz`. To create a login manually in Supabase, create an email/password user with that internal email format and give the user only the username.
+The app shell at `/app` is public. Users must sign in with a real Supabase account before submitting an equation or managing API keys. The login widget asks for a username and password; internally, the server action maps username `alice` to the Supabase Auth email `alice@quadratics.xyz`. To create a login manually in Supabase, create an email/password user with that internal email format and give the user only the username.
 
 Script generation is disabled by default and falls back to a deterministic development script so local UI work does not require provider credentials. To use the OpenAI-backed script provider, set:
 

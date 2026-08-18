@@ -3,7 +3,7 @@ import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
 import {dirname, resolve} from "node:path";
 import {spawnSync} from "node:child_process";
 
-const SUPABASE_WORKDIR = "infra/supabase";
+const SUPABASE_WORKDIR = "infra";
 const TYPES_OUTPUT = "packages/types/src/supabase.ts";
 const command = process.argv[2];
 const environment = process.argv[3] ?? "";

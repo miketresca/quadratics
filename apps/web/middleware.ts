@@ -3,9 +3,6 @@ import {NextResponse, type NextRequest} from "next/server";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({request});
-  if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true") {
-    return response;
-  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
