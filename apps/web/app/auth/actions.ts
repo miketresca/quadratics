@@ -11,19 +11,7 @@ export async function signIn(formData: FormData) {
   const {error} = await supabase.auth.signInWithPassword({email, password});
 
   if (error) {
-    redirect("/login?error=invalid_credentials");
-  }
-  redirect("/app");
-}
-
-export async function signUpForLocalTesting(formData: FormData) {
-  const email = String(formData.get("email") ?? "");
-  const password = String(formData.get("password") ?? "");
-  const supabase = await createClient();
-  const {error} = await supabase.auth.signUp({email, password});
-
-  if (error) {
-    redirect("/login?error=signup_failed");
+    redirect("/app?auth_error=invalid_credentials");
   }
   redirect("/app");
 }
@@ -31,5 +19,5 @@ export async function signUpForLocalTesting(formData: FormData) {
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect("/login");
+  redirect("/app");
 }

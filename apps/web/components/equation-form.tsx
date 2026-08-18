@@ -12,6 +12,7 @@ import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
 import {createClient} from "@/lib/supabase/client";
 
 const sampleEquations = ["x^2 + 5x + 6", "2x^2 - 7x + 3", "x^2 - x"];
+const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentUser | null}) {
   const [viewState, setViewState] = useState<SolveViewState>({kind: "idle"});
@@ -32,6 +33,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       try {
         let accessToken = "dev";
         if (!devAuthBypass) {
+          if (!supabaseConfigured) {
+            throw new Error("Sign in to run an equation.");
+          }
           const supabase = createClient();
           const {
             data: {session}

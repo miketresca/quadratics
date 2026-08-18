@@ -1,12 +1,20 @@
 import type {CurrentUser} from "@quadratics/types";
 
-import {signOut} from "@/app/auth/actions";
+import {signIn, signOut} from "@/app/auth/actions";
 import {EquationForm} from "@/components/equation-form";
 import {getMe} from "@/lib/api";
 import {devAuthBypass} from "@/lib/env";
 import {createClient} from "@/lib/supabase/server";
 
-export default async function AppPage() {
+const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
+export default async function AppPage({
+  searchParams
+}: {
+  searchParams: Promise<{auth_error?: string}>;
+}) {
+  const params = await searchParams;
+  const loginError = params.auth_error === "invalid_credentials" ? "Username or password was not accepted." : null;
   const accessToken = devAuthBypass ? "dev" : null;
   let sessionToken = accessToken;
   let sessionUserFallback: CurrentUser | null = devAuthBypass
@@ -18,7 +26,7 @@ export default async function AppPage() {
       }
     : null;
 
-  if (!devAuthBypass) {
+  if (!devAuthBypass && supabaseConfigured) {
     const supabase = await createClient();
     const {
       data: {session}
@@ -54,7 +62,7 @@ export default async function AppPage() {
           >
             <GithubIcon />
           </a>
-          <AccountMenu isDevBypass={devAuthBypass} user={user} />
+          <AccountMenu isDevBypass={devAuthBypass} loginError={loginError} user={user} />
         </div>
       </header>
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-4 py-24 sm:px-6">
@@ -64,30 +72,42 @@ export default async function AppPage() {
   );
 }
 
-function AccountMenu({isDevBypass, user}: {isDevBypass: boolean; user: CurrentUser | null}) {
+function AccountMenu({
+  isDevBypass,
+  loginError,
+  user
+}: {
+  isDevBypass: boolean;
+  loginError: string | null;
+  user: CurrentUser | null;
+}) {
   const label = accountLabel(user);
   const canSignOut = !isDevBypass && user !== null;
 
   return (
-    <details className="group relative">
+    <details className="group relative" open={loginError !== null}>
       <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-200 hover:border-emerald-400/70 hover:text-emerald-300 [&::-webkit-details-marker]:hidden">
         <span className="max-w-36 truncate">{label}</span>
         <span className="text-zinc-500 transition group-open:rotate-180">⌄</span>
       </summary>
-      <div className="absolute right-0 mt-2 w-56 rounded border border-zinc-800 bg-[#090d13] p-2 shadow-2xl shadow-black/50">
+      <div className="absolute right-0 mt-2 w-72 rounded border border-zinc-800 bg-[#090d13] p-2 shadow-2xl shadow-black/50">
         <div className="border-b border-zinc-800 px-2 pb-2">
           <div className="truncate text-sm text-zinc-100">{label}</div>
-          <div className="truncate text-xs text-zinc-500">{user?.email ?? "Local development"}</div>
+          <div className="truncate text-xs text-zinc-500">{user?.email ?? "Authentication required to submit"}</div>
         </div>
-        <button className="mt-2 w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
-          Profile settings
-        </button>
-        <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
-          API keys
-        </button>
-        <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
-          Usage
-        </button>
+        {user !== null || isDevBypass ? (
+          <>
+            <button className="mt-2 w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
+              Profile settings
+            </button>
+            <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
+              API keys
+            </button>
+            <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
+              Usage
+            </button>
+          </>
+        ) : null}
         {canSignOut ? (
           <form action={signOut} className="mt-2 border-t border-zinc-800 pt-2">
             <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-900" type="submit">
@@ -99,11 +119,37 @@ function AccountMenu({isDevBypass, user}: {isDevBypass: boolean; user: CurrentUs
             local_auth_bypass
           </div>
         ) : (
-          <div className="mt-2 border-t border-zinc-800 pt-2">
-            <a className="block rounded px-2 py-2 text-sm text-zinc-200 hover:bg-zinc-900" href="/login">
-              Sign in to run equations
-            </a>
-          </div>
+          <form action={signIn} className="grid gap-3 pt-3">
+            <label className="grid gap-1.5">
+              <span className="font-mono text-xs uppercase tracking-wide text-zinc-500">Username</span>
+              <input
+                autoComplete="username"
+                className="rounded border border-zinc-800 bg-[#101621] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                name="email"
+                placeholder="email@example.com"
+                required
+                type="email"
+              />
+            </label>
+            <label className="grid gap-1.5">
+              <span className="font-mono text-xs uppercase tracking-wide text-zinc-500">Password</span>
+              <input
+                autoComplete="current-password"
+                className="rounded border border-zinc-800 bg-[#101621] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                name="password"
+                required
+                type="password"
+              />
+            </label>
+            {loginError ? (
+              <p className="rounded border border-red-500/40 bg-red-950/30 px-3 py-2 text-xs text-red-100" role="alert">
+                {loginError}
+              </p>
+            ) : null}
+            <button className="rounded border border-emerald-400/60 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-400/10" type="submit">
+              Sign in
+            </button>
+          </form>
         )}
       </div>
     </details>
@@ -117,7 +163,7 @@ function accountLabel(user: CurrentUser | null) {
   if (user?.email) {
     return user.email.split("@")[0];
   }
-  return "Sign in";
+  return "login";
 }
 
 function GithubIcon() {
