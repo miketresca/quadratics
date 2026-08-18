@@ -2,7 +2,7 @@ import type {Lesson, LessonScript, MathLine} from "@quadratics/types";
 
 export type SolveViewState =
   | {kind: "idle"}
-  | {kind: "submitting"}
+  | {kind: "submitting"; lesson?: Lesson; script?: LessonScript; scriptLoading?: boolean}
   | {kind: "success"; lesson: Lesson; script?: LessonScript}
   | {kind: "unsupported"; lesson: Lesson; script?: LessonScript}
   | {kind: "error"; message: string};

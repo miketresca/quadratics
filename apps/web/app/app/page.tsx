@@ -65,7 +65,7 @@ export default async function AppPage({
           <AccountMenu isDevBypass={devAuthBypass} loginError={loginError} user={user} />
         </div>
       </header>
-      <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-4 py-24 sm:px-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-5xl items-start justify-center px-4 pb-24 pt-32 sm:px-6 sm:pt-36">
         <EquationForm initialUser={user} />
       </div>
     </main>

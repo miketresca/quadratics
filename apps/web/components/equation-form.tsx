@@ -6,7 +6,7 @@ import {useRef, useState, useTransition} from "react";
 
 import {LessonResult} from "@/components/lesson-result";
 import {MathEquationInput} from "@/components/math-equation-input";
-import {generateEquationScript} from "@/lib/api";
+import {generateEquationScript, solveEquation} from "@/lib/api";
 import {devAuthBypass} from "@/lib/env";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
 import {createClient} from "@/lib/supabase/client";
@@ -45,8 +45,8 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           }
           accessToken = session.access_token;
         }
-        const response = await generateEquationScript({accessToken, equation, instructorId, outputMode});
-        const {lesson, script} = response;
+        const lessonResponse = await solveEquation({accessToken, equation, instructorId});
+        const lesson = lessonResponse as Lesson;
         if (process.env.NODE_ENV === "development" || devAuthBypass) {
           const lineCount = lesson.steps.reduce((count, step) => count + step.mathLines.length, 0);
           console.info("[quadratics] received lesson", {
@@ -54,9 +54,21 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             method: lesson.method,
             lineCount
           });
-          console.info("[quadratics] received script", script);
         }
-        setViewState(stateForLesson(lesson as Lesson, script));
+        setViewState({kind: "submitting", lesson, scriptLoading: true});
+        try {
+          const response = await generateEquationScript({accessToken, equation, instructorId, outputMode});
+          const {lesson: scriptedLesson, script} = response;
+          if (process.env.NODE_ENV === "development" || devAuthBypass) {
+            console.info("[quadratics] received script", script);
+          }
+          setViewState(stateForLesson(scriptedLesson as Lesson, script));
+        } catch (scriptError) {
+          if (process.env.NODE_ENV === "development" || devAuthBypass) {
+            console.error("[quadratics] script generation failed", scriptError);
+          }
+          setViewState(stateForLesson(lesson));
+        }
       } catch (error) {
         setViewState({kind: "error", message: error instanceof Error ? error.message : "Could not solve the equation"});
         setTimeout(() => errorRef.current?.focus(), 0);
@@ -65,14 +77,20 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   }
 
   const disabled = isPending || viewState.kind === "submitting";
-  const lesson = viewState.kind === "success" || viewState.kind === "unsupported" ? viewState.lesson : null;
-  const script = viewState.kind === "success" || viewState.kind === "unsupported" ? viewState.script : undefined;
+  const lesson =
+    viewState.kind === "success" || viewState.kind === "unsupported" || viewState.kind === "submitting"
+      ? viewState.lesson
+      : null;
+  const script =
+    viewState.kind === "success" || viewState.kind === "unsupported" || viewState.kind === "submitting"
+      ? viewState.script
+      : undefined;
+  const scriptLoading = viewState.kind === "submitting" && viewState.scriptLoading === true;
 
   return (
     <div className="w-full">
       <div className="mx-auto w-full max-w-3xl rounded-md border border-zinc-800/90 bg-[#080c12]/90 p-4 shadow-2xl shadow-black/40 backdrop-blur sm:p-5">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div className="font-mono text-sm text-emerald-300">quadratic_input</div>
+        <div className="mb-4 flex items-center gap-4">
           <div className="group relative">
             <button
               aria-describedby="avatar-api-key-help"
@@ -83,7 +101,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               <InfoIcon />
             </button>
             <div
-              className="pointer-events-none absolute right-0 top-9 z-20 hidden w-72 rounded-md border border-zinc-700 bg-[#101621] p-3 text-sm leading-6 text-zinc-200 shadow-2xl shadow-black/50 group-hover:block"
+              className="pointer-events-none absolute bottom-9 left-0 z-20 hidden w-72 rounded-md border border-zinc-700 bg-[#101621] p-3 text-sm leading-6 text-zinc-200 shadow-2xl shadow-black/50 group-hover:block"
               id="avatar-api-key-help"
               role="tooltip"
             >
@@ -104,11 +122,11 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               onEquationChange={(visibleValue) => setEquationValue(visibleValue)}
             />
             <button
-              className="mr-2 flex h-11 w-11 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 font-mono text-xl text-zinc-200 hover:border-emerald-400 hover:text-white disabled:opacity-50"
+              className="group/submit mr-2 flex h-11 w-11 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 font-mono text-sm text-zinc-200 hover:border-emerald-400 disabled:opacity-50"
               disabled={disabled}
               aria-label={disabled ? "Solving" : "Solve equation"}
             >
-              {disabled ? "..." : "->"}
+              {disabled ? <LoadingDots /> : <SubmitMark />}
             </button>
           </div>
 
@@ -161,11 +179,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
         </form>
       </div>
 
-      {viewState.kind === "submitting" ? (
-        <p className="mx-auto mt-4 max-w-3xl font-mono text-sm text-zinc-400" role="status">
-          solving...
-        </p>
-      ) : null}
+      {viewState.kind === "submitting" && !lesson ? <LessonResult lesson={null} scriptLoading={scriptLoading} /> : null}
       {viewState.kind === "error" ? (
         <p
           className="mx-auto mt-4 max-w-3xl rounded border border-red-500/50 bg-red-950/40 p-3 text-sm text-red-100"
@@ -176,9 +190,24 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           {viewState.message}
         </p>
       ) : null}
-      {lesson ? <LessonResult lesson={lesson} script={script} /> : null}
+      {lesson ? <LessonResult lesson={lesson} script={script} scriptLoading={scriptLoading} /> : null}
     </div>
   );
+}
+
+function SubmitMark() {
+  return (
+    <span className="relative inline-block w-[2ch] leading-none transition group-hover/submit:text-emerald-300">
+      <span>.</span>
+      <span>x</span>
+      <span className="absolute -top-[0.75em] left-0">y</span>
+      <span className="absolute -top-[0.75em] left-[1ch]">z</span>
+    </span>
+  );
+}
+
+function LoadingDots() {
+  return <span className="font-mono text-zinc-500">...</span>;
 }
 
 function InfoIcon() {
