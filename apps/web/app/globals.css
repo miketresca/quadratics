@@ -16,6 +16,11 @@ body {
     #07090d;
 }
 
+::selection {
+  background: rgba(52, 211, 153, 0.72);
+  color: #022c22;
+}
+
 button,
 input,
 select {
@@ -24,8 +29,9 @@ select {
 
 math-field.math-equation-input {
   --caret-color: #34d399;
-  --contains-highlight-background-color: rgba(52, 211, 153, 0.18);
-  --selection-background-color: rgba(52, 211, 153, 0.28);
+  --contains-highlight-background-color: rgba(52, 211, 153, 0.3);
+  --selection-background-color: rgba(52, 211, 153, 0.72);
+  --selection-color: #022c22;
   min-height: 4rem;
 }
 

@@ -118,7 +118,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               onEquationChange={(visibleValue) => setEquationValue(visibleValue)}
             />
             <button
-              className="group/submit mr-2 flex h-11 w-11 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+              className="group/submit mr-2 flex h-11 w-11 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 text-zinc-200 transition enabled:hover:border-emerald-400 enabled:hover:bg-emerald-400/10 enabled:hover:text-emerald-300 disabled:opacity-50"
               disabled={disabled}
               aria-label={disabled ? "Solving" : "Solve equation"}
             >
@@ -130,7 +130,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             <span className="mr-1 uppercase tracking-wide">try</span>
             {sampleEquations.map((sample) => (
               <button
-                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-left text-zinc-300 hover:border-emerald-400/70 hover:text-emerald-300"
+                className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-left text-zinc-300 transition enabled:hover:border-emerald-400/70 enabled:hover:bg-emerald-400/10 enabled:hover:text-emerald-300"
                 disabled={disabled}
                 key={sample}
                 onClick={() => setEquationValue(sample)}
