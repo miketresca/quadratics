@@ -64,7 +64,11 @@ Use `http://localhost:3000` for the web app. `http://localhost:9000` is the Moti
 
 ## Deployment
 
-The web app is intended to run on Vercel. The FastAPI service can run on Railway from the root `Dockerfile`; Railway should use Dockerfile-based builds, not a pnpm build command, because the API is a Python service.
+The web app is intended to run on Vercel. The FastAPI service can run on Railway with service root directory `apps/api`, no custom build command, and start command:
+
+```sh
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
 
 ## Scope
 
