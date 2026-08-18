@@ -1,6 +1,7 @@
 import type {CurrentUser} from "@quadratics/types";
 
 import {signIn, signOut} from "@/app/auth/actions";
+import {ApiKeysDialog} from "@/components/api-keys-dialog";
 import {EquationForm} from "@/components/equation-form";
 import {getMe} from "@/lib/api";
 import {devAuthBypass} from "@/lib/env";
@@ -102,9 +103,7 @@ function AccountMenu({
             <button className="mt-2 w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
               Profile settings
             </button>
-            <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
-              API keys
-            </button>
+            <ApiKeysDialog />
             <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
               Usage
             </button>

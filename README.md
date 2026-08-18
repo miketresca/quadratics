@@ -47,6 +47,15 @@ SCRIPT_WORD_BUDGET=150
 
 Script generation is narration text only. It does not call ElevenLabs, HeyGen, or Motion Canvas.
 
+ElevenLabs and HeyGen provider keys are not consumed yet. Set future production keys on the API service, not in browser storage:
+
+```env
+ELEVENLABS_API_KEY=
+HEYGEN_API_KEY=
+```
+
+The account menu includes an API key modal as a UI placeholder. It is intentionally not connected to persistence until encrypted server-side storage exists.
+
 ## Commands
 
 - `pnpm install` - Install workspace dependencies

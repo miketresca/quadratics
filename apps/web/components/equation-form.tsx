@@ -122,11 +122,11 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               onEquationChange={(visibleValue) => setEquationValue(visibleValue)}
             />
             <button
-              className="group/submit mr-2 flex h-11 w-11 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 font-mono text-sm text-zinc-200 hover:border-emerald-400 disabled:opacity-50"
+              className="group/submit mr-2 flex h-11 w-11 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 text-zinc-200 hover:border-emerald-400 hover:text-emerald-300 disabled:opacity-50"
               disabled={disabled}
               aria-label={disabled ? "Solving" : "Solve equation"}
             >
-              {disabled ? <LoadingDots /> : <SubmitMark />}
+              {disabled ? <LoadingDots /> : <EnterIcon />}
             </button>
           </div>
 
@@ -195,14 +195,12 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   );
 }
 
-function SubmitMark() {
+function EnterIcon() {
   return (
-    <span className="relative inline-block w-[2ch] leading-none transition group-hover/submit:text-emerald-300">
-      <span>.</span>
-      <span>x</span>
-      <span className="absolute -top-[0.75em] left-0">y</span>
-      <span className="absolute -top-[0.75em] left-[1ch]">z</span>
-    </span>
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M20 4v7a4 4 0 0 1-4 4H5" />
+      <path d="m9 11-4 4 4 4" />
+    </svg>
   );
 }
 
