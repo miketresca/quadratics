@@ -1,7 +1,9 @@
+import json
 from functools import lru_cache
+from typing import Annotated
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -13,7 +15,9 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str = ""
     supabase_jwks_url: str = ""
     default_generation_credits: int = 20
-    allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
     app_environment: str = "production"
     dev_auth_bypass: bool = False
     dev_auth_user_id: str = "00000000-0000-0000-0000-000000000001"
@@ -23,7 +27,28 @@ class Settings(BaseSettings):
     script_generation_enabled: bool = False
     script_word_budget: int = 150
 
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        if not stripped:
+            return []
+        if stripped.startswith("["):
+            parsed = json.loads(stripped)
+            if not isinstance(parsed, list):
+                raise ValueError("ALLOWED_ORIGINS JSON must be a list")
+            return parsed
+        return [_strip_wrapping_quotes(origin.strip()) for origin in stripped.split(",") if origin.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def _strip_wrapping_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
