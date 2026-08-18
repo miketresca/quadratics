@@ -169,7 +169,7 @@ function accountLabel(user: CurrentUser | null) {
 }
 
 function usernameFromAuthEmail(email: string) {
-  return email.endsWith("@quadratics.local") ? email.slice(0, -"@quadratics.local".length) : email.split("@")[0];
+  return email.endsWith("@quadratics.xyz") ? email.slice(0, -"@quadratics.xyz".length) : email.split("@")[0];
 }
 
 function Logo() {

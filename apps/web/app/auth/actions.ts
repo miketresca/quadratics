@@ -32,5 +32,5 @@ function usernameToAuthEmail(username: string) {
   if (!/^[a-z0-9._-]{2,40}$/.test(normalized)) {
     return null;
   }
-  return `${normalized}@quadratics.local`;
+  return `${normalized}@quadratics.xyz`;
 }

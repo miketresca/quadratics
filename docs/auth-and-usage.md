@@ -1,6 +1,6 @@
 # Auth and Usage
 
-Supabase Auth owns password authentication. The product UI asks for a username and password, not an email address. The Next.js server action maps username `alice` to the internal Supabase Auth email `alice@quadratics.local`, then signs in with Supabase email/password auth. Operators can manually create accounts in Supabase by creating email/password users with that internal email format.
+Supabase Auth owns password authentication. The product UI asks for a username and password, not an email address. The Next.js server action maps username `alice` to the internal Supabase Auth email `alice@quadratics.xyz`, then signs in with Supabase email/password auth. Operators can manually create accounts in Supabase by creating email/password users with that internal email format.
 
 The `/app` UI shell is public so visitors can see the tool. Equation submission still requires an authenticated session, and API endpoints under `/api/v1` require API authorization. `/login` is not a standalone product surface; it redirects to `/app`, where the account menu contains the login form.
 
