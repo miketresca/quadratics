@@ -8,6 +8,10 @@ describe("normalizeEquationInput", () => {
     expect(normalizeEquationInput("2(x-1)(x-3)=0")).toBe("2*(x - 1)*(x - 3) = 0");
   });
 
+  it("treats a bare quadratic expression as equal to zero", () => {
+    expect(normalizeEquationInput("2x^2 - 7x + 3")).toBe("2*x^2 - 7*x + 3 = 0");
+  });
+
   it("preserves already explicit quadratic input", () => {
     expect(normalizeEquationInput("2*x^2 - 7*x + 3 = 0")).toBe("2*x^2 - 7*x + 3 = 0");
   });
@@ -23,7 +27,7 @@ describe("normalizeEquationInput", () => {
 
   it("keeps unsupported forms visible to API validation", () => {
     expect(normalizeEquationInput("2y^2 + 1 = 0")).toBe("2*y^2 + 1 = 0");
-    expect(normalizeEquationInput("hello world")).toBe("hello world");
+    expect(normalizeEquationInput("hello world")).toBe("hello world = 0");
     expect(normalizeEquationInput("x^3 + 1 = 0")).toBe("x^3 + 1 = 0");
   });
 });

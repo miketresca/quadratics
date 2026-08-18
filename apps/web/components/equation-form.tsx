@@ -4,28 +4,18 @@ import {instructors} from "@quadratics/config";
 import type {CurrentUser, Lesson} from "@quadratics/types";
 import {useRef, useState, useTransition} from "react";
 
-import {CreditBalance} from "@/components/credit-balance";
 import {LessonResult} from "@/components/lesson-result";
 import {MathEquationInput} from "@/components/math-equation-input";
-import {getMe, solveEquation} from "@/lib/api";
+import {solveEquation} from "@/lib/api";
 import {devAuthBypass} from "@/lib/env";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
 import {createClient} from "@/lib/supabase/client";
 
-export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
-  const [user, setUser] = useState(initialUser);
+export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentUser | null}) {
   const [viewState, setViewState] = useState<SolveViewState>({kind: "idle"});
   const [equationValue, setEquationValue] = useState("");
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
-
-  async function refreshUser(accessToken: string) {
-    try {
-      setUser(await getMe(accessToken));
-    } catch {
-      setUser(initialUser);
-    }
-  }
 
   function onSubmit(formData: FormData) {
     startTransition(async () => {
@@ -58,7 +48,6 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
           });
         }
         setViewState(stateForLesson(lesson as Lesson));
-        await refreshUser(accessToken);
       } catch (error) {
         setViewState({kind: "error", message: error instanceof Error ? error.message : "Could not solve the equation"});
         setTimeout(() => errorRef.current?.focus(), 0);
@@ -72,9 +61,8 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
   return (
     <div className="w-full">
       <div className="mx-auto w-full max-w-3xl rounded border border-zinc-700/80 bg-zinc-950/55 p-4 shadow-2xl shadow-black/40 backdrop-blur sm:p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="font-mono text-sm text-emerald-300">quadratic_input</div>
-          <CreditBalance balance={user?.creditBalance ?? null} />
+        <div className="mb-4 flex items-center">
+          <div className="font-mono text-sm text-emerald-300">quadratic's tutor</div>
         </div>
 
         <form action={onSubmit} className="grid gap-4">
@@ -96,11 +84,11 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
             </button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
-            <label className="grid gap-1 text-xs uppercase tracking-wide text-zinc-500">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid h-20 gap-2 rounded border border-zinc-700 bg-[#101621] px-4 py-3 text-xs uppercase tracking-wide text-zinc-500 focus-within:border-emerald-400">
               <span>Instructor</span>
               <select
-                className="h-12 rounded border border-zinc-700 bg-[#101621] px-3 text-sm normal-case tracking-normal text-zinc-100 outline-none focus:border-emerald-400"
+                className="-mx-1 h-8 bg-transparent px-1 text-sm normal-case tracking-normal text-zinc-100 outline-none"
                 name="instructorId"
                 defaultValue="male"
               >
@@ -112,23 +100,24 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
               </select>
             </label>
 
-            <label className="flex h-12 items-center justify-between gap-3 rounded border border-zinc-700 bg-[#101621] px-3 text-sm text-zinc-200">
-              <span>Video</span>
-              <input className="peer sr-only" name="videoEnabled" type="checkbox" defaultChecked />
-              <span className="relative h-6 w-11 rounded-full bg-zinc-700 transition after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition peer-checked:bg-emerald-500 peer-checked:after:translate-x-5" />
-            </label>
-
-            <button
-              className="h-12 rounded border border-zinc-700 px-4 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-50"
-              type="reset"
-              disabled={disabled}
-              onClick={() => {
-                setEquationValue("");
-                setViewState({kind: "idle"});
-              }}
-            >
-              Reset
-            </button>
+            <fieldset className="grid h-20 gap-2 rounded border border-zinc-700 bg-[#101621] px-4 py-3 text-xs uppercase tracking-wide text-zinc-500">
+              <legend className="sr-only">Output mode</legend>
+              <span>Output</span>
+              <span className="grid grid-cols-2 gap-2 text-sm normal-case tracking-normal text-zinc-100">
+                <label className="cursor-pointer">
+                  <input className="peer sr-only" name="outputMode" type="radio" value="video_audio" defaultChecked />
+                  <span className="flex h-8 items-center justify-center rounded border border-zinc-700 bg-zinc-950/40 px-2 text-zinc-300 transition peer-checked:border-emerald-400/70 peer-checked:bg-emerald-400/10 peer-checked:text-zinc-100">
+                    Video + audio
+                  </span>
+                </label>
+                <label className="cursor-pointer">
+                  <input className="peer sr-only" name="outputMode" type="radio" value="audio" />
+                  <span className="flex h-8 items-center justify-center rounded border border-zinc-700 bg-zinc-950/40 px-2 text-zinc-300 transition peer-checked:border-emerald-400/70 peer-checked:bg-emerald-400/10 peer-checked:text-zinc-100">
+                    Audio only
+                  </span>
+                </label>
+              </span>
+            </fieldset>
           </div>
         </form>
       </div>

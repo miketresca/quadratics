@@ -36,7 +36,8 @@ def parse_equation(equation_input: str) -> ParsedEquation:
         raise EquationParseError("Equation is required")
     if len(raw) > MAX_EQUATION_LENGTH:
         raise EquationParseError("Equation is too long")
-    if raw.count("=") != 1:
+    equals_count = raw.count("=")
+    if equals_count > 1:
         raise EquationParseError("Equation must contain exactly one equals sign")
     if not ALLOWED_PATTERN.match(raw):
         raise EquationParseError("Equation contains unsupported characters")
@@ -44,6 +45,9 @@ def parse_equation(equation_input: str) -> ParsedEquation:
         raise EquationParseError("Equation has too many terms")
 
     normalized = raw.replace("X", "x")
+    if equals_count == 0:
+        normalized = f"{normalized} = 0"
+
     for exponent in EXPONENT_PATTERN.findall(normalized):
         if int(exponent) > MAX_EXPONENT:
             raise EquationParseError("Equation exponent is too large")

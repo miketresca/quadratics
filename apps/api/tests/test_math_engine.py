@@ -20,6 +20,15 @@ def test_valid_factorable_quadratic():
     assert build_lesson(solution).method == "factoring"
 
 
+def test_bare_quadratic_expression_defaults_to_zero():
+    solution = solve("2*x^2 - 7*x + 3")
+
+    assert str(solution.quadratic.a) == "2"
+    assert str(solution.quadratic.b) == "-7"
+    assert str(solution.quadratic.c) == "3"
+    assert {str(root) for root in solution.roots} == {"1/2", "3"}
+
+
 def test_another_factorable_quadratic():
     solution = solve("x^2 - 5*x + 6 = 0")
 

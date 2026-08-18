@@ -13,7 +13,11 @@ export function normalizeEquationInput(input: string): string {
     .replace(/([a-zA-Z])\(/g, "$1*(")
     .replace(/\)\(/g, ")*(");
 
-  return formatEquationOperators(normalized);
+  const formatted = formatEquationOperators(normalized);
+  if (formatted && !formatted.includes("=")) {
+    return `${formatted} = 0`;
+  }
+  return formatted;
 }
 
 function formatEquationOperators(input: string): string {

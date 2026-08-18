@@ -18,6 +18,17 @@ async def test_solve_endpoint_returns_factoring_lesson(authenticated_client):
 
 
 @pytest.mark.asyncio
+async def test_solve_endpoint_accepts_bare_quadratic_expression(authenticated_client):
+    response = await authenticated_client.post(
+        "/api/v1/equations/solve",
+        json={"equation": "2*x^2 - 7*x + 3", "instructorId": "male"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["normalizedEquation"] == "2*x**2 - 7*x + 3 = 0"
+
+
+@pytest.mark.asyncio
 async def test_solve_endpoint_rejects_linear(authenticated_client):
     response = await authenticated_client.post(
         "/api/v1/equations/solve",
