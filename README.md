@@ -34,6 +34,8 @@ Keep `DEV_AUTH_BYPASS=false` outside local development; production-mode API requ
 
 The API must be running for equation submission to work. If only the web app is running, the composer will render but submit will show a fetch failure.
 
+The app shell at `/app` is public. Users must sign in only when they submit an equation. The login widget asks for a username and password; internally, the server action maps username `alice` to the Supabase Auth email `alice@quadratics.local`. To create a login manually in Supabase, create an email/password user with that internal email format and give the user only the username.
+
 Script generation is disabled by default and falls back to a deterministic development script so local UI work does not require provider credentials. To use the OpenAI-backed script provider, set:
 
 ```env

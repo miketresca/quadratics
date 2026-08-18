@@ -1,8 +1,8 @@
 # Auth and Usage
 
-Supabase Auth owns email/password authentication. The browser receives a Supabase access token and sends it to FastAPI as a bearer token. FastAPI verifies the token and derives `user_id` before protected work.
+Supabase Auth owns password authentication. The product UI asks for a username and password, not an email address. The Next.js server action maps username `alice` to the internal Supabase Auth email `alice@quadratics.local`, then signs in with Supabase email/password auth. Operators can manually create accounts in Supabase by creating email/password users with that internal email format.
 
-Only `/login` is public in the web app. `/app` requires an authenticated session. API endpoints under `/api/v1` require API authorization.
+The `/app` UI shell is public so visitors can see the tool. Equation submission still requires an authenticated session, and API endpoints under `/api/v1` require API authorization. `/login` is not a standalone product surface; it redirects to `/app`, where the account menu contains the login form.
 
 Generation credits are ledger-based. `credit_ledger` is the auditable source of truth, and balances are derived by summing entries for one user. Default demo credits use an idempotency key so first-login provisioning cannot double-grant credits.
 

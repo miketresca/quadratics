@@ -51,7 +51,7 @@ export default async function AppPage({
   return (
     <main className="min-h-screen bg-[#07090d] text-zinc-100">
       <header className="fixed left-0 top-0 z-10 flex w-full items-center justify-between px-5 py-5 sm:px-8">
-        <div className="font-mono text-lg tracking-normal text-zinc-200">quadratics.xyz</div>
+        <Logo />
         <div className="flex items-center gap-2">
           <a
             aria-label="Open quadratics GitHub repository"
@@ -93,7 +93,9 @@ function AccountMenu({
       <div className="absolute right-0 mt-2 w-72 rounded border border-zinc-800 bg-[#090d13] p-2 shadow-2xl shadow-black/50">
         <div className="border-b border-zinc-800 px-2 pb-2">
           <div className="truncate text-sm text-zinc-100">{label}</div>
-          <div className="truncate text-xs text-zinc-500">{user?.email ?? "Authentication required to submit"}</div>
+          <div className="truncate text-xs text-zinc-500">
+            {user ? "authenticated session" : "Authentication required to submit"}
+          </div>
         </div>
         {user !== null || isDevBypass ? (
           <>
@@ -125,10 +127,10 @@ function AccountMenu({
               <input
                 autoComplete="username"
                 className="rounded border border-zinc-800 bg-[#101621] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
-                name="email"
-                placeholder="email@example.com"
+                name="username"
+                placeholder="username"
                 required
-                type="email"
+                type="text"
               />
             </label>
             <label className="grid gap-1.5">
@@ -161,9 +163,27 @@ function accountLabel(user: CurrentUser | null) {
     return user.displayName;
   }
   if (user?.email) {
-    return user.email.split("@")[0];
+    return usernameFromAuthEmail(user.email);
   }
   return "login";
+}
+
+function usernameFromAuthEmail(email: string) {
+  return email.endsWith("@quadratics.local") ? email.slice(0, -"@quadratics.local".length) : email.split("@")[0];
+}
+
+function Logo() {
+  return (
+    <div className="flex items-center font-mono text-lg tracking-normal sm:text-xl" aria-label="quadratics.xyz">
+      <span className="text-zinc-100">quadratics</span>
+      <span className="relative ml-0.5 inline-block w-[2ch] leading-none text-emerald-300">
+        <span>.</span>
+        <span>x</span>
+        <span className="absolute -top-[0.75em] left-0">y</span>
+        <span className="absolute -top-[0.75em] left-[1ch]">z</span>
+      </span>
+    </div>
+  );
 }
 
 function GithubIcon() {
