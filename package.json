@@ -10,9 +10,23 @@
     "test": "turbo test",
     "api:dev": "uv run --project apps/api uvicorn app.main:app --reload --app-dir apps/api",
     "web:dev": "pnpm --filter @quadratics/web dev",
-    "video:dev": "pnpm --filter @quadratics/video dev"
+    "video:dev": "pnpm --filter @quadratics/video dev",
+    "sb:login": "node scripts/supabase-env.mjs login",
+    "sb:link": "node scripts/supabase-env.mjs link",
+    "sb:link:dev": "node scripts/supabase-env.mjs link dev",
+    "sb:link:prod": "node scripts/supabase-env.mjs link prod",
+    "sb:push": "node scripts/supabase-env.mjs push",
+    "sb:push:dry": "node scripts/supabase-env.mjs dry",
+    "sb:push:dev": "node scripts/supabase-env.mjs push dev",
+    "sb:push:dev:dry": "node scripts/supabase-env.mjs dry dev",
+    "sb:push:prod": "node scripts/supabase-env.mjs push prod",
+    "sb:push:prod:dry": "node scripts/supabase-env.mjs dry prod",
+    "sb:types": "node scripts/supabase-env.mjs types",
+    "sb:types:dev": "node scripts/supabase-env.mjs types dev",
+    "sb:types:prod": "node scripts/supabase-env.mjs types prod"
   },
   "devDependencies": {
+    "supabase": "^2.115.0",
     "turbo": "2.10.10",
     "typescript": "7.0.2"
   }

@@ -73,6 +73,10 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - `pnpm web:dev` - Run Next.js
 - `pnpm api:dev` - Run FastAPI
 - `pnpm video:dev` - Run Motion Canvas
+- `pnpm sb:login` - Authenticate the local Supabase CLI
+- `pnpm sb:link` - Link `infra/supabase` to the configured Supabase project
+- `pnpm sb:push:dry` - Preview Supabase migration changes
+- `pnpm sb:push` - Push Supabase migrations
 - `pnpm lint` - Run lint gates
 - `pnpm typecheck` - Run TypeScript checks
 - `pnpm test` - Run TypeScript tests
