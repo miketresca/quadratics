@@ -62,6 +62,10 @@ Script generation is narration text only. It does not call ElevenLabs, HeyGen, o
 
 Use `http://localhost:3000` for the web app. `http://localhost:9000` is the Motion Canvas editor.
 
+## Deployment
+
+The web app is intended to run on Vercel. The FastAPI service can run on Railway from the root `Dockerfile`; Railway should use Dockerfile-based builds, not a pnpm build command, because the API is a Python service.
+
 ## Scope
 
 The app currently supports quadratic equations only. SymPy is the source of mathematical truth. v0 builds instructional steps only for quadratics that factor cleanly over rational values.

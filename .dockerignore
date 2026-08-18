@@ -1,0 +1,13 @@
+.git
+.next
+.pnpm-store
+.pytest_cache
+.ruff_cache
+.turbo
+.uv-cache
+.venv
+node_modules
+apps/web/.next
+apps/web/tsconfig.tsbuildinfo
+apps/api/.env
+**/__pycache__
