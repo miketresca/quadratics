@@ -1,14 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
-  background: #f7f7f4;
-  color: #1f2523;
+  color-scheme: dark;
+  background: #07090d;
+  color: #f4f4f5;
 }
 
 body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.86), rgba(7, 9, 13, 0.98)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 96px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.026) 0 1px, transparent 1px 96px),
+    #07090d;
 }
 
 button,

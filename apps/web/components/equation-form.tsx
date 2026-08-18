@@ -52,48 +52,81 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
   const lesson = viewState.kind === "success" || viewState.kind === "unsupported" ? viewState.lesson : null;
 
   return (
-    <div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Solve a quadratic</h1>
-          <p className="mt-1 text-sm text-neutral-700">v0 supports factoring lessons for clean rational quadratics.</p>
+    <div className="w-full">
+      <div className="mx-auto w-full max-w-3xl rounded border border-zinc-700/80 bg-zinc-950/55 p-4 shadow-2xl shadow-black/40 backdrop-blur sm:p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="font-mono text-sm text-emerald-300">quadratic_input</div>
+          <CreditBalance balance={user?.creditBalance ?? null} />
         </div>
-        <CreditBalance balance={user?.creditBalance ?? null} />
+
+        <form action={onSubmit} className="grid gap-4">
+          <div className="flex min-h-16 items-center rounded border border-zinc-700 bg-[#101621] focus-within:border-emerald-400">
+            <label className="sr-only" htmlFor="equation">
+              Equation
+            </label>
+            <input
+              className="min-w-0 flex-1 bg-transparent px-4 py-4 font-mono text-lg text-zinc-100 outline-none placeholder:text-zinc-500 sm:px-5 sm:text-xl"
+              id="equation"
+              name="equation"
+              placeholder="2*x^2 - 7*x + 3 = 0"
+              defaultValue="2*x^2 - 7*x + 3 = 0"
+              required
+            />
+            <button
+              className="mr-2 flex h-11 w-11 items-center justify-center rounded border border-zinc-700 bg-zinc-900 text-xl text-zinc-200 hover:border-emerald-400 hover:text-white disabled:opacity-50"
+              disabled={disabled}
+              aria-label={disabled ? "Solving" : "Solve equation"}
+            >
+              {disabled ? "..." : "->"}
+            </button>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+            <label className="grid gap-1 text-xs uppercase tracking-wide text-zinc-500">
+              <span>Instructor</span>
+              <select
+                className="h-12 rounded border border-zinc-700 bg-[#101621] px-3 text-sm normal-case tracking-normal text-zinc-100 outline-none focus:border-emerald-400"
+                name="instructorId"
+                defaultValue="male"
+              >
+                {instructors.map((instructor) => (
+                  <option key={instructor.id} value={instructor.id}>
+                    {instructor.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex h-12 items-center justify-between gap-3 rounded border border-zinc-700 bg-[#101621] px-3 text-sm text-zinc-200">
+              <span>Video</span>
+              <input className="peer sr-only" name="videoEnabled" type="checkbox" defaultChecked />
+              <span className="relative h-6 w-11 rounded-full bg-zinc-700 transition after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:transition peer-checked:bg-emerald-500 peer-checked:after:translate-x-5" />
+            </label>
+
+            <button
+              className="h-12 rounded border border-zinc-700 px-4 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white disabled:opacity-50"
+              type="reset"
+              disabled={disabled}
+              onClick={() => setViewState({kind: "idle"})}
+            >
+              Reset
+            </button>
+          </div>
+        </form>
       </div>
 
-      <form action={onSubmit} className="mt-8 grid gap-4 rounded border border-neutral-300 bg-white p-4">
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Equation</span>
-          <input
-            className="rounded border border-neutral-400 px-3 py-2 font-mono"
-            name="equation"
-            defaultValue="2*x^2 - 7*x + 3 = 0"
-            required
-          />
-        </label>
-        <label className="grid gap-2">
-          <span className="text-sm font-medium">Instructor</span>
-          <select className="rounded border border-neutral-400 px-3 py-2" name="instructorId" defaultValue="male">
-            {instructors.map((instructor) => (
-              <option key={instructor.id} value={instructor.id}>
-                {instructor.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="flex flex-wrap gap-3">
-          <button className="rounded bg-emerald-700 px-4 py-2 font-medium text-white disabled:opacity-60" disabled={disabled}>
-            {disabled ? "Solving..." : "Solve"}
-          </button>
-          <button className="rounded border border-neutral-500 px-4 py-2" type="reset" disabled={disabled} onClick={() => setViewState({kind: "idle"})}>
-            Reset
-          </button>
-        </div>
-      </form>
-
-      {viewState.kind === "submitting" ? <p className="mt-4 text-sm" role="status">Solving equation...</p> : null}
+      {viewState.kind === "submitting" ? (
+        <p className="mx-auto mt-4 max-w-3xl font-mono text-sm text-zinc-400" role="status">
+          solving...
+        </p>
+      ) : null}
       {viewState.kind === "error" ? (
-        <p className="mt-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800" ref={errorRef} role="alert" tabIndex={-1}>
+        <p
+          className="mx-auto mt-4 max-w-3xl rounded border border-red-500/50 bg-red-950/40 p-3 text-sm text-red-100"
+          ref={errorRef}
+          role="alert"
+          tabIndex={-1}
+        >
           {viewState.message}
         </p>
       ) : null}
