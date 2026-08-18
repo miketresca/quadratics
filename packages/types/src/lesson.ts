@@ -38,5 +38,5 @@ export interface Lesson {
   coefficients: QuadraticCoefficients;
   solutions: MathValue[];
   steps: TeachingStep[];
-  unsupportedReason?: string;
+  unsupportedReason?: string | null;
 }

@@ -1,8 +1,8 @@
-import type {Lesson} from "@quadratics/types";
+import type {Lesson, LessonScript} from "@quadratics/types";
 
 import {flattenLessonMathLines} from "@/lib/lesson-view";
 
-export function LessonResult({lesson}: {lesson: Lesson}) {
+export function LessonResult({lesson, script}: {lesson: Lesson; script?: LessonScript}) {
   const solutionLines = flattenLessonMathLines(lesson);
 
   return (
@@ -50,6 +50,40 @@ export function LessonResult({lesson}: {lesson: Lesson}) {
               </li>
             ))}
           </ol>
+        </div>
+      ) : null}
+
+      {script ? (
+        <div className="mt-6 rounded border border-sky-400/35 bg-sky-950/10 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <h3 className="font-mono text-sm uppercase tracking-wide text-sky-300">teacher_script</h3>
+            <span className="font-mono text-xs text-zinc-500">
+              {script.status}
+              {script.status === "completed" ? ` / ${script.totalEstimatedSeconds}s` : ""}
+            </span>
+          </div>
+          {script.status === "completed" ? (
+            <ol className="mt-4 grid gap-4">
+              {script.segments.map((segment, index) => (
+                <li className="rounded border border-zinc-800 bg-zinc-950/45 p-3" key={segment.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h4 className="text-sm font-semibold text-zinc-100">
+                      {index + 1}. {segment.title}
+                    </h4>
+                    <span className="font-mono text-xs text-zinc-500">{segment.estimatedSeconds}s</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-zinc-200">{segment.narration}</p>
+                  <p className="mt-3 break-words font-mono text-xs text-zinc-500">
+                    lines: {segment.mathLineIds.join(", ")}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-3 text-sm text-zinc-300">
+              {script.unsupportedReason ?? "Script generation is not available for this lesson."}
+            </p>
+          )}
         </div>
       ) : null}
     </section>

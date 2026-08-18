@@ -1,0 +1,93 @@
+{
+  "lesson": {
+    "status": "completed",
+    "originalEquation": "2*x^2 - 7*x + 3 = 0",
+    "normalizedEquation": "2*x^2 - 7*x + 3 = 0",
+    "method": "factoring",
+    "coefficients": {
+      "a": {"expression": "2", "latex": "2"},
+      "b": {"expression": "-7", "latex": "-7"},
+      "c": {"expression": "3", "latex": "3"}
+    },
+    "solutions": [
+      {"expression": "1/2", "latex": "\\frac{1}{2}"},
+      {"expression": "3", "latex": "3"}
+    ],
+    "steps": [
+      {
+        "id": "factor",
+        "title": "Factor the quadratic",
+        "stepType": "factor",
+        "mathLines": [
+          {"id": "standard_form", "expression": "2*x^2 - 7*x + 3 = 0", "latex": "2 x^{2} - 7 x + 3 = 0"},
+          {"id": "factored_form", "expression": "(2*x - 1)*(x - 3) = 0", "latex": "\\left(2 x - 1\\right) \\left(x - 3\\right) = 0"}
+        ]
+      },
+      {
+        "id": "solve_factors",
+        "title": "Solve each factor",
+        "stepType": "solve_factors",
+        "mathLines": [
+          {"id": "first_factor", "expression": "2*x - 1 = 0", "latex": "2 x - 1 = 0"},
+          {"id": "first_isolate_x_term", "expression": "2*x = 1", "latex": "2 x = 1"},
+          {"id": "first_solution", "expression": "x = 1/2", "latex": "x = \\frac{1}{2}"},
+          {"id": "second_factor", "expression": "x - 3 = 0", "latex": "x - 3 = 0"},
+          {"id": "second_solution", "expression": "x = 3", "latex": "x = 3"}
+        ]
+      },
+      {
+        "id": "final_answer",
+        "title": "State the final answer",
+        "stepType": "final_answer",
+        "mathLines": [
+          {"id": "solutions", "expression": "x = 1/2, 3", "latex": "x = \\frac{1}{2}, 3"}
+        ]
+      }
+    ]
+  },
+  "script": {
+    "status": "completed",
+    "method": "factoring",
+    "totalEstimatedSeconds": 42,
+    "totalWordCount": 112,
+    "segments": [
+      {
+        "id": "script_factor",
+        "stepId": "factor",
+        "title": "Factor the quadratic",
+        "narration": "First, rewrite the quadratic as two factors. This trinomial factors into two x minus one times x minus three.",
+        "mathLineIds": ["standard_form", "factored_form"],
+        "estimatedSeconds": 12,
+        "wordCount": 19,
+        "deliveryNotes": ["Show the factored form after the standard form."]
+      },
+      {
+        "id": "script_solve_factors",
+        "stepId": "solve_factors",
+        "title": "Solve each factor",
+        "narration": "Now use the zero product property. If the product is zero, one of the factors must be zero, so solve each factor separately.",
+        "mathLineIds": [
+          "first_factor",
+          "first_isolate_x_term",
+          "first_solution",
+          "second_factor",
+          "second_solution"
+        ],
+        "estimatedSeconds": 20,
+        "wordCount": 24,
+        "deliveryNotes": []
+      },
+      {
+        "id": "script_final_answer",
+        "stepId": "final_answer",
+        "title": "State the final answer",
+        "narration": "The two solutions are one half and three. Both values make the original quadratic equal zero.",
+        "mathLineIds": ["solutions"],
+        "estimatedSeconds": 10,
+        "wordCount": 16,
+        "deliveryNotes": []
+      }
+    ],
+    "providerMetadata": {"model": "fake-script-provider"}
+  }
+}

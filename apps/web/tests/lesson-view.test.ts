@@ -2,12 +2,26 @@ import {describe, expect, it} from "vitest";
 
 import {flattenLessonMathLines, stateForLesson} from "../lib/lesson-view";
 import fixture from "../../../packages/types/tests/fixtures/factoring_lesson.json";
+import scriptResponse from "../../../packages/types/tests/fixtures/factoring_script_response.json";
 
 describe("lesson view state", () => {
   it("maps completed lessons to success state", () => {
     const state = stateForLesson(fixture as never);
 
     expect(state.kind).toBe("success");
+  });
+
+  it("keeps generated scripts with completed lessons", () => {
+    const state = stateForLesson(scriptResponse.lesson as never, scriptResponse.script as never);
+
+    expect(state.kind).toBe("success");
+    if (state.kind === "success") {
+      expect(state.script?.segments.map((segment) => segment.stepId)).toEqual([
+        "factor",
+        "solve_factors",
+        "final_answer"
+      ]);
+    }
   });
 
   it("maps unsupported lessons to unsupported state", () => {

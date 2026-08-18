@@ -1,4 +1,7 @@
 import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.core.config import Settings, get_settings
 
 
 @pytest.mark.asyncio
@@ -60,11 +63,14 @@ async def test_solve_endpoint_rejects_oversized_input(authenticated_client):
 
 
 @pytest.mark.asyncio
-async def test_solve_endpoint_rejects_dev_token_without_bypass(client):
-    response = await client.post(
-        "/api/v1/equations/solve",
-        headers={"Authorization": "Bearer dev"},
-        json={"equation": "2*x^2 - 7*x + 3 = 0"},
-    )
+async def test_solve_endpoint_rejects_dev_token_without_bypass(app):
+    app.dependency_overrides[get_settings] = lambda: Settings(dev_auth_bypass=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/equations/solve",
+            headers={"Authorization": "Bearer dev"},
+            json={"equation": "2*x^2 - 7*x + 3 = 0"},
+        )
 
     assert response.status_code == 401
+    app.dependency_overrides.clear()

@@ -14,9 +14,11 @@ SymPy and deterministic Python code are the source of mathematical truth. LLM ou
 
 Mathematical operations and teaching steps are different concepts. Teaching steps are the unit for narration, animation timing, optional avatar composition, and video segments. Math lines are deterministic transformations rendered inside a teaching step.
 
+Script generation sits after deterministic lesson construction. Script segments may use an LLM to explain a completed factoring lesson, but they must reference existing teaching-step and math-line IDs and must not introduce new math.
+
 ## Provider Isolation
 
-ElevenLabs belongs behind a future `NarrationProvider`. HeyGen belongs behind a future `AvatarProvider`. Future video providers belong behind adapters. Core math and lesson code must not import provider-specific SDKs or provider modules.
+OpenAI script generation belongs behind a `ScriptProvider`. ElevenLabs belongs behind a future `NarrationProvider`. HeyGen belongs behind a future `AvatarProvider`. Future video providers belong behind adapters. Core math and lesson code must not import provider-specific SDKs or provider modules.
 
 ## Authentication and Usage
 
@@ -30,6 +32,6 @@ Never expose Supabase service-role credentials client-side. User-owned records m
 
 ## Repository Conventions
 
-Frontend code belongs in `apps/web`. API routes belong in `apps/api/app/api/routes`. Math domain logic belongs in `apps/api/app/services/math`. Lesson construction belongs in `apps/api/app/services/lessons`. Database migrations belong in `infra/supabase/migrations`. Motion Canvas code belongs in `apps/video`.
+Frontend code belongs in `apps/web`. API routes belong in `apps/api/app/api/routes`. Math domain logic belongs in `apps/api/app/services/math`. Lesson construction belongs in `apps/api/app/services/lessons`. Script orchestration belongs in `apps/api/app/services/scripts`, with provider adapters under `apps/api/app/providers`. Database migrations belong in `infra/supabase/migrations`. Motion Canvas code belongs in `apps/video`.
 
 Before completing a task, run the relevant tests plus root validation where practical: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `uv run --project apps/api pytest`.

@@ -3,13 +3,22 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies.auth import get_current_user
+from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
+from app.providers.openai.script_provider import (
+    OpenAIScriptProvider,
+    ScriptProviderConfigurationError,
+)
 from app.schemas.equation import SolveEquationRequest
 from app.schemas.lesson import LessonResponse
+from app.schemas.script import LessonScript, ScriptEquationRequest, ScriptEquationResponse
 from app.services.lessons.builder import build_lesson
 from app.services.math.parser import EquationParseError, parse_equation
 from app.services.math.solver import solve_quadratic
 from app.services.math.validator import QuadraticValidationError, validate_quadratic
+from app.services.scripts.builder import build_lesson_script
+from app.services.scripts.development import DevelopmentScriptProvider
+from app.services.scripts.validator import ScriptValidationError
 
 router = APIRouter(prefix="/equations")
 
@@ -19,8 +28,37 @@ async def solve_equation(
     request: SolveEquationRequest,
     _current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> LessonResponse:
+    return _lesson_from_equation(request.equation)
+
+
+@router.post("/script", response_model=ScriptEquationResponse)
+async def script_equation(
+    request: ScriptEquationRequest,
+    _current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ScriptEquationResponse:
+    lesson = _lesson_from_equation(request.equation)
     try:
-        parsed = parse_equation(request.equation)
+        provider = _script_provider(settings, lesson)
+        script = await build_lesson_script(
+            lesson=lesson,
+            provider=provider,
+            instructor_id=request.instructor_id,
+            output_mode=request.output_mode,
+            word_budget=settings.script_word_budget,
+        )
+    except (ScriptProviderConfigurationError, ScriptValidationError, ValueError) as exc:
+        script = LessonScript(
+            status="failed",
+            method=lesson.method,
+            unsupported_reason=str(exc),
+        )
+    return ScriptEquationResponse(lesson=lesson, script=script)
+
+
+def _lesson_from_equation(equation: str) -> LessonResponse:
+    try:
+        parsed = parse_equation(equation)
         quadratic = validate_quadratic(parsed)
         solution = solve_quadratic(quadratic)
     except (EquationParseError, QuadraticValidationError) as exc:
@@ -29,3 +67,19 @@ async def solve_equation(
             detail=str(exc),
         ) from exc
     return build_lesson(solution)
+
+
+def _script_provider(
+    settings: Settings,
+    lesson: LessonResponse,
+) -> DevelopmentScriptProvider | OpenAIScriptProvider:
+    if (
+        not settings.script_generation_enabled
+        or lesson.status != "completed"
+        or lesson.method != "factoring"
+    ):
+        return DevelopmentScriptProvider()
+    return OpenAIScriptProvider(
+        api_key=settings.openai_api_key,
+        model=settings.openai_script_model,
+    )

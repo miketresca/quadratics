@@ -1,12 +1,12 @@
 "use client";
 
 import {instructors} from "@quadratics/config";
-import type {CurrentUser, Lesson} from "@quadratics/types";
+import type {CurrentUser, Lesson, OutputMode} from "@quadratics/types";
 import {useRef, useState, useTransition} from "react";
 
 import {LessonResult} from "@/components/lesson-result";
 import {MathEquationInput} from "@/components/math-equation-input";
-import {solveEquation} from "@/lib/api";
+import {generateEquationScript} from "@/lib/api";
 import {devAuthBypass} from "@/lib/env";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
 import {createClient} from "@/lib/supabase/client";
@@ -21,9 +21,10 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     startTransition(async () => {
       const equation = String(formData.get("equation") ?? "");
       const instructorId = String(formData.get("instructorId") ?? "male");
+      const outputMode = String(formData.get("outputMode") ?? "video_audio") as OutputMode;
       setViewState({kind: "submitting"});
       if (process.env.NODE_ENV === "development" || devAuthBypass) {
-        console.info("[quadratics] submitting equation", {equation, instructorId});
+        console.info("[quadratics] submitting equation", {equation, instructorId, outputMode});
       }
 
       try {
@@ -38,7 +39,8 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           }
           accessToken = session.access_token;
         }
-        const lesson = await solveEquation({accessToken, equation, instructorId});
+        const response = await generateEquationScript({accessToken, equation, instructorId, outputMode});
+        const {lesson, script} = response;
         if (process.env.NODE_ENV === "development" || devAuthBypass) {
           const lineCount = lesson.steps.reduce((count, step) => count + step.mathLines.length, 0);
           console.info("[quadratics] received lesson", {
@@ -46,8 +48,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             method: lesson.method,
             lineCount
           });
+          console.info("[quadratics] received script", script);
         }
-        setViewState(stateForLesson(lesson as Lesson));
+        setViewState(stateForLesson(lesson as Lesson, script));
       } catch (error) {
         setViewState({kind: "error", message: error instanceof Error ? error.message : "Could not solve the equation"});
         setTimeout(() => errorRef.current?.focus(), 0);
@@ -57,6 +60,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
 
   const disabled = isPending || viewState.kind === "submitting";
   const lesson = viewState.kind === "success" || viewState.kind === "unsupported" ? viewState.lesson : null;
+  const script = viewState.kind === "success" || viewState.kind === "unsupported" ? viewState.script : undefined;
 
   return (
     <div className="w-full">
@@ -137,7 +141,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           {viewState.message}
         </p>
       ) : null}
-      {lesson ? <LessonResult lesson={lesson} /> : null}
+      {lesson ? <LessonResult lesson={lesson} script={script} /> : null}
     </div>
   );
 }

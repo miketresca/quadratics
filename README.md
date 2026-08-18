@@ -34,6 +34,17 @@ Keep `DEV_AUTH_BYPASS=false` outside local development; production-mode API requ
 
 The API must be running for equation submission to work. If only the web app is running, the composer will render but submit will show a fetch failure.
 
+Script generation is disabled by default and falls back to a deterministic development script so local UI work does not require provider credentials. To use the OpenAI-backed script provider, set:
+
+```env
+OPENAI_API_KEY=
+OPENAI_SCRIPT_MODEL=gpt-5-mini
+SCRIPT_GENERATION_ENABLED=true
+SCRIPT_WORD_BUDGET=150
+```
+
+Script generation is narration text only. It does not call ElevenLabs, HeyGen, or Motion Canvas.
+
 ## Commands
 
 - `pnpm install` - Install workspace dependencies

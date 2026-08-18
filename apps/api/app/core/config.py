@@ -14,10 +14,14 @@ class Settings(BaseSettings):
     supabase_jwks_url: str = ""
     default_generation_credits: int = 20
     allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
-    app_environment: str = "development"
+    app_environment: str = "production"
     dev_auth_bypass: bool = False
     dev_auth_user_id: str = "00000000-0000-0000-0000-000000000001"
     dev_auth_email: str = "dev@example.com"
+    openai_api_key: str = ""
+    openai_script_model: str = "gpt-5-mini"
+    script_generation_enabled: bool = False
+    script_word_budget: int = 150
 
 
 @lru_cache

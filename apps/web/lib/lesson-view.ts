@@ -1,17 +1,17 @@
-import type {Lesson, MathLine} from "@quadratics/types";
+import type {Lesson, LessonScript, MathLine} from "@quadratics/types";
 
 export type SolveViewState =
   | {kind: "idle"}
   | {kind: "submitting"}
-  | {kind: "success"; lesson: Lesson}
-  | {kind: "unsupported"; lesson: Lesson}
+  | {kind: "success"; lesson: Lesson; script?: LessonScript}
+  | {kind: "unsupported"; lesson: Lesson; script?: LessonScript}
   | {kind: "error"; message: string};
 
-export function stateForLesson(lesson: Lesson): SolveViewState {
+export function stateForLesson(lesson: Lesson, script?: LessonScript): SolveViewState {
   if (lesson.status === "unsupported_instructional_method") {
-    return {kind: "unsupported", lesson};
+    return {kind: "unsupported", lesson, script};
   }
-  return {kind: "success", lesson};
+  return {kind: "success", lesson, script};
 }
 
 export function flattenLessonMathLines(lesson: Lesson): MathLine[] {
