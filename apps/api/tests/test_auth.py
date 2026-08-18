@@ -23,3 +23,23 @@ async def test_invalid_supabase_jwt_returns_unauthorized():
         await verify_supabase_token("not-a-jwt", settings)
 
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_dev_token_requires_explicit_bypass():
+    settings = Settings(dev_auth_bypass=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await verify_supabase_token("dev", settings)
+
+    assert exc_info.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_dev_auth_bypass_accepts_dev_token():
+    settings = Settings(dev_auth_bypass=True)
+
+    user = await verify_supabase_token("dev", settings)
+
+    assert user.id == "00000000-0000-0000-0000-000000000001"
+    assert user.email == "dev@example.com"

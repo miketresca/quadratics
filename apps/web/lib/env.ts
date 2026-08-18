@@ -7,3 +7,4 @@ export function requiredPublicEnv(name: string): string {
 }
 
 export const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const devAuthBypass = process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === "true";

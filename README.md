@@ -22,6 +22,15 @@ Quadratics is a scaffold for generating short educational videos that explain ho
 
 Copy `.env.example` and app-specific `.env.example` files to local `.env` files. Browser variables must use the `NEXT_PUBLIC_` prefix only when they are safe to expose.
 
+For local UI work before Supabase is configured, set:
+
+```env
+NEXT_PUBLIC_DEV_AUTH_BYPASS=true
+DEV_AUTH_BYPASS=true
+```
+
+Then run the API and web app. The web app uses `Bearer dev`, and the API accepts it only when `DEV_AUTH_BYPASS=true`.
+
 ## Commands
 
 - `pnpm install` - Install workspace dependencies
@@ -34,6 +43,8 @@ Copy `.env.example` and app-specific `.env.example` files to local `.env` files.
 - `pnpm typecheck` - Run TypeScript checks
 - `pnpm test` - Run TypeScript tests
 - `uv run --project apps/api pytest` - Run API tests
+
+Use `http://localhost:3000` for the web app. `http://localhost:9000` is the Motion Canvas editor.
 
 ## Scope
 

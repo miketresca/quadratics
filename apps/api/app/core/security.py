@@ -29,7 +29,7 @@ def _payload_to_user(payload: dict[str, Any]) -> AuthenticatedUser:
 
 
 async def verify_supabase_token(token: str, settings: Settings) -> AuthenticatedUser:
-    if settings.dev_auth_user_id and token == "dev":
+    if settings.dev_auth_bypass and token == "dev":
         return AuthenticatedUser(id=settings.dev_auth_user_id, email=settings.dev_auth_email)
 
     if settings.supabase_jwks_url:

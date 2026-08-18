@@ -7,6 +7,7 @@ import {useRef, useState, useTransition} from "react";
 import {CreditBalance} from "@/components/credit-balance";
 import {LessonResult} from "@/components/lesson-result";
 import {getMe, solveEquation} from "@/lib/api";
+import {devAuthBypass} from "@/lib/env";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
 import {createClient} from "@/lib/supabase/client";
 
@@ -31,16 +32,20 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
       setViewState({kind: "submitting"});
 
       try {
-        const supabase = createClient();
-        const {
-          data: {session}
-        } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-          throw new Error("Your session expired. Sign in again.");
+        let accessToken = "dev";
+        if (!devAuthBypass) {
+          const supabase = createClient();
+          const {
+            data: {session}
+          } = await supabase.auth.getSession();
+          if (!session?.access_token) {
+            throw new Error("Your session expired. Sign in again.");
+          }
+          accessToken = session.access_token;
         }
-        const lesson = await solveEquation({accessToken: session.access_token, equation, instructorId});
+        const lesson = await solveEquation({accessToken, equation, instructorId});
         setViewState(stateForLesson(lesson as Lesson));
-        await refreshUser(session.access_token);
+        await refreshUser(accessToken);
       } catch (error) {
         setViewState({kind: "error", message: error instanceof Error ? error.message : "Could not solve the equation"});
         setTimeout(() => errorRef.current?.focus(), 0);
