@@ -124,13 +124,13 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               <span className="grid flex-1 grid-cols-2 gap-1 text-sm text-zinc-100">
                 <label className="cursor-pointer overflow-hidden rounded-md">
                   <input className="peer sr-only" name="outputMode" type="radio" value="video_audio" defaultChecked />
-                  <span className="flex h-8 items-center justify-center border border-zinc-800 bg-zinc-950/50 px-2 text-zinc-400 transition peer-checked:border-sky-400/70 peer-checked:bg-sky-400/10 peer-checked:text-zinc-100">
+                  <span className="flex h-8 items-center justify-center border border-zinc-800 bg-zinc-950/50 px-2 text-zinc-400 transition peer-checked:text-emerald-300">
                     Video + audio
                   </span>
                 </label>
                 <label className="cursor-pointer overflow-hidden rounded-md">
                   <input className="peer sr-only" name="outputMode" type="radio" value="audio" />
-                  <span className="flex h-8 items-center justify-center border border-zinc-800 bg-zinc-950/50 px-2 text-zinc-400 transition peer-checked:border-sky-400/70 peer-checked:bg-sky-400/10 peer-checked:text-zinc-100">
+                  <span className="flex h-8 items-center justify-center border border-zinc-800 bg-zinc-950/50 px-2 text-zinc-400 transition peer-checked:text-emerald-300">
                     Audio only
                   </span>
                 </label>
