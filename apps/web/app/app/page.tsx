@@ -1,4 +1,5 @@
 import {redirect} from "next/navigation";
+import type {CurrentUser} from "@quadratics/types";
 
 import {signOut} from "@/app/auth/actions";
 import {EquationForm} from "@/components/equation-form";
@@ -37,21 +38,79 @@ export default async function AppPage() {
     <main className="min-h-screen bg-[#07090d] text-zinc-100">
       <header className="fixed left-0 top-0 z-10 flex w-full items-center justify-between px-5 py-5 sm:px-8">
         <div className="font-mono text-lg tracking-normal text-zinc-200">quadratics.xyz</div>
-        {devAuthBypass ? (
-          <div className="rounded border border-emerald-500/40 bg-emerald-950/20 px-3 py-2 font-mono text-xs text-emerald-300">
-            dev_auth
-          </div>
-        ) : (
-          <form action={signOut}>
-            <button className="rounded border border-zinc-700/80 bg-zinc-950/30 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white">
-              Sign out
-            </button>
-          </form>
-        )}
+        <div className="flex items-center gap-2">
+          <a
+            aria-label="Open quadratics GitHub repository"
+            className="flex h-10 w-10 items-center justify-center rounded border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-sky-400/70 hover:text-white"
+            href="https://github.com/miketresca/quadratics"
+            rel="noreferrer"
+            target="_blank"
+          >
+            <GithubIcon />
+          </a>
+          <AccountMenu canSignOut={!devAuthBypass} user={user} />
+        </div>
       </header>
       <div className="mx-auto flex min-h-screen w-full max-w-5xl items-center justify-center px-4 py-24 sm:px-6">
         <EquationForm initialUser={user} />
       </div>
     </main>
+  );
+}
+
+function AccountMenu({canSignOut, user}: {canSignOut: boolean; user: CurrentUser | null}) {
+  const label = accountLabel(user);
+
+  return (
+    <details className="group relative">
+      <summary className="flex h-10 cursor-pointer list-none items-center gap-2 rounded border border-zinc-800 bg-zinc-950/40 px-3 text-sm text-zinc-200 hover:border-sky-400/70 hover:text-white [&::-webkit-details-marker]:hidden">
+        <span className="max-w-36 truncate">{label}</span>
+        <span className="text-zinc-500 transition group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="absolute right-0 mt-2 w-56 rounded border border-zinc-800 bg-[#090d13] p-2 shadow-2xl shadow-black/50">
+        <div className="border-b border-zinc-800 px-2 pb-2">
+          <div className="truncate text-sm text-zinc-100">{label}</div>
+          <div className="truncate text-xs text-zinc-500">{user?.email ?? "Local development"}</div>
+        </div>
+        <button className="mt-2 w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
+          Profile settings
+        </button>
+        <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
+          API keys
+        </button>
+        <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
+          Usage
+        </button>
+        {canSignOut ? (
+          <form action={signOut} className="mt-2 border-t border-zinc-800 pt-2">
+            <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-900" type="submit">
+              Sign out
+            </button>
+          </form>
+        ) : (
+          <div className="mt-2 border-t border-zinc-800 px-2 pt-3 font-mono text-xs text-emerald-300">
+            local_auth_bypass
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function accountLabel(user: CurrentUser | null) {
+  if (user?.displayName) {
+    return user.displayName;
+  }
+  if (user?.email) {
+    return user.email.split("@")[0];
+  }
+  return "Account";
+}
+
+function GithubIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49v-1.73c-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .08 1.53 1.06 1.53 1.06.9 1.57 2.35 1.12 2.92.86.09-.67.35-1.12.63-1.38-2.22-.26-4.55-1.14-4.55-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.3 9.3 0 0 1 12 7c.85 0 1.7.12 2.5.34 1.9-1.33 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.8-4.57 5.05.36.32.68.94.68 1.9v2.81c0 .27.18.59.69.49A10.1 10.1 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z" />
+    </svg>
   );
 }
