@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.pyc
+*.tsbuildinfo
+apps/video/output/

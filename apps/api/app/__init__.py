@@ -1,0 +1,1 @@
+"""Quadratics API package."""

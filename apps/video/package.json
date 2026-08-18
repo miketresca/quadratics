@@ -1,0 +1,25 @@
+{
+  "name": "@quadratics/video",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo \"No video unit tests configured\""
+  },
+  "dependencies": {
+    "@motion-canvas/2d": "3.17.2",
+    "@motion-canvas/core": "3.17.2",
+    "@quadratics/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@motion-canvas/ui": "3.17.2",
+    "@motion-canvas/vite-plugin": "3.17.2",
+    "typescript": "7.0.2",
+    "vite": "5.4.21"
+  }
+}

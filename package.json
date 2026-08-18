@@ -1,0 +1,19 @@
+{
+  "name": "quadratics",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "api:dev": "uv run --project apps/api uvicorn app.main:app --reload --app-dir apps/api",
+    "web:dev": "pnpm --filter @quadratics/web dev",
+    "video:dev": "pnpm --filter @quadratics/video dev"
+  },
+  "devDependencies": {
+    "turbo": "2.10.10",
+    "typescript": "7.0.2"
+  }
+}

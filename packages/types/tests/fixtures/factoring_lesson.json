@@ -1,0 +1,45 @@
+{
+  "status": "completed",
+  "originalEquation": "2*x^2 - 7*x + 3 = 0",
+  "normalizedEquation": "2*x^2 - 7*x + 3 = 0",
+  "method": "factoring",
+  "coefficients": {
+    "a": {"expression": "2", "latex": "2"},
+    "b": {"expression": "-7", "latex": "-7"},
+    "c": {"expression": "3", "latex": "3"}
+  },
+  "solutions": [
+    {"expression": "1/2", "latex": "\\frac{1}{2}"},
+    {"expression": "3", "latex": "3"}
+  ],
+  "steps": [
+    {
+      "id": "factor",
+      "title": "Factor the quadratic",
+      "stepType": "factor",
+      "mathLines": [
+        {"id": "standard_form", "expression": "2*x^2 - 7*x + 3 = 0", "latex": "2 x^{2} - 7 x + 3 = 0"},
+        {"id": "factored_form", "expression": "(2*x - 1)*(x - 3) = 0", "latex": "\\left(2 x - 1\\right) \\left(x - 3\\right) = 0"}
+      ]
+    },
+    {
+      "id": "solve_factors",
+      "title": "Solve each factor",
+      "stepType": "solve_factors",
+      "mathLines": [
+        {"id": "first_factor", "expression": "2*x - 1 = 0", "latex": "2 x - 1 = 0"},
+        {"id": "first_solution", "expression": "x = 1/2", "latex": "x = \\frac{1}{2}"},
+        {"id": "second_factor", "expression": "x - 3 = 0", "latex": "x - 3 = 0"},
+        {"id": "second_solution", "expression": "x = 3", "latex": "x = 3"}
+      ]
+    },
+    {
+      "id": "final_answer",
+      "title": "State the final answer",
+      "stepType": "final_answer",
+      "mathLines": [
+        {"id": "solutions", "expression": "x = 1/2, 3", "latex": "x = \\frac{1}{2}, 3"}
+      ]
+    }
+  ]
+}

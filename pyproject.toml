@@ -1,0 +1,13 @@
+[project]
+name = "quadratics"
+version = "0.1.0"
+description = "Educational quadratic equation video generator scaffold"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["apps/api"]
+
+[tool.pytest.ini_options]
+pythonpath = ["apps/api"]
+testpaths = ["apps/api/tests"]

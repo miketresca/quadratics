@@ -1,0 +1,31 @@
+[project]
+name = "quadratics-api"
+version = "0.1.0"
+description = "FastAPI service for deterministic quadratic lessons"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116,<1.0",
+  "httpx>=0.28,<1.0",
+  "pydantic-settings>=2.8,<3.0",
+  "pyjwt[crypto]>=2.10,<3.0",
+  "sympy>=1.13,<2.0",
+  "uvicorn[standard]>=0.35,<1.0"
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4,<9.0",
+  "pytest-asyncio>=1.1,<2.0",
+  "ruff>=0.12,<1.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
