@@ -2,8 +2,10 @@ import pytest
 
 from app.api.routes import generations
 from app.core.config import Settings, get_settings
+from app.providers.heygen.avatar_provider import HeyGenAvatarVideoProvider
 from app.schemas.narration import AudioAlignment
 from app.services.animation.base import AnimationPlanningRequest, AnimationPlanProvider
+from app.services.avatars.development import DevelopmentAvatarVideoProvider
 from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
 from app.services.storage.media_store import MediaStore
 
@@ -32,6 +34,36 @@ class CountingNarrationProvider(NarrationProvider):
 class FailingMediaStore(MediaStore):
     def put(self, **_kwargs):
         raise RuntimeError("media upload failed")
+
+
+@pytest.mark.asyncio
+async def test_avatar_provider_uses_development_provider_in_tests():
+    provider = await generations._avatar_provider(
+        Settings(app_environment="test"),
+        user_id="user-1",
+    )
+
+    assert isinstance(provider, DevelopmentAvatarVideoProvider)
+
+
+@pytest.mark.asyncio
+async def test_avatar_provider_uses_development_provider_without_dev_key():
+    provider = await generations._avatar_provider(
+        Settings(app_environment="development"),
+        user_id="user-1",
+    )
+
+    assert isinstance(provider, DevelopmentAvatarVideoProvider)
+
+
+@pytest.mark.asyncio
+async def test_avatar_provider_uses_heygen_provider_with_server_key_in_development():
+    provider = await generations._avatar_provider(
+        Settings(app_environment="development", heygen_api_key="test-heygen-key"),
+        user_id="user-1",
+    )
+
+    assert isinstance(provider, HeyGenAvatarVideoProvider)
 
 
 def alignment_for(text: str) -> AudioAlignment:

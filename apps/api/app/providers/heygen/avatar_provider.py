@@ -67,17 +67,26 @@ class HeyGenAvatarVideoProvider(AvatarVideoProvider):
                 raise HeyGenProviderError("HeyGen completed without a video_url")
             download_response = await client.get(video_url)
             _raise_for_heygen_error(download_response, action="download video")
+            content_type = _content_type(download_response, request.output_format)
+            _validate_video_download(
+                content=download_response.content,
+                content_type=content_type,
+                output_format=request.output_format,
+            )
 
         return AvatarVideoResult(
             content=download_response.content,
-            content_type=_content_type(download_response, request.output_format),
+            content_type=content_type,
             duration_seconds=float(detail.get("duration") or 0),
             provider_video_id=video_id,
             output_format=request.output_format,
             provider_metadata={
                 "status": detail.get("status"),
+                "videoUrl": video_url,
                 "videoPageUrl": detail.get("video_page_url"),
                 "thumbnailUrl": detail.get("thumbnail_url"),
+                "downloadContentType": content_type,
+                "downloadSizeBytes": len(download_response.content),
             },
         )
 
@@ -127,6 +136,19 @@ def _content_type(response: httpx.Response, output_format: str) -> str:
     if content_type:
         return content_type.split(";")[0]
     return "video/webm" if output_format == "webm" else "video/mp4"
+
+
+def _validate_video_download(*, content: bytes, content_type: str, output_format: str) -> None:
+    if not content:
+        raise HeyGenProviderError("HeyGen video download was empty")
+    if output_format == "webm" and (content_type == "video/webm" or content.startswith(b"\x1a\x45\xdf\xa3")):
+        return
+    if output_format == "mp4" and (content_type == "video/mp4" or b"ftyp" in content[:16]):
+        return
+    raise HeyGenProviderError(
+        f"HeyGen video download was not a {output_format} video "
+        f"(content-type: {content_type}, bytes: {len(content)})"
+    )
 
 
 class _client_context:

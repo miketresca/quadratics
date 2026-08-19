@@ -269,16 +269,25 @@ def _narration_provider(settings: Settings) -> NarrationProvider:
 
 
 async def _avatar_provider(settings: Settings, user_id: str) -> AvatarVideoProvider:
-    if settings.app_environment in {"development", "test"}:
+    if settings.app_environment == "test":
         return DevelopmentAvatarVideoProvider()
+    api_key = settings.heygen_api_key.strip()
+    stored_key = None
     try:
         stored_key = await SupabaseProviderKeyStore(settings).get_decrypted(user_id, "heygen")
     except ProviderKeyStorageError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    if stored_key is None:
+        if not api_key and settings.app_environment == "development":
+            return DevelopmentAvatarVideoProvider()
+        if not api_key:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if stored_key is not None:
+        api_key = stored_key.api_key
+    if not api_key:
+        if settings.app_environment == "development":
+            return DevelopmentAvatarVideoProvider()
         raise HTTPException(status_code=409, detail="HeyGen API key is not configured")
     return HeyGenAvatarVideoProvider(
-        api_key=stored_key.api_key,
+        api_key=api_key,
         poll_interval_seconds=settings.heygen_avatar_poll_interval_seconds,
         timeout_seconds=settings.heygen_avatar_timeout_seconds,
     )

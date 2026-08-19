@@ -96,6 +96,7 @@ Cost display and provider usage logging use these price settings:
 ```env
 OPENAI_GPT5_MINI_INPUT_COST_PER_MILLION_TOKENS_USD=0.25
 OPENAI_GPT5_MINI_OUTPUT_COST_PER_MILLION_TOKENS_USD=2.00
+HEYGEN_API_KEY=
 HEYGEN_AVATAR_COST_PER_SECOND_USD=0.0167
 NEXT_PUBLIC_HEYGEN_AVATAR_COST_PER_SECOND_USD=0.0167
 ```
@@ -122,7 +123,7 @@ The golden checkpoint can be reused outside development with:
 GOLDEN_CHECKPOINT_REUSE_ENABLED=true
 ```
 
-HeyGen credentials are stored as encrypted user-provided provider keys. Set this before enabling saves and avatar generation:
+HeyGen credentials are normally stored as encrypted user-provided provider keys. `HEYGEN_API_KEY` is an API-server fallback for local/internal testing when no user key is stored. Set the encryption key before enabling in-app key saves:
 
 ```env
 PROVIDER_KEYS_ENCRYPTION_KEY=
