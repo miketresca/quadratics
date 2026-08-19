@@ -43,6 +43,7 @@ async def test_instructors_can_be_created_updated_and_deleted(authenticated_clie
 
     listed = await authenticated_client.get("/api/v1/instructors")
     assert listed.status_code == 200
+    assert listed.json()[0]["displayName"] == "Male Instructor"
     assert any(instructor["id"] == body["id"] for instructor in listed.json())
 
     deleted = await authenticated_client.delete(f"/api/v1/instructors/{body['id']}")

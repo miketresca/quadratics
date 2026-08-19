@@ -18,11 +18,12 @@ class InMemoryInstructorRepository:
         self._instructors = list(instructors or INSTRUCTORS)
 
     async def list(self) -> list[Instructor]:
-        return sorted(self._instructors, key=lambda instructor: instructor.display_name.lower())
+        return _sort_instructors(self._instructors)
 
     async def get(self, instructor_id: str | None) -> Instructor | None:
         if instructor_id is None:
-            return self._instructors[0] if self._instructors else None
+            instructors = await self.list()
+            return instructors[0] if instructors else None
         return next(
             (
                 instructor
@@ -116,11 +117,11 @@ class SupabaseInstructorRepository:
                 headers=self._headers,
                 params={
                     "select": _select_fields(),
-                    "order": "display_name.asc",
+                    "order": "created_at.asc",
                 },
             )
         _raise_for_storage_error(response)
-        return [Instructor.model_validate(row) for row in response.json()]
+        return _sort_instructors([Instructor.model_validate(row) for row in response.json()])
 
     async def get(self, instructor_id: str | None) -> Instructor | None:
         if instructor_id is None:
@@ -257,6 +258,21 @@ def _blank_to_none(value: str | None) -> str | None:
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _sort_instructors(instructors: list[Instructor]) -> list[Instructor]:
+    return sorted(instructors, key=_instructor_sort_key)
+
+
+def _instructor_sort_key(instructor: Instructor) -> tuple[int, str]:
+    name = instructor.display_name.lower()
+    if instructor.id == "male" or name == "male instructor":
+        priority = 0
+    elif instructor.id == "female" or name == "female instructor":
+        priority = 1
+    else:
+        priority = 2
+    return (priority, name)
 
 
 def _raise_for_storage_error(response: httpx.Response) -> None:

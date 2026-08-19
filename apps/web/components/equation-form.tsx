@@ -227,7 +227,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       setSelectedInstructorId((current) =>
         nextProfiles.some((profile) => profile.id === current)
           ? current
-          : nextProfiles.find((profile) => profile.id === "male")?.id ?? nextProfiles[0].id
+          : preferredDefaultInstructor(nextProfiles).id
       );
     } catch (error) {
       if (process.env.NODE_ENV === "development") {
@@ -725,4 +725,12 @@ function instructorToProfile(instructor: Instructor): InstructorProfile {
     imageX: instructor.imageX ?? 50,
     imageY: instructor.imageY ?? 50
   };
+}
+
+function preferredDefaultInstructor(profiles: InstructorProfile[]) {
+  return (
+    profiles.find((profile) => profile.displayName.toLowerCase() === "male instructor") ??
+    profiles.find((profile) => /\bmale\b/i.test(profile.displayName)) ??
+    profiles[0]
+  );
 }
