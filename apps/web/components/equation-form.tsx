@@ -1,14 +1,17 @@
 "use client";
 
 import {instructors} from "@quadratics/config";
-import type {CurrentUser, Lesson, OutputMode} from "@quadratics/types";
+import type {CurrentUser, Lesson} from "@quadratics/types";
 import {useRef, useState, useTransition} from "react";
 
 import {LessonResult} from "@/components/lesson-result";
 import {MathEquationInput} from "@/components/math-equation-input";
-import {generateEquationNarration, generateEquationScript, solveEquation} from "@/lib/api";
+import {
+  createGeneration,
+  runGenerationPipeline,
+  runGenerationStage
+} from "@/lib/api";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
-import {mergeNarrationSegmentRetry} from "@/lib/narration";
 import {createClient} from "@/lib/supabase/client";
 
 const sampleEquations = ["x^2 + 5x + 6", "2x^2 - 7x + 3", "x^2 - x"];
@@ -17,9 +20,6 @@ const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && proce
 export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentUser | null}) {
   const [viewState, setViewState] = useState<SolveViewState>({kind: "idle"});
   const [equationValue, setEquationValue] = useState("");
-  const [lastEquation, setLastEquation] = useState("");
-  const [lastInstructorId, setLastInstructorId] = useState("male");
-  const [lastOutputMode, setLastOutputMode] = useState<OutputMode>("audio");
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
   const pipelineInFlightRef = useRef(false);
@@ -28,13 +28,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     startTransition(async () => {
       const equation = String(formData.get("equation") ?? "");
       const instructorId = String(formData.get("instructorId") ?? "male");
-      const outputMode = String(formData.get("outputMode") ?? "audio") as OutputMode;
-      setLastEquation(equation);
-      setLastInstructorId(instructorId);
-      setLastOutputMode(outputMode);
       setViewState({kind: "submitting"});
       if (process.env.NODE_ENV === "development") {
-        console.info("[quadratics] submitting equation", {equation, instructorId, outputMode});
+        console.info("[quadratics] submitting equation", {equation, instructorId});
       }
 
       try {
@@ -49,8 +45,8 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           throw new Error("Sign in to run an equation.");
         }
         const accessToken = session.access_token;
-        const lessonResponse = await solveEquation({accessToken, equation, instructorId});
-        const lesson = lessonResponse as Lesson;
+        const generation = await createGeneration({accessToken, equation, instructorId});
+        const lesson = generation.lesson as Lesson;
         if (process.env.NODE_ENV === "development") {
           const lineCount = lesson.steps.reduce((count, step) => count + step.mathLines.length, 0);
           console.info("[quadratics] received lesson", {
@@ -59,7 +55,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             lineCount
           });
         }
-        setViewState(stateForLesson(lesson));
+        setViewState(stateForLesson(lesson, undefined, undefined, generation));
       } catch (error) {
         setViewState({kind: "error", message: error instanceof Error ? error.message : "Could not solve the equation"});
         setTimeout(() => errorRef.current?.focus(), 0);
@@ -90,45 +86,20 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           throw new Error("Sign in to run the pipeline.");
         }
         const accessToken = await getAccessToken();
-        let nextLesson = lesson;
-        let nextScript = script;
-
-        if (!nextScript || nextScript.status !== "completed") {
-          setViewState({kind: "submitting", lesson: nextLesson, scriptLoading: true});
-          const scriptResponse = await generateEquationScript({
-            accessToken,
-            equation: lastEquation || lesson.originalEquation,
-            instructorId: lastInstructorId,
-            outputMode: lastOutputMode
-          });
-          nextLesson = scriptResponse.lesson as Lesson;
-          nextScript = scriptResponse.script;
+        if (!generation) {
+          throw new Error("Solve the equation before running the pipeline.");
         }
-
-        if (lastOutputMode !== "audio" || nextScript.status !== "completed") {
-          setViewState(stateForLesson(nextLesson, nextScript));
-          return;
-        }
-
-        setViewState({
-          kind: "submitting",
-          lesson: nextLesson,
-          script: nextScript,
-          speechMarkupLoading: true,
-          narrationLoading: true
-        });
-        const narrationResponse = await generateEquationNarration({
+        setViewState({kind: "submitting", lesson, script, narration, generation, loadingStage: "run_all"});
+        const nextGeneration = await runGenerationPipeline({
           accessToken,
-          script: nextScript,
-          instructorId: lastInstructorId,
-          outputMode: lastOutputMode
+          generationId: generation.job.id
         });
-        setViewState(stateForLesson(nextLesson, nextScript, narrationResponse.narration));
+        setViewState(stateForLesson(nextGeneration.lesson as Lesson, undefined, undefined, nextGeneration));
       } catch (pipelineError) {
         if (process.env.NODE_ENV === "development") {
           console.error("[quadratics] full pipeline failed", pipelineError);
         }
-        setViewState(stateForLesson(lesson, script, narration));
+        setViewState(stateForLesson(lesson, script, narration, generation));
       } finally {
         finishPipelineOperation();
       }
@@ -141,24 +112,26 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     }
 
     startTransition(async () => {
-      setViewState({kind: "submitting", lesson, scriptLoading: true});
+      setViewState({kind: "submitting", lesson, generation, scriptLoading: true});
       try {
         if (!supabaseConfigured) {
           throw new Error("Sign in to generate the teacher script.");
         }
         const accessToken = await getAccessToken();
-        const response = await generateEquationScript({
+        if (!generation) {
+          throw new Error("Solve the equation before generating the teacher script.");
+        }
+        const response = await runGenerationStage({
           accessToken,
-          equation: lastEquation || lesson.originalEquation,
-          instructorId: lastInstructorId,
-          outputMode: lastOutputMode
+          generationId: generation.job.id,
+          stage: "teacher_script"
         });
-        setViewState(stateForLesson(response.lesson as Lesson, response.script));
+        setViewState(stateForLesson(response.lesson as Lesson, undefined, undefined, response));
       } catch (scriptError) {
         if (process.env.NODE_ENV === "development") {
           console.error("[quadratics] script generation failed", scriptError);
         }
-        setViewState(stateForLesson(lesson));
+        setViewState(stateForLesson(lesson, script, narration, generation));
       } finally {
         finishPipelineOperation();
       }
@@ -172,8 +145,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   function retryNarrationSegment(scriptSegmentId: string | null) {
     if (
       !lesson ||
-      !script ||
-      script.status !== "completed" ||
+      !generation ||
       !startPipelineOperation()
     ) {
       return;
@@ -185,6 +157,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
         lesson,
         script,
         narration,
+        generation,
         speechMarkupLoading: true,
         narrationLoading: true
       });
@@ -193,26 +166,24 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           throw new Error("Sign in to regenerate audio.");
         }
         const accessToken = await getAccessToken();
-        const narrationResponse = await generateEquationNarration({
+        if (!generation) {
+          throw new Error("Solve the equation before regenerating audio.");
+        }
+        const nextGeneration = await runGenerationStage({
           accessToken,
-          script,
-          instructorId: lastInstructorId,
-          outputMode: "audio",
+          generationId: generation.job.id,
+          stage: "elevenlabs_audio",
           scriptSegmentId
         });
-        const nextNarration =
-          scriptSegmentId && narration
-            ? mergeNarrationSegmentRetry(narration, narrationResponse.narration)
-            : narrationResponse.narration;
         if (process.env.NODE_ENV === "development") {
-          console.info("[quadratics] regenerated narration", nextNarration);
+          console.info("[quadratics] regenerated narration", nextGeneration);
         }
-        setViewState(stateForLesson(lesson, script, nextNarration));
+        setViewState(stateForLesson(nextGeneration.lesson as Lesson, undefined, undefined, nextGeneration));
       } catch (narrationError) {
         if (process.env.NODE_ENV === "development") {
           console.error("[quadratics] narration regeneration failed", narrationError);
         }
-        setViewState(stateForLesson(lesson, script, narration));
+        setViewState(stateForLesson(lesson, script, narration, generation));
       } finally {
         finishPipelineOperation();
       }
@@ -232,9 +203,22 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     viewState.kind === "success" || viewState.kind === "unsupported" || viewState.kind === "submitting"
       ? viewState.narration
       : undefined;
-  const scriptLoading = viewState.kind === "submitting" && viewState.scriptLoading === true;
-  const speechMarkupLoading = viewState.kind === "submitting" && viewState.speechMarkupLoading === true;
-  const narrationLoading = viewState.kind === "submitting" && viewState.narrationLoading === true;
+  const generation =
+    viewState.kind === "success" || viewState.kind === "unsupported" || viewState.kind === "submitting"
+      ? viewState.generation
+      : undefined;
+  const loadingStage = viewState.kind === "submitting" ? viewState.loadingStage : undefined;
+  const scriptLoading =
+    viewState.kind === "submitting" &&
+    (viewState.scriptLoading === true || loadingStage === "teacher_script" || loadingStage === "run_all");
+  const speechMarkupLoading =
+    viewState.kind === "submitting" &&
+    (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_audio");
+  const narrationLoading =
+    viewState.kind === "submitting" &&
+    (viewState.narrationLoading === true ||
+      loadingStage === "elevenlabs_audio" ||
+      loadingStage === "run_all");
 
   return (
     <div className="w-full">
@@ -334,13 +318,16 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
         <LessonResult
           lesson={lesson}
           narration={narration}
+          generation={generation}
           actionDisabled={disabled}
           narrationLoading={narrationLoading}
-          onGenerateNarration={script?.status === "completed" ? retryNarration : undefined}
+          loadingStage={loadingStage}
+          onGenerateNarration={generation ? retryNarration : undefined}
           onGenerateScript={runScript}
           onRunFullPipeline={runFullPipeline}
-          onRetryNarration={script?.status === "completed" ? retryNarration : undefined}
-          onRetryNarrationSegment={script?.status === "completed" ? retryNarrationSegment : undefined}
+          onRunStage={(stage, options) => runStage(stage, options)}
+          onRetryNarration={generation ? retryNarration : undefined}
+          onRetryNarrationSegment={generation ? retryNarrationSegment : undefined}
           speechMarkupLoading={speechMarkupLoading}
           script={script}
           scriptLoading={scriptLoading}
@@ -348,6 +335,32 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       ) : null}
     </div>
   );
+
+  function runStage(stage: string, options: {force?: boolean} = {}) {
+    if (!lesson || !generation || !startPipelineOperation()) {
+      return;
+    }
+    startTransition(async () => {
+      setViewState({kind: "submitting", lesson, script, narration, generation, loadingStage: stage});
+      try {
+        const accessToken = await getAccessToken();
+        const nextGeneration = await runGenerationStage({
+          accessToken,
+          generationId: generation.job.id,
+          stage,
+          force: options.force
+        });
+        setViewState(stateForLesson(nextGeneration.lesson as Lesson, undefined, undefined, nextGeneration));
+      } catch (stageError) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("[quadratics] stage failed", stage, stageError);
+        }
+        setViewState(stateForLesson(lesson, script, narration, generation));
+      } finally {
+        finishPipelineOperation();
+      }
+    });
+  }
 }
 
 async function getAccessToken() {

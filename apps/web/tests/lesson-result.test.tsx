@@ -360,4 +360,255 @@ describe("LessonResult", () => {
       root.unmount();
     });
   });
+
+  it("renders animation plan, resolved timeline, and render artifacts from a generation snapshot", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const onRunStage = vi.fn();
+    const generation = {
+      job: {
+        id: "generation-1",
+        userId: "user-1",
+        equationInput: "x^2 + 5x + 6",
+        normalizedEquation: "x^2 + 5*x + 6 = 0",
+        status: "completed",
+        creditsUsed: 0
+      },
+      lesson: scriptResponse.lesson,
+      artifacts: [
+        {
+          id: "script-artifact",
+          generationJobId: "generation-1",
+          userId: "user-1",
+          stage: "teacher_script",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:script",
+          payload: scriptResponse.script,
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:00Z"
+        },
+        {
+          id: "audio-artifact",
+          generationJobId: "generation-1",
+          userId: "user-1",
+          stage: "elevenlabs_audio",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:audio",
+          provider: "elevenlabs",
+          model: "eleven_multilingual_v2",
+          payload: {
+            status: "completed",
+            provider: "elevenlabs",
+            voiceId: "male-voice",
+            modelId: "eleven_multilingual_v2",
+            durationSeconds: 4,
+            speechText: "We need two numbers. Now factor the quadratic.",
+            segments: [
+              {
+                scriptSegmentId: "script_factor",
+                stepId: "factor",
+                title: "Factor the quadratic",
+                provider: "elevenlabs",
+                voiceId: "male-voice",
+                modelId: "eleven_multilingual_v2",
+                audioMimeType: "audio/mpeg",
+                durationSeconds: 4,
+                speechText: "We need two numbers. Now factor the quadratic."
+              }
+            ]
+          },
+          storageObjects: [
+            {
+              bucket: "generated-media",
+              path: "user-1/generation-1/narration/audio-artifact.mp3",
+              contentType: "audio/mpeg"
+            }
+          ],
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:01Z"
+        },
+        {
+          id: "plan-artifact",
+          generationJobId: "generation-1",
+          userId: "user-1",
+          stage: "animation_plan",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:plan",
+          payload: {
+            version: "animation-plan/v1",
+            lessonArtifactId: "lesson-artifact",
+            narrationArtifactId: "audio-artifact",
+            durationSeconds: 4,
+            layout: {theme: "chalkboard", verticalFlow: true},
+            cues: [
+              {
+                id: "cue-1",
+                lessonStepId: "factor",
+                mathLineId: "factor_line",
+                trigger: {
+                  type: "narration_text",
+                  scriptSegmentId: "script_factor",
+                  text: "Now factor the quadratic"
+                },
+                visual: {
+                  action: "write_math",
+                  target: {lessonStepId: "factor", mathLineId: "factor_line", fragment: "(x + 2)(x + 3)"}
+                },
+                sync: {mode: "with_narration"}
+              }
+            ]
+          },
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:02Z"
+        },
+        {
+          id: "timeline-artifact",
+          generationJobId: "generation-1",
+          userId: "user-1",
+          stage: "resolved_timeline",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:timeline",
+          payload: {
+            version: "resolved-animation-timeline/v1",
+            animationPlanArtifactId: "plan-artifact",
+            narrationArtifactId: "audio-artifact",
+            durationSeconds: 4,
+            cues: [
+              {
+                cueId: "cue-1",
+                lessonStepId: "factor",
+                mathLineId: "factor_line",
+                narration: {text: "Now factor the quadratic", startSeconds: 1, endSeconds: 2.2},
+                animation: {action: "write_math", startSeconds: 1.1, endSeconds: 2.1},
+                sfx: {type: "chalk_write", startSeconds: 1.1, endSeconds: 2.1}
+              }
+            ]
+          },
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:03Z"
+        },
+        {
+          id: "video-artifact",
+          generationJobId: "generation-1",
+          userId: "user-1",
+          stage: "base_video",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:video",
+          storageObjects: [
+            {
+              bucket: "generated-media",
+              path: "user-1/generation-1/renders/video-artifact.mp4",
+              contentType: "video/mp4"
+            }
+          ],
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:04Z"
+        }
+      ]
+    };
+
+    await act(async () => {
+      root.render(<LessonResult generation={generation as never} lesson={scriptResponse.lesson as never} onRunStage={onRunStage} />);
+    });
+
+    expect(container.textContent).toContain("animation_plan");
+    expect(container.textContent).toContain("resolved_timeline");
+    expect(container.textContent).toContain("motion_canvas_render");
+    expect(container.textContent).toContain("Now factor the quadratic");
+    expect(container.textContent).toContain("write_math -> factor_line");
+    expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/narration/audio-artifact.mp3");
+
+    const regeneratePlan = container.querySelector('button[aria-label="Regenerate animation plan"]');
+    await act(async () => {
+      regeneratePlan?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+    });
+
+    expect(onRunStage).toHaveBeenCalledWith("animation_plan", {force: true});
+
+    const lessonTab = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Lesson");
+    await act(async () => {
+      lessonTab?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+    });
+
+    expect(container.textContent).toContain("base video ready");
+    expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/renders/video-artifact.mp4");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("keeps stale animation artifacts visible", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={
+            {
+              job: {
+                id: "generation-2",
+                userId: "user-1",
+                equationInput: "x^2 + 5x + 6",
+                status: "processing",
+                creditsUsed: 0
+              },
+              lesson: scriptResponse.lesson,
+              artifacts: [
+                {
+                  id: "stale-plan",
+                  generationJobId: "generation-2",
+                  userId: "user-1",
+                  stage: "animation_plan",
+                  version: 1,
+                  status: "stale",
+                  inputHash: "sha256:old-plan",
+                  staleReason: "Narration was regenerated after this animation plan was created.",
+                  payload: {
+                    version: "animation-plan/v1",
+                    lessonArtifactId: "lesson-artifact",
+                    narrationArtifactId: "old-audio",
+                    layout: {theme: "chalkboard", verticalFlow: true},
+                    cues: [
+                      {
+                        id: "cue-old",
+                        lessonStepId: "factor",
+                        trigger: {
+                          type: "narration_text",
+                          scriptSegmentId: "script_factor",
+                          text: "old narration phrase"
+                        },
+                        visual: {action: "highlight", target: {lessonStepId: "factor"}},
+                        sync: {mode: "with_narration"}
+                      }
+                    ]
+                  },
+                  isCurrent: false,
+                  createdAt: "2026-08-18T00:00:00Z"
+                }
+              ]
+            } as never
+          }
+          lesson={scriptResponse.lesson as never}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("animation_plan");
+    expect(container.textContent).toContain("STALE");
+    expect(container.textContent).toContain("Narration was regenerated after this animation plan was created.");
+    expect(container.textContent).toContain("old narration phrase");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });

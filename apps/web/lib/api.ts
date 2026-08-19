@@ -1,4 +1,6 @@
 import type {
+  CreateGenerationResponse,
+  GenerationSnapshot,
   MeResponse,
   NarrationEquationResponse,
   OutputMode,
@@ -41,6 +43,68 @@ export async function solveEquation(params: {
     throw new Error(body?.detail ?? "Could not solve the equation");
   }
   return response.json() as Promise<SolveEquationResponse>;
+}
+
+export async function createGeneration(params: {
+  accessToken: string;
+  equation: string;
+  instructorId: string;
+}): Promise<CreateGenerationResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/generations`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({equation: params.equation, instructorId: params.instructorId})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not create the generation");
+  }
+  return response.json() as Promise<CreateGenerationResponse>;
+}
+
+export async function runGenerationStage(params: {
+  accessToken: string;
+  generationId: string;
+  stage: string;
+  force?: boolean;
+  scriptSegmentId?: string | null;
+}): Promise<GenerationSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/generations/${params.generationId}/stages/${params.stage}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({force: params.force ?? false, scriptSegmentId: params.scriptSegmentId})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? `Could not run ${params.stage}`);
+  }
+  return response.json() as Promise<GenerationSnapshot>;
+}
+
+export async function runGenerationPipeline(params: {
+  accessToken: string;
+  generationId: string;
+  force?: boolean;
+}): Promise<GenerationSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/generations/${params.generationId}/run-all`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({force: params.force ?? false})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not run the full pipeline");
+  }
+  return response.json() as Promise<GenerationSnapshot>;
 }
 
 export async function generateEquationScript(params: {

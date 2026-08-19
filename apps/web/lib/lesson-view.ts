@@ -1,4 +1,4 @@
-import type {Lesson, LessonNarration, LessonScript, MathLine} from "@quadratics/types";
+import type {GenerationSnapshot, Lesson, LessonNarration, LessonScript, MathLine} from "@quadratics/types";
 
 export type SolveViewState =
   | {kind: "idle"}
@@ -7,19 +7,38 @@ export type SolveViewState =
       lesson?: Lesson;
       script?: LessonScript;
       narration?: LessonNarration;
+      generation?: GenerationSnapshot;
+      loadingStage?: string;
       scriptLoading?: boolean;
       speechMarkupLoading?: boolean;
       narrationLoading?: boolean;
     }
-  | {kind: "success"; lesson: Lesson; script?: LessonScript; narration?: LessonNarration}
-  | {kind: "unsupported"; lesson: Lesson; script?: LessonScript; narration?: LessonNarration}
+  | {
+      kind: "success";
+      lesson: Lesson;
+      script?: LessonScript;
+      narration?: LessonNarration;
+      generation?: GenerationSnapshot;
+    }
+  | {
+      kind: "unsupported";
+      lesson: Lesson;
+      script?: LessonScript;
+      narration?: LessonNarration;
+      generation?: GenerationSnapshot;
+    }
   | {kind: "error"; message: string};
 
-export function stateForLesson(lesson: Lesson, script?: LessonScript, narration?: LessonNarration): SolveViewState {
+export function stateForLesson(
+  lesson: Lesson,
+  script?: LessonScript,
+  narration?: LessonNarration,
+  generation?: GenerationSnapshot
+): SolveViewState {
   if (lesson.status === "unsupported_instructional_method") {
-    return {kind: "unsupported", lesson, script, narration};
+    return {kind: "unsupported", lesson, script, narration, generation};
   }
-  return {kind: "success", lesson, script, narration};
+  return {kind: "success", lesson, script, narration, generation};
 }
 
 export function flattenLessonMathLines(lesson: Lesson): MathLine[] {
