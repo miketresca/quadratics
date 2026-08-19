@@ -19,6 +19,7 @@ const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && proce
 export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentUser | null}) {
   const [viewState, setViewState] = useState<SolveViewState>({kind: "idle"});
   const [equationValue, setEquationValue] = useState("");
+  const [activePipelineStage, setActivePipelineStage] = useState<string>();
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
   const pipelineInFlightRef = useRef(false);
@@ -62,20 +63,22 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     });
   }
 
-  function startPipelineOperation() {
+  function startPipelineOperation(stage: string) {
     if (pipelineInFlightRef.current || viewState.kind === "submitting") {
       return false;
     }
     pipelineInFlightRef.current = true;
+    setActivePipelineStage(stage);
     return true;
   }
 
   function finishPipelineOperation() {
     pipelineInFlightRef.current = false;
+    setActivePipelineStage(undefined);
   }
 
   function runScript() {
-    if (!lesson || !startPipelineOperation()) {
+    if (!lesson || !startPipelineOperation("teacher_script")) {
       return;
     }
 
@@ -106,7 +109,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     });
   }
 
-  const disabled = isPending || viewState.kind === "submitting";
+  const disabled = isPending || viewState.kind === "submitting" || Boolean(activePipelineStage);
   const lesson =
     viewState.kind === "success" || viewState.kind === "unsupported" || viewState.kind === "submitting"
       ? viewState.lesson
@@ -123,13 +126,13 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     viewState.kind === "success" || viewState.kind === "unsupported" || viewState.kind === "submitting"
       ? viewState.generation
       : undefined;
-  const loadingStage = viewState.kind === "submitting" ? viewState.loadingStage : undefined;
+  const loadingStage = activePipelineStage ?? (viewState.kind === "submitting" ? viewState.loadingStage : undefined);
   const scriptLoading =
     viewState.kind === "submitting" &&
     (viewState.scriptLoading === true || loadingStage === "teacher_script");
   const speechMarkupLoading =
     viewState.kind === "submitting" &&
-    (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_audio");
+    (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_request" || loadingStage === "elevenlabs_audio");
   const narrationLoading =
     viewState.kind === "submitting" &&
     viewState.narrationLoading === true;
@@ -247,7 +250,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   );
 
   function runStage(stage: string, options: {force?: boolean} = {}) {
-    if (!lesson || !generation || !startPipelineOperation()) {
+    if (!lesson || !generation || !startPipelineOperation(stage)) {
       return;
     }
     startTransition(async () => {
@@ -294,7 +297,13 @@ function EnterIcon() {
 }
 
 function LoadingDots() {
-  return <span className="font-mono text-zinc-500">...</span>;
+  return (
+    <span className="flex h-5 items-end gap-0.5" aria-label="Loading">
+      <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.2s]" />
+      <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.1s]" />
+      <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-400" />
+    </span>
+  );
 }
 
 function InfoIcon() {
