@@ -674,6 +674,180 @@ describe("LessonResult", () => {
     });
   });
 
+  it("swaps completed downstream stage actions to a spinner while that stage is loading", async () => {
+    const generation = {
+      job: {
+        id: "generation-loading",
+        userId: "user-1",
+        equationInput: "x^2 + 5x + 6",
+        status: "processing",
+        creditsUsed: 0
+      },
+      lesson: scriptResponse.lesson,
+      artifacts: [
+        {
+          id: "audio-artifact",
+          generationJobId: "generation-loading",
+          userId: "user-1",
+          stage: "elevenlabs_audio",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:audio",
+          payload: {
+            status: "completed",
+            provider: "elevenlabs",
+            voiceId: "male-voice",
+            modelId: "eleven_multilingual_v2",
+            durationSeconds: 4,
+            speechText: "Now factor the quadratic.",
+            segments: [
+              {
+                scriptSegmentId: "script_factor",
+                stepId: "factor",
+                title: "Factor the quadratic",
+                provider: "elevenlabs",
+                voiceId: "male-voice",
+                modelId: "eleven_multilingual_v2",
+                audioMimeType: "audio/mpeg",
+                durationSeconds: 4,
+                speechText: "Now factor the quadratic."
+              }
+            ]
+          },
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:01Z"
+        },
+        {
+          id: "plan-artifact",
+          generationJobId: "generation-loading",
+          userId: "user-1",
+          stage: "animation_plan",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:plan",
+          payload: {
+            version: "animation-plan/v1",
+            lessonArtifactId: "lesson-artifact",
+            narrationArtifactId: "audio-artifact",
+            durationSeconds: 4,
+            layout: {theme: "chalkboard", verticalFlow: true},
+            cues: [
+              {
+                id: "cue-1",
+                lessonStepId: "factor",
+                mathLineId: "factor_line",
+                trigger: {
+                  type: "narration_text",
+                  scriptSegmentId: "script_factor",
+                  text: "Now factor the quadratic"
+                },
+                visual: {
+                  action: "write_math",
+                  target: {lessonStepId: "factor", mathLineId: "factor_line"}
+                },
+                sync: {mode: "with_narration"}
+              }
+            ]
+          },
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:02Z"
+        },
+        {
+          id: "timeline-artifact",
+          generationJobId: "generation-loading",
+          userId: "user-1",
+          stage: "resolved_timeline",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:timeline",
+          payload: {
+            version: "resolved-animation-timeline/v1",
+            animationPlanArtifactId: "plan-artifact",
+            narrationArtifactId: "audio-artifact",
+            durationSeconds: 4,
+            cues: [
+              {
+                cueId: "cue-1",
+                lessonStepId: "factor",
+                mathLineId: "factor_line",
+                narration: {text: "Now factor the quadratic", startSeconds: 1, endSeconds: 2.2},
+                animation: {action: "write_math", startSeconds: 1.1, endSeconds: 2.1},
+                sfx: {type: "chalk_write", startSeconds: 1.1, endSeconds: 2.1}
+              }
+            ]
+          },
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:03Z"
+        },
+        {
+          id: "render-artifact",
+          generationJobId: "generation-loading",
+          userId: "user-1",
+          stage: "motion_canvas_render",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:render",
+          payload: {durationSeconds: 4},
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:04Z"
+        }
+      ]
+    };
+
+    for (const [stage, label] of [
+      ["animation_plan", "Regenerate animation plan"],
+      ["resolved_timeline", "Regenerate resolved timeline"],
+      ["motion_canvas_render", "Regenerate Motion Canvas render"]
+    ]) {
+      container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+
+      await act(async () => {
+        root.render(
+          <LessonResult
+            generation={generation as never}
+            lesson={scriptResponse.lesson as never}
+            loadingStage={stage}
+            onRunStage={vi.fn()}
+          />
+        );
+      });
+
+      expect(container.querySelector(`button[aria-label="${label}"]`)).toBeNull();
+      expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(1);
+
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+      container = null;
+    }
+
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={generation as never}
+          lesson={scriptResponse.lesson as never}
+          loadingStage="elevenlabs_audio"
+          onRunStage={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("elevenlabs_request");
+    expect(container.textContent).toContain("elevenlabs_audio");
+    expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(2);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("keeps stale animation artifacts visible", async () => {
     container = document.createElement("div");
     document.body.append(container);

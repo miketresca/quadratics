@@ -43,11 +43,15 @@ export function LessonResult({
 }) {
   const [activeView, setActiveView] = useState<"lesson" | "logs">("logs");
   const solutionLines = lesson ? flattenLessonMathLines(lesson) : [];
+  const teacherScriptArtifact = artifactForStage(generation, "teacher_script");
+  const speechMarkupArtifact = artifactForStage(generation, "elevenlabs_request");
+  const narrationArtifact = artifactForStage(generation, "elevenlabs_audio");
   const effectiveScript = script ?? payloadForStage<LessonScript>(generation, "teacher_script");
   const effectiveNarration = narration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_audio");
   const speechMarkup = effectiveNarration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_request");
   const animationPlanArtifact = artifactForStage(generation, "animation_plan");
   const resolvedTimelineArtifact = artifactForStage(generation, "resolved_timeline");
+  const renderArtifact = artifactForStage(generation, "motion_canvas_render");
   const animationPlan = isAnimationPlanPayload(animationPlanArtifact?.payload)
     ? animationPlanArtifact.payload
     : undefined;
@@ -55,6 +59,7 @@ export function LessonResult({
     ? resolvedTimelineArtifact.payload
     : undefined;
   const baseVideo = artifactForStage(generation, "base_video");
+  const visibleRenderArtifact = baseVideo ?? renderArtifact;
 
   return (
     <section className="mx-auto mt-6 max-w-3xl" aria-live="polite">
@@ -79,31 +84,57 @@ export function LessonResult({
 
           {effectiveScript ? (
             <ScriptLog
-              artifact={artifactForStage(generation, "teacher_script")}
-              disabled={actionDisabled || scriptLoading}
-              loading={scriptLoading}
+              artifact={teacherScriptArtifact}
+              disabled={actionDisabled || loadingStage === "teacher_script"}
+              loading={loadingStage === "teacher_script"}
               onRun={onRunStage ? () => onRunStage("teacher_script", {force: true}) : onGenerateScript}
               script={effectiveScript}
             />
           ) : scriptLoading ? (
             <PendingLog accent="sky" className="mt-6" title="teacher_script" />
+          ) : teacherScriptArtifact?.status === "failed" ? (
+            <FailedStageLog
+              accent="sky"
+              artifact={teacherScriptArtifact}
+              disabled={actionDisabled || !onRunStage || loadingStage === "teacher_script"}
+              loading={loadingStage === "teacher_script"}
+              onRun={onRunStage ? () => onRunStage("teacher_script", {force: true}) : undefined}
+              title="teacher_script"
+            />
           ) : lesson ? (
-            <RunnableLog accent="sky" className="mt-6" disabled={actionDisabled || !onGenerateScript} onRun={onGenerateScript} title="teacher_script" />
+            <RunnableLog
+              accent="sky"
+              className="mt-6"
+              disabled={actionDisabled || !onGenerateScript || loadingStage === "teacher_script"}
+              loading={loadingStage === "teacher_script"}
+              onRun={onGenerateScript}
+              title="teacher_script"
+            />
           ) : null}
 
           {speechMarkup?.speechText ? (
             <SpeechMarkupLog
-              artifact={artifactForStage(generation, "elevenlabs_request")}
-              loading={speechMarkupLoading}
+              artifact={speechMarkupArtifact}
+              loading={loadingStage === "elevenlabs_audio"}
               narration={speechMarkup}
             />
           ) : speechMarkupLoading ? (
             <PendingLog accent="amber" className="mt-6" title="elevenlabs_request" />
+          ) : speechMarkupArtifact?.status === "failed" ? (
+            <FailedStageLog
+              accent="amber"
+              artifact={speechMarkupArtifact}
+              disabled={actionDisabled || !onRunStage || loadingStage === "elevenlabs_audio"}
+              loading={loadingStage === "elevenlabs_audio"}
+              onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
+              title="elevenlabs_request"
+            />
           ) : effectiveScript?.status === "completed" ? (
             <RunnableLog
               accent="amber"
               className="mt-6"
-              disabled={actionDisabled || !onRunStage}
+              disabled={actionDisabled || !onRunStage || loadingStage === "elevenlabs_audio"}
+              loading={loadingStage === "elevenlabs_audio"}
               onRun={onRunStage ? () => onRunStage("elevenlabs_audio") : undefined}
               title="elevenlabs_request"
             />
@@ -111,12 +142,21 @@ export function LessonResult({
 
           {effectiveNarration ? (
             <NarrationLog
-              artifact={artifactForStage(generation, "elevenlabs_audio")}
-              loading={narrationLoading}
+              artifact={narrationArtifact}
+              loading={loadingStage === "elevenlabs_audio" || narrationLoading}
               narration={effectiveNarration}
             />
           ) : narrationLoading ? (
             <PendingLog accent="fuchsia" className="mt-6" title="elevenlabs_audio" />
+          ) : narrationArtifact?.status === "failed" ? (
+            <FailedStageLog
+              accent="fuchsia"
+              artifact={narrationArtifact}
+              disabled={actionDisabled || !onRunStage || loadingStage === "elevenlabs_audio"}
+              loading={loadingStage === "elevenlabs_audio"}
+              onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
+              title="elevenlabs_audio"
+            />
           ) : null}
 
           {animationPlan ? (
@@ -128,21 +168,23 @@ export function LessonResult({
               plan={animationPlan}
               timeline={resolvedTimeline}
             />
-          ) : loadingStage === "animation_plan" ? (
-            <PendingLog accent="violet" className="mt-6" title="animation_plan" />
           ) : animationPlanArtifact?.status === "failed" ? (
             <FailedStageLog
               accent="violet"
               artifact={animationPlanArtifact}
-              disabled={actionDisabled || !onRunStage}
+              disabled={actionDisabled || !onRunStage || loadingStage === "animation_plan"}
+              loading={loadingStage === "animation_plan"}
               onRun={onRunStage ? () => onRunStage("animation_plan", {force: true}) : undefined}
               title="animation_plan"
             />
+          ) : loadingStage === "animation_plan" ? (
+            <PendingLog accent="violet" className="mt-6" title="animation_plan" />
           ) : effectiveNarration?.status === "completed" ? (
             <RunnableLog
               accent="violet"
               className="mt-6"
-              disabled={actionDisabled || !onRunStage}
+              disabled={actionDisabled || !onRunStage || loadingStage === "animation_plan"}
+              loading={loadingStage === "animation_plan"}
               onRun={onRunStage ? () => onRunStage("animation_plan") : undefined}
               title="animation_plan"
             />
@@ -156,22 +198,32 @@ export function LessonResult({
               onRun={onRunStage ? () => onRunStage("resolved_timeline", {force: true}) : undefined}
               timeline={resolvedTimeline}
             />
+          ) : resolvedTimelineArtifact?.status === "failed" ? (
+            <FailedStageLog
+              accent="cyan"
+              artifact={resolvedTimelineArtifact}
+              disabled={actionDisabled || !onRunStage || loadingStage === "resolved_timeline"}
+              loading={loadingStage === "resolved_timeline"}
+              onRun={onRunStage ? () => onRunStage("resolved_timeline", {force: true}) : undefined}
+              title="resolved_timeline"
+            />
           ) : loadingStage === "resolved_timeline" ? (
             <PendingLog accent="cyan" className="mt-6" title="resolved_timeline" />
           ) : animationPlan ? (
             <RunnableLog
               accent="cyan"
               className="mt-6"
-              disabled={actionDisabled || !onRunStage}
+              disabled={actionDisabled || !onRunStage || loadingStage === "resolved_timeline"}
+              loading={loadingStage === "resolved_timeline"}
               onRun={onRunStage ? () => onRunStage("resolved_timeline") : undefined}
               title="resolved_timeline"
             />
           ) : null}
 
-          {baseVideo ? (
+          {visibleRenderArtifact ? (
             <RenderLog
               actionDisabled={actionDisabled}
-              artifact={baseVideo}
+              artifact={visibleRenderArtifact}
               loading={loadingStage === "motion_canvas_render"}
               onRun={onRunStage ? () => onRunStage("motion_canvas_render", {force: true}) : undefined}
             />
@@ -181,7 +233,8 @@ export function LessonResult({
             <RunnableLog
               accent="lime"
               className="mt-6"
-              disabled={actionDisabled || !onRunStage}
+              disabled={actionDisabled || !onRunStage || loadingStage === "motion_canvas_render"}
+              loading={loadingStage === "motion_canvas_render"}
               onRun={onRunStage ? () => onRunStage("motion_canvas_render") : undefined}
               title="motion_canvas_render"
             />
@@ -670,12 +723,14 @@ function RunnableLog({
   accent = "zinc",
   className = "",
   disabled = false,
+  loading = false,
   onRun,
   title
 }: {
   accent?: Accent;
   className?: string;
   disabled?: boolean;
+  loading?: boolean;
   onRun?: () => void;
   title: string;
 }) {
@@ -683,9 +738,13 @@ function RunnableLog({
     <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
       <div className="flex items-center justify-between gap-4">
         <h3 className={`font-mono text-sm uppercase tracking-wide ${accentTextClass(accent)}`}>{title}</h3>
-        <IconButton disabled={disabled} label={`Run ${title}`} onClick={onRun}>
-          <RunIcon />
-        </IconButton>
+        {loading ? (
+          <Spinner />
+        ) : (
+          <IconButton disabled={disabled} label={`Run ${title}`} onClick={onRun}>
+            <RunIcon />
+          </IconButton>
+        )}
       </div>
     </div>
   );
@@ -695,12 +754,14 @@ function FailedStageLog({
   accent = "zinc",
   artifact,
   disabled = false,
+  loading = false,
   onRun,
   title
 }: {
   accent?: Accent;
   artifact: GenerationArtifact;
   disabled?: boolean;
+  loading?: boolean;
   onRun?: () => void;
   title: string;
 }) {
@@ -709,6 +770,7 @@ function FailedStageLog({
       accent={accent}
       action={onRun ? <IconButton disabled={disabled} label={`Run ${title}`} onClick={onRun}><RunIcon /></IconButton> : null}
       artifact={artifact}
+      loading={loading}
       title={title}
     >
       <p className="mt-3 rounded border border-red-400/30 bg-red-950/20 p-3 text-sm text-red-100">
