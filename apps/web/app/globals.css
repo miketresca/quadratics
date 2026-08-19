@@ -4,6 +4,7 @@
   color-scheme: dark;
   background: #07090d;
   color: #f4f4f5;
+  scrollbar-gutter: stable;
 }
 
 body {
