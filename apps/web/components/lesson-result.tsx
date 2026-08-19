@@ -227,6 +227,14 @@ export function LessonResult({
             />
           ) : null}
 
+          {resolvedTimeline ? (
+            <RenderContextLog
+              narration={effectiveNarration}
+              renderArtifact={renderArtifact}
+              timeline={resolvedTimeline}
+            />
+          ) : null}
+
           {visibleRenderArtifact ? (
             <RenderLog
               actionDisabled={actionDisabled}
@@ -276,7 +284,9 @@ function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; load
           {storageObject ? <ArtifactStorage object={storageObject} /> : null}
         </div>
       ) : (
-        <div className="flex min-h-56 items-center justify-center text-sm text-zinc-500">No rendered lesson video yet.</div>
+        <div className="flex min-h-56 items-center justify-center px-6 text-center text-sm leading-6 text-zinc-400">
+          Run the pipeline from the Logs tab. The finished narrated lesson video will appear here.
+        </div>
       )}
     </div>
   );
@@ -285,7 +295,7 @@ function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; load
 function AnswerLog({lesson}: {lesson: Lesson}) {
   return (
     <div className="rounded border border-zinc-700/80 bg-zinc-950/55 p-4 backdrop-blur">
-      <h2 className="font-mono text-lg text-zinc-100">answer</h2>
+      <StageTitle accent="zinc" title="answer" />
       <dl className="mt-4 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
         <div>
           <dt className="text-xs uppercase tracking-wide text-zinc-500">Normalized equation</dt>
@@ -316,7 +326,7 @@ function AnswerLog({lesson}: {lesson: Lesson}) {
 function SolutionLinesLog({lines}: {lines: ReturnType<typeof flattenLessonMathLines>}) {
   return (
     <div className="mt-6 rounded border border-emerald-400/35 bg-emerald-950/10 p-4">
-      <h3 className="font-mono text-sm uppercase tracking-wide text-emerald-300">solution_lines</h3>
+      <StageTitle accent="lime" title="solution_lines" />
       <ol className="mt-4 grid gap-2 font-mono text-sm text-zinc-100">
         {lines.map((line, index) => (
           <li className="flex gap-3" key={`${line.id}-${index}`}>
@@ -647,6 +657,46 @@ function RenderLog({
   );
 }
 
+function RenderContextLog({
+  narration,
+  renderArtifact,
+  timeline
+}: {
+  narration?: LessonNarration;
+  renderArtifact?: GenerationArtifact;
+  timeline: ResolvedAnimationTimeline;
+}) {
+  const narrationSegments = narration?.segments?.length ?? 0;
+  const renderProvider = [renderArtifact?.provider, renderArtifact?.model].filter(Boolean).join(" / ");
+  return (
+    <div className="mt-6 rounded border border-lime-400/20 bg-lime-950/5 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <StageTitle accent="lime" title="render_context" />
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
+            Motion Canvas receives the lesson, resolved timeline, and signed narration segment URLs. The renderer uses those inputs to
+            draw the blackboard scene, place captions, and mux narration into the final MP4.
+          </p>
+        </div>
+      </div>
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+        <div className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
+          <dt className="font-mono text-xs uppercase tracking-wide text-zinc-500">Timeline</dt>
+          <dd className="mt-1 text-zinc-100">{timeline.cues.length} cues / {formatSeconds(timeline.durationSeconds)}</dd>
+        </div>
+        <div className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
+          <dt className="font-mono text-xs uppercase tracking-wide text-zinc-500">Narration</dt>
+          <dd className="mt-1 text-zinc-100">{narrationSegments || "pending"} segments</dd>
+        </div>
+        <div className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
+          <dt className="font-mono text-xs uppercase tracking-wide text-zinc-500">Renderer</dt>
+          <dd className="mt-1 break-words text-zinc-100">{renderProvider || "motion_canvas command adapter"}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 function StageCard({
   accent = "zinc",
   action,
@@ -667,7 +717,7 @@ function StageCard({
     <div className={`mt-6 rounded border ${accentBorderClass(accent)} p-4`}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className={`font-mono text-sm uppercase tracking-wide ${accentTextClass(accent)}`}>{title}</h3>
+          <StageTitle accent={accent} title={title} />
           {artifact ? <ArtifactMeta artifact={artifact} /> : null}
         </div>
         <div className="flex items-center gap-2">
@@ -744,7 +794,7 @@ function PendingLog({accent = "zinc", className = "", title}: {accent?: Accent; 
   return (
     <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
       <div className="flex items-center justify-between gap-4">
-        <h3 className={`font-mono text-sm uppercase tracking-wide ${accentTextClass(accent)}`}>{title}</h3>
+        <StageTitle accent={accent} title={title} />
         <Spinner />
       </div>
     </div>
@@ -769,7 +819,7 @@ function RunnableLog({
   return (
     <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
       <div className="flex items-center justify-between gap-4">
-        <h3 className={`font-mono text-sm uppercase tracking-wide ${accentTextClass(accent)}`}>{title}</h3>
+        <StageTitle accent={accent} title={title} />
         {loading ? <Spinner /> : null}
         <IconButton disabled={disabled || loading || !onRun} label={`Run ${title}`} onClick={onRun}>
           <RunIcon />
@@ -855,6 +905,45 @@ function cuesForAnimationPlanLog(plan: AnimationPlan, timeline?: ResolvedAnimati
 function formatSeconds(value: number) {
   return `${value.toFixed(1)}s`;
 }
+
+function StageTitle({accent, title}: {accent: Accent; title: string}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <StageInfo title={title} />
+      <h3 className={`font-mono text-sm uppercase tracking-wide ${accentTextClass(accent)}`}>{title}</h3>
+    </div>
+  );
+}
+
+function StageInfo({title}: {title: string}) {
+  const description = stageDescriptions[title] ?? "This log shows one artifact boundary in the generation pipeline.";
+  return (
+    <span className="group/info relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+      <span
+        aria-label={`${title} info`}
+        className="flex h-4 w-4 items-center justify-center rounded-full border border-zinc-700 font-mono text-[10px] font-semibold text-zinc-500 transition group-hover/info:border-emerald-400/60 group-hover/info:text-emerald-300"
+        tabIndex={0}
+      >
+        i
+      </span>
+      <span className="pointer-events-none absolute left-0 top-7 z-30 hidden w-80 rounded border border-zinc-700 bg-[#090d14] p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/60 group-hover/info:block group-focus-within/info:block">
+        {description}
+      </span>
+    </span>
+  );
+}
+
+const stageDescriptions: Record<string, string> = {
+  answer: "The API normalizes the equation, verifies it is a quadratic in x, and uses deterministic SymPy-backed code to compute coefficients and exact roots. No LLM decides the math.",
+  solution_lines: "The lesson builder converts the solved quadratic into stable math-line IDs. These lines become the canonical board work for narration, animation planning, and Motion Canvas rendering.",
+  teacher_script: "OpenAI receives the deterministic lesson structure and writes concise teaching narration. The script must reference existing teaching steps and math-line IDs; it cannot invent math.",
+  elevenlabs_request: "The speech-markup provider turns the teacher script into ElevenLabs-ready conversational text with SSML break tags. This is the exact request-shaped text used before audio generation.",
+  elevenlabs_audio: "ElevenLabs generates per-step narration audio and character alignment. The MP3 segments are stored in private Supabase Storage and exposed through signed playback URLs.",
+  animation_plan: "The animation planner uses the lesson, script, and narration text to choose semantic visual actions like write, highlight, underline, or box. It does not create Motion Canvas code.",
+  resolved_timeline: "Deterministic resolver code maps planner trigger phrases to ElevenLabs character timestamps and creates exact animation, caption, and chalk-SFX windows.",
+  render_context: "This derived log summarizes the payload Motion Canvas will receive: lesson data, resolved cue timing, narration segment URLs, and renderer configuration.",
+  motion_canvas_render: "The API calls the configured Motion Canvas command adapter. It renders the blackboard scene from the resolved timeline, downloads signed narration segments, and muxes the MP4 with ffmpeg."
+};
 
 function accentTextClass(accent: Accent) {
   return {

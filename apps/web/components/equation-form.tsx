@@ -299,9 +299,9 @@ function EnterIcon() {
 function LoadingDots() {
   return (
     <span className="flex h-5 items-end gap-0.5" aria-label="Loading">
-      <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.2s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-400 [animation-delay:-0.1s]" />
-      <span className="h-1 w-1 animate-bounce rounded-full bg-zinc-400" />
+      <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-300 [animation-delay:-0.2s]" />
+      <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-300 [animation-delay:-0.1s]" />
+      <span className="h-1 w-1 animate-bounce rounded-full bg-emerald-300" />
     </span>
   );
 }
