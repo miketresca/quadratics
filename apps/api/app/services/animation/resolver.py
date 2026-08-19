@@ -37,8 +37,14 @@ def resolve_animation_timeline(
         raise TimelineResolutionError("completed narration is required")
     defaults = timing or TimingDefaults()
     segment_by_id = {segment.script_segment_id: segment for segment in narration.segments}
+    segment_offsets = _segment_offsets(narration.segments)
     resolved_cues = [
-        _resolve_cue(cue, segment_by_id=segment_by_id, timing=defaults)
+        _resolve_cue(
+            cue,
+            segment_by_id=segment_by_id,
+            segment_offsets=segment_offsets,
+            timing=defaults,
+        )
         for cue in plan.cues
     ]
     resolved_cues.sort(
@@ -62,6 +68,7 @@ def _resolve_cue(
     cue: AnimationCue,
     *,
     segment_by_id: dict[str, NarrationSegment],
+    segment_offsets: dict[str, float],
     timing: TimingDefaults,
 ) -> ResolvedAnimationCue:
     segment = segment_by_id.get(cue.trigger.script_segment_id)
@@ -80,7 +87,7 @@ def _resolve_cue(
         phrase=cue.trigger.text,
         occurrence=cue.trigger.occurrence,
     )
-    segment_offset = float(segment.provider_metadata.get("segmentOffsetSeconds", 0))
+    segment_offset = segment_offsets[segment.script_segment_id]
     narration_start = alignment.character_start_times_seconds[raw_start] + segment_offset
     narration_end = alignment.character_end_times_seconds[raw_end] + segment_offset
     animation_start, animation_end = _animation_window(
@@ -112,6 +119,19 @@ def _resolve_cue(
         ),
         sfx=sfx,
     )
+
+
+def _segment_offsets(segments: list[NarrationSegment]) -> dict[str, float]:
+    offsets: dict[str, float] = {}
+    elapsed = 0.0
+    for segment in segments:
+        metadata_offset = segment.provider_metadata.get("segmentOffsetSeconds")
+        if metadata_offset is None:
+            offsets[segment.script_segment_id] = elapsed
+        else:
+            offsets[segment.script_segment_id] = float(metadata_offset)
+        elapsed += segment.duration_seconds or 0
+    return offsets
 
 
 def _validate_alignment(alignment: AudioAlignment, script_segment_id: str) -> None:

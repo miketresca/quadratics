@@ -136,6 +136,45 @@ def test_resolver_returns_cues_in_chronological_order():
     assert timeline.cues[0].animation.start_seconds < timeline.cues[1].animation.start_seconds
 
 
+def test_resolver_reconstructs_segment_offsets_when_metadata_is_missing():
+    first = narration_segment("script_factor", "First segment.", offset=0.0)
+    first.provider_metadata = {}
+    second = narration_segment("script_final_answer", "Final answer.")
+    second.provider_metadata = {}
+
+    timeline = resolve_animation_timeline(
+        AnimationPlan.model_validate(
+            {
+                "lessonArtifactId": "lesson-1",
+                "narrationArtifactId": "narration-1",
+                "cues": [
+                    {
+                        "id": "cue_final",
+                        "lessonStepId": "factor",
+                        "mathLineId": "standard_form",
+                        "trigger": {
+                            "type": "narration_text",
+                            "scriptSegmentId": "script_final_answer",
+                            "text": "Final",
+                        },
+                        "visual": {
+                            "action": "write_math",
+                            "target": {
+                                "lessonStepId": "factor",
+                                "mathLineId": "standard_form",
+                            },
+                        },
+                        "sync": {"mode": "with_narration"},
+                    }
+                ],
+            }
+        ),
+        narration=narration(first, second),
+    )
+
+    assert timeline.cues[0].narration.start_seconds == pytest.approx(1.4)
+
+
 def test_resolver_maps_phrase_at_beginning_middle_and_end():
     segment = narration_segment("script_factor", "Start here, then middle, then final")
     timeline = resolve_animation_timeline(

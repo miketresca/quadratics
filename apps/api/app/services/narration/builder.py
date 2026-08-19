@@ -59,6 +59,7 @@ async def build_lesson_narration(
     script_segments = _selected_script_segments(script, script_segment_id)
     narration_segments: list[NarrationSegment] = []
     speech_texts: list[str] = []
+    segment_offset_seconds = 0.0
     try:
         for segment in script_segments:
             segment_script = _script_for_segment(script, segment)
@@ -73,6 +74,10 @@ async def build_lesson_narration(
                     voice_id=voice_id,
                 )
             )
+            provider_metadata = {
+                **(result.provider_metadata or {}),
+                "segmentOffsetSeconds": segment_offset_seconds,
+            }
             narration_segments.append(
                 NarrationSegment(
                     script_segment_id=segment.id,
@@ -87,9 +92,10 @@ async def build_lesson_narration(
                     speech_text=speech_text,
                     alignment=result.alignment,
                     normalized_alignment=result.normalized_alignment,
-                    provider_metadata=result.provider_metadata or {},
+                    provider_metadata=provider_metadata,
                 )
             )
+            segment_offset_seconds += result.duration_seconds or 0
     except RuntimeError as exc:
         return failed_narration(
             str(exc),

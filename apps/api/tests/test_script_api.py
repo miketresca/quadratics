@@ -217,7 +217,10 @@ async def test_narration_endpoint_generates_audio_for_completed_audio_script(
                 "characterStartTimesSeconds": [0.0, 0.2],
                 "characterEndTimesSeconds": [0.2, 0.4],
             },
-            "providerMetadata": {"model": "eleven_multilingual_v2"},
+            "providerMetadata": {
+                "model": "eleven_multilingual_v2",
+                "segmentOffsetSeconds": 0.0,
+            },
         },
         {
             "scriptSegmentId": "script_solve_factors",
@@ -236,7 +239,10 @@ async def test_narration_endpoint_generates_audio_for_completed_audio_script(
                 "characterStartTimesSeconds": [0.0, 0.2],
                 "characterEndTimesSeconds": [0.2, 0.4],
             },
-            "providerMetadata": {"model": "eleven_multilingual_v2"},
+            "providerMetadata": {
+                "model": "eleven_multilingual_v2",
+                "segmentOffsetSeconds": 3.2,
+            },
         },
         {
             "scriptSegmentId": "script_final_answer",
@@ -255,7 +261,10 @@ async def test_narration_endpoint_generates_audio_for_completed_audio_script(
                 "characterStartTimesSeconds": [0.0, 0.2],
                 "characterEndTimesSeconds": [0.2, 0.4],
             },
-            "providerMetadata": {"model": "eleven_multilingual_v2"},
+            "providerMetadata": {
+                "model": "eleven_multilingual_v2",
+                "segmentOffsetSeconds": 6.4,
+            },
         },
     ]
     assert body["narration"]["voiceId"] == "male-voice"
