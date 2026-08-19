@@ -3,7 +3,13 @@ import pytest
 from app.api.routes import generations
 from app.core.config import Settings, get_settings
 from app.schemas.narration import AudioAlignment
+from app.services.animation.base import AnimationPlanningRequest, AnimationPlanProvider
 from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
+
+
+class FailingAnimationPlanProvider(AnimationPlanProvider):
+    async def generate_animation_plan(self, request: AnimationPlanningRequest):
+        raise RuntimeError("planner exploded")
 
 
 class CountingNarrationProvider(NarrationProvider):
@@ -182,3 +188,54 @@ async def test_animation_plan_stage_does_not_regenerate_elevenlabs_audio(
 
     assert response.status_code == 200
     assert len(provider.requests) == 3
+
+
+@pytest.mark.asyncio
+async def test_animation_plan_stage_records_provider_failure(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    monkeypatch.setattr(
+        generations,
+        "_animation_plan_provider",
+        lambda _settings: FailingAnimationPlanProvider(),
+    )
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+        await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/teacher_script",
+            json={},
+        )
+        await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/elevenlabs_audio",
+            json={},
+        )
+
+        response = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/animation_plan",
+            json={},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    plan_artifacts = [
+        artifact
+        for artifact in response.json()["artifacts"]
+        if artifact["stage"] == "animation_plan"
+    ]
+    assert plan_artifacts[-1]["status"] == "failed"
+    assert plan_artifacts[-1]["errorCode"] == "animation_plan_failed"
+    assert "planner exploded" in plan_artifacts[-1]["errorMessage"]

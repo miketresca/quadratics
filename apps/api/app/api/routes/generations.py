@@ -118,10 +118,14 @@ async def run_generation_stage(
         )
         if snapshot is None:
             raise HTTPException(status_code=404, detail="Generation not found")
+        try:
+            provider = _animation_plan_provider(settings)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         return await service.run_animation_plan(
             generation_job_id=generation_id,
             user_id=current_user.id,
-            provider=_animation_plan_provider(settings),
+            provider=provider,
             force=request.force,
         )
     if stage == "resolved_timeline":

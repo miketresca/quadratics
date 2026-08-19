@@ -300,7 +300,7 @@ class SolveGenerationService:
                 narration_artifact_id=narration_artifact.id,
                 provider=provider,
             )
-        except ValueError as exc:
+        except Exception as exc:
             self._artifacts.fail_attempt(
                 stage_run.artifact.id,
                 error_code="animation_plan_failed",
