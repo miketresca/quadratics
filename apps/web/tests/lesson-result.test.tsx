@@ -370,6 +370,93 @@ describe("LessonResult", () => {
     });
   });
 
+  it("renders the persisted ElevenLabs request artifact instead of the completed audio payload", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={
+            {
+              job: {
+                id: "generation-request-log",
+                userId: "user-1",
+                equationInput: "x^2 + 5x + 6",
+                status: "completed",
+                creditsUsed: 0
+              },
+              lesson: scriptResponse.lesson,
+              artifacts: [
+                {
+                  id: "request-artifact",
+                  generationJobId: "generation-request-log",
+                  userId: "user-1",
+                  stage: "elevenlabs_request",
+                  version: 1,
+                  status: "completed",
+                  inputHash: "sha256:request",
+                  provider: "openai",
+                  model: "speech-markup",
+                  payload: {
+                    status: "completed",
+                    provider: "openai",
+                    speechText: 'Conversational request text.<break time="0.7s" />'
+                  },
+                  isCurrent: true,
+                  createdAt: "2026-08-19T00:00:00Z"
+                },
+                {
+                  id: "audio-artifact",
+                  generationJobId: "generation-request-log",
+                  userId: "user-1",
+                  stage: "elevenlabs_audio",
+                  version: 1,
+                  status: "completed",
+                  inputHash: "sha256:audio",
+                  provider: "elevenlabs",
+                  model: "eleven_multilingual_v2",
+                  payload: {
+                    status: "completed",
+                    provider: "elevenlabs",
+                    voiceId: "male-voice",
+                    modelId: "eleven_multilingual_v2",
+                    speechText: "Completed audio payload text should not appear in the request card.",
+                    segments: [
+                      {
+                        scriptSegmentId: "script_factor",
+                        stepId: "factor",
+                        title: "Factor the quadratic",
+                        provider: "elevenlabs",
+                        voiceId: "male-voice",
+                        modelId: "eleven_multilingual_v2",
+                        audioMimeType: "audio/mpeg",
+                        speechText: "Completed audio segment text should not appear in the request card."
+                      }
+                    ]
+                  },
+                  isCurrent: true,
+                  createdAt: "2026-08-19T00:00:01Z"
+                }
+              ]
+            } as never
+          }
+          lesson={scriptResponse.lesson as never}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("elevenlabs_request");
+    expect(container.textContent).toContain('Conversational request text.<break time="0.7s" />');
+    expect(container.textContent).not.toContain("Completed audio payload text should not appear in the request card.");
+    expect(container.textContent).not.toContain("Completed audio segment text should not appear in the request card.");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("does not show a whole-audio regenerate control", async () => {
     container = document.createElement("div");
     document.body.append(container);

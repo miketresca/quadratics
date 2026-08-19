@@ -48,7 +48,8 @@ export function LessonResult({
   const narrationArtifact = artifactForStage(generation, "elevenlabs_audio");
   const effectiveScript = script ?? payloadForStage<LessonScript>(generation, "teacher_script");
   const effectiveNarration = narration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_audio");
-  const speechMarkup = effectiveNarration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_request");
+  const speechMarkupArtifactPayload = payloadForStage<LessonNarration>(generation, "elevenlabs_request");
+  const speechMarkup = speechMarkupArtifactPayload ?? effectiveNarration;
   const animationPlanArtifact = artifactForStage(generation, "animation_plan");
   const resolvedTimelineArtifact = artifactForStage(generation, "resolved_timeline");
   const renderArtifact = artifactForStage(generation, "motion_canvas_render");
