@@ -137,4 +137,9 @@ class MediaStoreError(RuntimeError):
 def _raise_for_media_error(response: httpx.Response) -> None:
     if response.is_success:
         return
+    detail = response.text.strip()
+    if detail:
+        raise MediaStoreError(
+            f"Media storage request failed: {response.status_code}: {detail}"
+        )
     raise MediaStoreError(f"Media storage request failed: {response.status_code}")

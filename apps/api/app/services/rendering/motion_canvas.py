@@ -62,6 +62,10 @@ class CommandMotionCanvasRenderer(MotionCanvasRenderer):
                 raise MotionCanvasRenderError(
                     f"Motion Canvas render timed out after {self._timeout_seconds} seconds"
                 ) from exc
+            except OSError as exc:
+                raise MotionCanvasRenderError(
+                    f"Motion Canvas render command could not start: {exc}"
+                ) from exc
             if completed.returncode != 0:
                 stderr = completed.stderr.decode(errors="replace").strip()
                 stdout = completed.stdout.decode(errors="replace").strip()

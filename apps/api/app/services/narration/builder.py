@@ -1,10 +1,23 @@
+import re
 from collections.abc import Iterable
 from typing import Literal
 
 from app.schemas.narration import LessonNarration, NarrationSegment
 from app.schemas.script import LessonScript, OutputMode, ScriptSegment
 from app.services.narration.base import NarrationProvider, NarrationRequest
-from app.services.narration.speech_markup import SpeechMarkupProvider, SpeechMarkupRequest
+from app.services.narration.speech_markup import (
+    SpeechMarkupProvider,
+    SpeechMarkupRequest,
+    deterministic_speech_text,
+)
+
+SPOKEN_WORDS_PER_SECOND = 2.6
+MAX_TOTAL_NARRATION_SECONDS = 60.0
+SPEECH_MARKUP_EXTENSION_RATIO = 1.5
+SPEECH_MARKUP_EXTRA_WORD_ALLOWANCE = 12
+BREAK_SECONDS_PATTERN = re.compile(r"<break\s+time=[\"']([0-9.]+)s[\"']\s*/?>", re.IGNORECASE)
+TAG_PATTERN = re.compile(r"<[^>]+>")
+WORD_PATTERN = re.compile(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?")
 
 
 def unsupported_narration(reason: str, *, speech_text: str | None = None) -> LessonNarration:
@@ -66,6 +79,13 @@ async def build_lesson_narration(
             speech_text = await speech_markup_provider.prepare(
                 SpeechMarkupRequest(script=segment_script)
             )
+            speech_markup_fallback = _speech_markup_fallback_reason(
+                speech_text,
+                segment_script=segment_script,
+                full_script=script,
+            )
+            if speech_markup_fallback is not None:
+                speech_text = deterministic_speech_text(segment_script)
             speech_texts.append(speech_text)
             result = await provider.generate(
                 NarrationRequest(
@@ -78,6 +98,8 @@ async def build_lesson_narration(
                 **(result.provider_metadata or {}),
                 "segmentOffsetSeconds": segment_offset_seconds,
             }
+            if speech_markup_fallback is not None:
+                provider_metadata["speechMarkupFallback"] = speech_markup_fallback
             narration_segments.append(
                 NarrationSegment(
                     script_segment_id=segment.id,
@@ -159,6 +181,47 @@ def _sum_durations(segments: list[NarrationSegment]) -> float | None:
     if not durations:
         return None
     return sum(durations)
+
+
+def _speech_markup_fallback_reason(
+    speech_text: str,
+    *,
+    segment_script: LessonScript,
+    full_script: LessonScript,
+) -> str | None:
+    source_word_count = max(
+        1,
+        segment_script.total_word_count or _script_word_count(segment_script),
+    )
+    total_word_count = max(source_word_count, full_script.total_word_count or source_word_count)
+    max_words = max(
+        source_word_count + SPEECH_MARKUP_EXTRA_WORD_ALLOWANCE,
+        round(source_word_count * SPEECH_MARKUP_EXTENSION_RATIO),
+    )
+    max_seconds = max(
+        6.0,
+        (source_word_count / total_word_count) * MAX_TOTAL_NARRATION_SECONDS,
+    )
+    estimated_seconds = _estimated_speech_seconds(speech_text)
+    if _spoken_word_count(speech_text) > max_words or estimated_seconds > max_seconds:
+        return "too_long"
+    return None
+
+
+def _script_word_count(script: LessonScript) -> int:
+    return sum(segment.word_count or len(segment.narration.split()) for segment in script.segments)
+
+
+def _estimated_speech_seconds(speech_text: str) -> float:
+    return (_spoken_word_count(speech_text) / SPOKEN_WORDS_PER_SECOND) + _break_seconds(speech_text)
+
+
+def _spoken_word_count(speech_text: str) -> int:
+    return len(WORD_PATTERN.findall(TAG_PATTERN.sub(" ", speech_text)))
+
+
+def _break_seconds(speech_text: str) -> float:
+    return sum(float(match.group(1)) for match in BREAK_SECONDS_PATTERN.finditer(speech_text))
 
 
 def _provider_name_for_segments(

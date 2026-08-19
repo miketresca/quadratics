@@ -70,5 +70,6 @@ async def test_openai_speech_markup_provider_requests_conversational_spoken_math
     assert "conversational speech" in system_prompt
     assert "convert symbolic math into spoken algebra" in system_prompt
     assert "Never say 'open parenthesis'" in system_prompt
+    assert "full narration stays under 60 seconds" in system_prompt
     assert call["text"]["format"]["type"] == "json_schema"
     assert speech_text.startswith("<speak>x squared minus x equals zero.")

@@ -266,6 +266,7 @@ def _renderer_for_settings(
     if settings.motion_canvas_render_command:
         return CommandMotionCanvasRenderer(
             command=settings.motion_canvas_render_command,
+            cwd=settings.motion_canvas_render_cwd or None,
             timeout_seconds=settings.motion_canvas_render_timeout_seconds,
         )
     return DevelopmentMotionCanvasRenderer()

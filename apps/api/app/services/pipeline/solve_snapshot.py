@@ -423,19 +423,19 @@ class SolveGenerationService:
                     },
                 )
             )
-        except RuntimeError as exc:
+            video_ref = media_store.put(
+                path=f"{user_id}/{generation_job_id}/renders/{stage_run.artifact.id}.mp4",
+                content=result.content,
+                content_type=result.content_type,
+                metadata={"timelineArtifactId": timeline_artifact.id},
+            )
+        except Exception as exc:
             self._artifacts.fail_attempt(
                 stage_run.artifact.id,
                 error_code="motion_canvas_render_failed",
                 error_message=str(exc),
             )
             return self.snapshot_for_job(job=job, lesson=lesson)
-        video_ref = media_store.put(
-            path=f"{user_id}/{generation_job_id}/renders/{stage_run.artifact.id}.mp4",
-            content=result.content,
-            content_type=result.content_type,
-            metadata={"timelineArtifactId": timeline_artifact.id},
-        )
         render_artifact = self._artifacts.complete_attempt(
             stage_run.artifact.id,
             payload={

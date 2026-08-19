@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     elevenlabs_female_voice_id: str = ""
     generated_media_bucket: str = "generated-media"
     motion_canvas_render_command: str = ""
+    motion_canvas_render_cwd: str = ""
     motion_canvas_render_timeout_seconds: int = 120
 
     @field_validator("allowed_origins", mode="before")

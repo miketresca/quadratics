@@ -74,3 +74,20 @@ def test_command_motion_canvas_renderer_wraps_timeout(tmp_path):
                 render_input={"lesson": {}, "timeline": {}, "narration": {}},
             )
         )
+
+
+def test_command_motion_canvas_renderer_wraps_spawn_errors():
+    renderer = CommandMotionCanvasRenderer(
+        command="/path/to/missing-motion-canvas-command",
+        timeout_seconds=5,
+    )
+
+    with pytest.raises(MotionCanvasRenderError, match="could not start"):
+        renderer.render(
+            RenderRequest(
+                generation_job_id="generation-1",
+                timeline_artifact_id="timeline-1",
+                duration_seconds=2.5,
+                render_input={"lesson": {}, "timeline": {}, "narration": {}},
+            )
+        )

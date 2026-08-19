@@ -62,7 +62,9 @@ class OpenAISpeechMarkupProvider(SpeechMarkupProvider):
                         "'open parenthesis', 'close parenthesis', 'asterisk', 'caret', or 'slash'. "
                         "Use SSML break tags sparingly for natural pacing, preferring 0.5s, 0.7s, "
                         "or 1.0s. Use 2.0s only for a major transition. Never use a break longer "
-                        "than 2.0s."
+                        "than 2.0s. Do not add new teaching examples, definitions, or extra "
+                        "explanation. Keep each segment close to the original length so the full "
+                        "narration stays under 60 seconds."
                     ),
                 },
                 {"role": "user", "content": json.dumps(_script_payload(request.script))},

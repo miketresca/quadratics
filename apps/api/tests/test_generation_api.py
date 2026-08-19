@@ -5,6 +5,7 @@ from app.core.config import Settings, get_settings
 from app.schemas.narration import AudioAlignment
 from app.services.animation.base import AnimationPlanningRequest, AnimationPlanProvider
 from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
+from app.services.storage.media_store import MediaStore
 
 
 class FailingAnimationPlanProvider(AnimationPlanProvider):
@@ -26,6 +27,11 @@ class CountingNarrationProvider(NarrationProvider):
             normalized_alignment=alignment_for(request.text),
             provider_metadata={"model": "eleven_multilingual_v2"},
         )
+
+
+class FailingMediaStore(MediaStore):
+    def put(self, **_kwargs):
+        raise RuntimeError("media upload failed")
 
 
 def alignment_for(text: str) -> AudioAlignment:
@@ -239,6 +245,50 @@ async def test_animation_plan_stage_records_provider_failure(
     assert plan_artifacts[-1]["status"] == "failed"
     assert plan_artifacts[-1]["errorCode"] == "animation_plan_failed"
     assert "planner exploded" in plan_artifacts[-1]["errorMessage"]
+
+
+@pytest.mark.asyncio
+async def test_render_stage_records_media_storage_failure(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+        await authenticated_client.post(f"/api/v1/generations/{generation_id}/run-all", json={})
+
+        monkeypatch.setattr(
+            generations,
+            "_generation_services",
+            lambda settings: (generations._solve_generations, FailingMediaStore()),
+        )
+        response = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/motion_canvas_render",
+            json={"force": True},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    render_artifacts = [
+        artifact
+        for artifact in response.json()["artifacts"]
+        if artifact["stage"] == "motion_canvas_render"
+    ]
+    assert render_artifacts[-1]["status"] == "failed"
+    assert render_artifacts[-1]["errorCode"] == "motion_canvas_render_failed"
+    assert "media upload failed" in render_artifacts[-1]["errorMessage"]
 
 
 @pytest.mark.asyncio

@@ -55,9 +55,10 @@ The API render boundary is command-backed. Set:
 
 ```env
 MOTION_CANVAS_RENDER_COMMAND=pnpm --filter @quadratics/video render
+MOTION_CANVAS_RENDER_CWD=
 ```
 
-The command receives `QUADRATICS_RENDER_INPUT_PATH` and `QUADRATICS_RENDER_OUTPUT_PATH`. The current local command writes the generation render input into the Motion Canvas app, renders frames through `?render`, downloads the signed narration segment URLs when the API provides them, concatenates those segments, then muxes the narration into the MP4 with `ffmpeg`. If no signed narration URLs are present, it still produces a silent visual render for fixture/development work.
+The command receives `QUADRATICS_RENDER_INPUT_PATH` and `QUADRATICS_RENDER_OUTPUT_PATH`. The current local command writes the generation render input into the Motion Canvas app, renders frames through `?render`, downloads the signed narration segment URLs when the API provides them, concatenates those segments, then muxes the narration into the MP4 with `ffmpeg`. If no signed narration URLs are present, it still produces a silent visual render for fixture/development work. In production, the API process must be able to run the command from a checkout that includes `apps/video`; set `MOTION_CANVAS_RENDER_CWD` when the process working directory is not the monorepo root.
 
 Chalk SFX windows are part of the resolved timeline contract. Actual chalk-audio mixing should use a licensed local asset from `apps/video/public/audio/chalk-write.mp3`; the repository does not commit third-party samples.
 
@@ -77,4 +78,4 @@ In `APP_ENVIRONMENT=development`, submitting the normalized equation `x**2 + 5*x
 
 The API now has Supabase-backed artifact repositories, Supabase Storage media upload, signed playback URL support, and a command-backed render adapter. Local/test runs without Supabase or render-command configuration still use in-memory repositories and the development renderer.
 
-The remaining production hardening is mostly operational: run migrations in the target Supabase project, provide a Chrome/ffmpeg-capable render environment, and decide whether render workers should run inside the API process or as a separate worker.
+The remaining production hardening is mostly operational: run migrations in the target Supabase project, provide a Chrome/ffmpeg-capable render environment, deploy the full monorepo for command-backed rendering, and decide whether render workers should run inside the API process or as a separate worker.

@@ -58,10 +58,11 @@ The API render stage calls a command-backed Motion Canvas renderer when configur
 
 ```env
 MOTION_CANVAS_RENDER_COMMAND=pnpm --filter @quadratics/video render
+MOTION_CANVAS_RENDER_CWD=
 MOTION_CANVAS_RENDER_TIMEOUT_SECONDS=120
 ```
 
-The render command receives `QUADRATICS_RENDER_INPUT_PATH` and `QUADRATICS_RENDER_OUTPUT_PATH` from the API, renders Motion Canvas frames headlessly, downloads signed narration segment URLs when present, and assembles an MP4 with `ffmpeg`.
+The render command receives `QUADRATICS_RENDER_INPUT_PATH` and `QUADRATICS_RENDER_OUTPUT_PATH` from the API, renders Motion Canvas frames headlessly, downloads signed narration segment URLs when present, and assembles an MP4 with `ffmpeg`. If the API process does not run from the monorepo root, set `MOTION_CANVAS_RENDER_CWD` to the deployed monorepo root before invoking the render command.
 
 HeyGen keys are user-provided through the account menu API key modal. They are encrypted server-side and stored in Supabase. Set this Railway API environment variable before enabling saves:
 
@@ -110,10 +111,10 @@ The golden fixture uses `x^2 + 5x + 6 = 0` and is the preferred workflow for ite
 
 ## Deployment
 
-The web app is intended to run on Vercel. The FastAPI service can run on Railway with service root directory `apps/api`, no custom build command, and start command:
+The web app is intended to run on Vercel. The FastAPI service can run on Railway. For API-only solving and narration, service root directory `apps/api` is enough. For command-backed Motion Canvas rendering, deploy the full monorepo so Railway has `apps/video`, the root `package.json`, `pnpm-lock.yaml`, Chrome, and `ffmpeg` available to the API process. In that setup, use a start command like:
 
 ```sh
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
+uv run --project apps/api uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --port $PORT
 ```
 
 ## Scope
