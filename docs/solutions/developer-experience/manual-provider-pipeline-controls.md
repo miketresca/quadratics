@@ -18,14 +18,14 @@ tags: [manual-pipeline, narration, provider-boundary]
 
 The lesson pipeline mixes cheap deterministic work with provider calls and render work. Solving a quadratic and building deterministic lesson steps should not rerun OpenAI, ElevenLabs, or Motion Canvas. Teacher-script generation, speech-markup formatting, ElevenLabs narration, animation planning, and rendering all need separate artifact boundaries.
 
-During development, users need to inspect the result of each step and retry only the failing or poor-quality downstream step. ElevenLabs audio regeneration is intentionally not exposed in the current UI because narration can be expensive and should remain stable while animation work iterates.
+During development, users need to inspect the result of each step and retry only the failing or poor-quality downstream step. ElevenLabs request and audio regeneration are exposed as deliberate per-stage controls, because narration can be expensive and should be rerun only when the user explicitly asks for it.
 
 ## Guidance
 
 Expose expensive provider calls as independently runnable pipeline steps. The default submit action should run the deterministic solve only. After that, the result view can offer manual controls for:
 
 - running `teacher_script`
-- running `elevenlabs_request` and `elevenlabs_audio`
+- running or deliberately regenerating `elevenlabs_request` and `elevenlabs_audio`
 - running `animation_plan`
 - running `resolved_timeline`
 - running `motion_canvas_render`
@@ -33,7 +33,7 @@ Expose expensive provider calls as independently runnable pipeline steps. The de
 
 Keep the logs aligned with the real provider boundary. `teacher_script` is the high-level narration plan. `elevenlabs_request` is the speech-markup text sent to the narration provider, including SSML break tags. `elevenlabs_audio` is the provider response, alignment, and media reference. `animation_plan` is semantic planner output. `resolved_timeline` is deterministic timing. `motion_canvas_render` is the render attempt.
 
-For retries, preserve successful prior work when the replacement attempt fails. A failed stage attempt should attach the new error message to that stage without discarding useful upstream artifacts. Prefer exposing retry controls first on animation planning, timeline resolution, and Motion Canvas rendering; keep narration regeneration behind deliberate developer/API workflows until the product needs it again.
+For retries, preserve successful prior work when the replacement attempt fails. A failed stage attempt should attach the new error message to that stage without discarding useful upstream artifacts. Narration regeneration should remain deliberate because it can spend provider credits, but it must be available when the request text or audio quality needs correction.
 
 When a stage is regenerated, mark affected downstream artifacts stale rather than deleting them. Stale plans, timelines, and renders are debugging material, but they should not be presented as the current final video.
 
