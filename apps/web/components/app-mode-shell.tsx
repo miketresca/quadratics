@@ -109,7 +109,7 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
             </div>
           </div>
         </div>
-        <article className="prose-invert max-h-[42rem] overflow-auto p-6 text-zinc-200 sm:p-8">
+        <article className="prose-invert p-6 text-zinc-200 sm:p-8">
           <MarkdownBlocks blocks={blocks} />
         </article>
       </div>
