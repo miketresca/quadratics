@@ -115,9 +115,11 @@ export function LessonResult({
 
           {speechMarkup?.speechText ? (
             <SpeechMarkupLog
+              actionDisabled={actionDisabled}
               artifact={speechMarkupArtifact}
               loading={loadingStage === "elevenlabs_audio"}
               narration={speechMarkup}
+              onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
             />
           ) : speechMarkupLoading ? (
             <PendingLog accent="amber" className="mt-6" title="elevenlabs_request" />
@@ -143,9 +145,11 @@ export function LessonResult({
 
           {effectiveNarration ? (
             <NarrationLog
+              actionDisabled={actionDisabled}
               artifact={narrationArtifact}
               loading={loadingStage === "elevenlabs_audio" || narrationLoading}
               narration={effectiveNarration}
+              onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
             />
           ) : narrationLoading ? (
             <PendingLog accent="fuchsia" className="mt-6" title="elevenlabs_audio" />
@@ -367,17 +371,27 @@ function ScriptLog({
 }
 
 function SpeechMarkupLog({
+  actionDisabled = false,
   artifact,
   loading = false,
-  narration
+  narration,
+  onRun
 }: {
+  actionDisabled?: boolean;
   artifact?: GenerationArtifact;
   loading?: boolean;
   narration: LessonNarration;
+  onRun?: () => void;
 }) {
   const segments = narration.segments ?? [];
   return (
-    <StageCard accent="amber" artifact={artifact} loading={loading} title="elevenlabs_request">
+    <StageCard
+      accent="amber"
+      action={onRun ? <IconButton disabled={actionDisabled || loading} label="Regenerate elevenlabs_request" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      artifact={artifact}
+      loading={loading}
+      title="elevenlabs_request"
+    >
       {segments.length > 0 ? (
         <ol className="mt-4 grid gap-3">
           {segments.map((segment, index) => (
@@ -404,18 +418,23 @@ function SpeechMarkupLog({
 }
 
 function NarrationLog({
+  actionDisabled = false,
   artifact,
   loading = false,
-  narration
+  narration,
+  onRun
 }: {
+  actionDisabled?: boolean;
   artifact?: GenerationArtifact;
   loading?: boolean;
   narration: LessonNarration;
+  onRun?: () => void;
 }) {
   const segments = narration.segments ?? [];
   return (
     <StageCard
       accent="fuchsia"
+      action={onRun ? <IconButton disabled={actionDisabled || loading} label="Regenerate elevenlabs_audio" onClick={onRun}><RegenerateIcon /></IconButton> : null}
       artifact={artifact}
       loading={loading}
       title="elevenlabs_audio"

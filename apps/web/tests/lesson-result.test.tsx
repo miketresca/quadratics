@@ -740,6 +740,20 @@ describe("LessonResult", () => {
     expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/narration/audio-artifact.mp3");
     expect(container.querySelector('audio[src="https://media.example/audio-artifact.mp3"]')).not.toBeNull();
 
+    const regenerateRequest = container.querySelector('button[aria-label="Regenerate elevenlabs_request"]');
+    await act(async () => {
+      regenerateRequest?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+    });
+
+    expect(onRunStage).toHaveBeenCalledWith("elevenlabs_audio", {force: true});
+
+    const regenerateAudio = container.querySelector('button[aria-label="Regenerate elevenlabs_audio"]');
+    await act(async () => {
+      regenerateAudio?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+    });
+
+    expect(onRunStage).toHaveBeenCalledWith("elevenlabs_audio", {force: true});
+
     const regeneratePlan = container.querySelector('button[aria-label="Regenerate animation plan"]');
     await act(async () => {
       regeneratePlan?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
@@ -928,6 +942,8 @@ describe("LessonResult", () => {
 
     expect(container.textContent).toContain("elevenlabs_request");
     expect(container.textContent).toContain("elevenlabs_audio");
+    expect(container.querySelector('button[aria-label="Regenerate elevenlabs_request"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Regenerate elevenlabs_audio"]')).toBeNull();
     expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(2);
 
     await act(async () => {
