@@ -1,4 +1,6 @@
 import type {CurrentUser} from "@quadratics/types";
+import {readFile} from "node:fs/promises";
+import path from "node:path";
 
 import {signIn, signOut} from "@/app/auth/actions";
 import {AppModeShell} from "@/components/app-mode-shell";
@@ -8,6 +10,7 @@ import {getMe} from "@/lib/api";
 import {createClient} from "@/lib/supabase/server";
 
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const readmePath = path.resolve(process.cwd(), "../..", "README.md");
 
 export default async function AppPage({
   searchParams
@@ -40,9 +43,10 @@ export default async function AppPage({
     sessionToken !== null
       ? await getMe(sessionToken).catch(() => sessionUserFallback)
       : null;
+  const readmeMarkdown = await readFile(readmePath, "utf8");
 
   return (
-    <main className="min-h-screen bg-[#07090d] text-zinc-100">
+    <main className="quadratics-app-bg min-h-screen bg-black text-zinc-100">
       <header className="fixed left-0 top-0 z-10 flex w-full items-center justify-between px-5 py-5 sm:px-8">
         <Logo />
         <div className="flex items-center gap-2">
@@ -58,7 +62,7 @@ export default async function AppPage({
           <AccountMenu loginError={loginError} user={user} />
         </div>
       </header>
-      <AppModeShell initialUser={user} />
+      <AppModeShell initialUser={user} readmeMarkdown={readmeMarkdown} />
     </main>
   );
 }

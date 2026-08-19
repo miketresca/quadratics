@@ -9,11 +9,16 @@
 body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
+  background: #000;
+}
+
+.quadratics-app-bg {
   background:
-    linear-gradient(180deg, rgba(17, 24, 39, 0.86), rgba(7, 9, 13, 0.98)),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 96px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.026) 0 1px, transparent 1px 96px),
-    #07090d;
+    radial-gradient(circle at 50% 18rem, rgba(16, 185, 129, 0.084), transparent 24rem),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.048) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.036) 0 1px, transparent 1px 80px),
+    #000;
+  background-attachment: fixed;
 }
 
 ::selection {
