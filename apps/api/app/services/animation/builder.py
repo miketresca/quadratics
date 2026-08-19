@@ -46,6 +46,7 @@ async def build_animation_plan(
     plan = await provider.generate_animation_plan(request)
     plan.lesson_artifact_id = lesson_artifact_id
     plan.narration_artifact_id = narration_artifact_id
+    _repair_visual_targets(plan, lesson=lesson)
     validate_animation_plan(plan, lesson=lesson, script=script)
     return plan
 
@@ -64,3 +65,19 @@ def _narration_context(narration: LessonNarration) -> dict[str, object]:
             for segment in narration.segments
         ],
     }
+
+
+def _repair_visual_targets(plan: AnimationPlan, *, lesson: LessonResponse) -> None:
+    line_to_step = {
+        line.id: step.id
+        for step in lesson.steps
+        for line in step.math_lines
+    }
+
+    for cue in plan.cues:
+        target = cue.visual.target
+        if target is None or target.math_line_id is None:
+            continue
+        owning_step_id = line_to_step.get(target.math_line_id)
+        if owning_step_id is not None:
+            target.lesson_step_id = owning_step_id

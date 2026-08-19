@@ -76,3 +76,44 @@ async def test_animation_planner_builder_rejects_hallucinated_targets():
             narration_artifact_id="narration-artifact-1",
             provider=provider,
         )
+
+
+@pytest.mark.asyncio
+async def test_animation_planner_builder_allows_emphasis_on_prior_step_math_line():
+    lesson = LessonResponse.model_validate(load_json(FIXTURE_ROOT / "lesson.json"))
+    script = LessonScript.model_validate(load_json(FIXTURE_ROOT / "script.json"))
+    narration = LessonNarration.model_validate(load_json(FIXTURE_ROOT / "narration.json"))
+    payload = load_json(PLAN_FIXTURE)
+    payload["cues"][0] = {
+        "id": "cue_reference_factored_form",
+        "lessonStepId": "solve_factors",
+        "mathLineId": "factored_form",
+        "trigger": {
+            "type": "narration_text",
+            "scriptSegmentId": "script_solve_factors",
+            "text": "Now set each factor equal to zero",
+        },
+        "visual": {
+            "action": "underline",
+            "target": {
+                "lessonStepId": "solve_factors",
+                "mathLineId": "factored_form",
+            },
+        },
+        "sync": {"mode": "with_narration"},
+    }
+    provider = RecordingAnimationPlanProvider(AnimationPlan.model_validate(payload))
+
+    plan = await build_animation_plan(
+        lesson=lesson,
+        script=script,
+        narration=narration,
+        lesson_artifact_id="lesson-artifact-1",
+        narration_artifact_id="narration-artifact-1",
+        provider=provider,
+    )
+
+    assert plan.cues[0].lesson_step_id == "solve_factors"
+    assert plan.cues[0].math_line_id == "factored_form"
+    assert plan.cues[0].visual.target
+    assert plan.cues[0].visual.target.lesson_step_id == "factor"

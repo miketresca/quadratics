@@ -28,9 +28,14 @@ def validate_animation_plan(
             raise AnimationPlanValidationError(f"unknown lesson step id '{cue.lesson_step_id}'")
         if cue.math_line_id and cue.math_line_id not in line_to_step:
             raise AnimationPlanValidationError(f"unknown math line id '{cue.math_line_id}'")
-        if cue.math_line_id and line_to_step[cue.math_line_id] != cue.lesson_step_id:
+        if (
+            cue.math_line_id
+            and cue.visual.action == "write_math"
+            and line_to_step[cue.math_line_id] != cue.lesson_step_id
+        ):
             raise AnimationPlanValidationError(
-                f"math line '{cue.math_line_id}' does not belong to step '{cue.lesson_step_id}'"
+                f"write_math line '{cue.math_line_id}' does not belong to step "
+                f"'{cue.lesson_step_id}'"
             )
         segment = script_segments.get(cue.trigger.script_segment_id)
         if segment is None:
