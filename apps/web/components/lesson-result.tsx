@@ -952,10 +952,10 @@ const stageDescriptions: Record<string, string> = {
 
 function PipelineConnector() {
   return (
-    <div aria-hidden className="pointer-events-none absolute -top-8 left-1/2 flex h-8 -translate-x-1/2 flex-col items-center justify-end">
-      <span className="h-5 w-px bg-gradient-to-b from-transparent via-emerald-400/45 to-cyan-300/35" />
-      <span className="-mt-0.5 h-2 w-2 rotate-45 border-b border-r border-cyan-300/45" />
-      <span className="mt-0.5 h-1.5 w-1.5 rounded-full border border-emerald-300/35 bg-[#07100d]" />
+    <div aria-hidden className="pointer-events-none absolute -top-8 left-1/2 flex h-8 -translate-x-1/2 flex-col items-center justify-center">
+      <span className="h-2 w-2 rounded-full border border-cyan-300/45 bg-[#090d14] shadow-[0_0_10px_rgba(103,232,249,0.18)]" />
+      <span className="h-4 w-px bg-gradient-to-b from-cyan-300/45 via-emerald-300/35 to-cyan-300/45" />
+      <span className="h-2 w-2 rounded-full border border-emerald-300/45 bg-[#090d14] shadow-[0_0_10px_rgba(110,231,183,0.18)]" />
     </div>
   );
 }
