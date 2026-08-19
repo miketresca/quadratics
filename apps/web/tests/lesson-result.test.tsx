@@ -108,19 +108,33 @@ describe("LessonResult", () => {
     });
   });
 
-  it("renders the request loading block during full pipeline execution", async () => {
+  it("shows a loading spinner for the specific running stage", async () => {
     container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
 
     await act(async () => {
-      root.render(<LessonResult lesson={scriptResponse.lesson as never} loadingStage="run_all" scriptLoading />);
+      root.render(
+        <LessonResult
+          lesson={scriptResponse.lesson as never}
+          loadingStage="animation_plan"
+          narration={
+            {
+              status: "completed",
+              provider: "elevenlabs",
+              voiceId: "male-voice",
+              modelId: "eleven_multilingual_v2",
+              durationSeconds: 3,
+              speechText: "Factor first."
+            } as never
+          }
+          script={scriptResponse.script as never}
+        />
+      );
     });
 
-    const text = container.textContent ?? "";
-    expect(text.indexOf("teacher_script")).toBeGreaterThanOrEqual(0);
-    expect(text.indexOf("elevenlabs_request")).toBeGreaterThan(text.indexOf("teacher_script"));
-    expect(text.indexOf("elevenlabs_audio")).toBeGreaterThan(text.indexOf("elevenlabs_request"));
+    expect(container.textContent).toContain("animation_plan");
+    expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(1);
 
     await act(async () => {
       root.unmount();
@@ -133,34 +147,25 @@ describe("LessonResult", () => {
     const root = createRoot(container);
     const onGenerateScript = vi.fn();
     const onGenerateNarration = vi.fn();
-    const onRunFullPipeline = vi.fn();
 
     await act(async () => {
       root.render(
         <LessonResult
           lesson={scriptResponse.lesson as never}
           onGenerateScript={onGenerateScript}
-          onRunFullPipeline={onRunFullPipeline}
         />
       );
     });
 
     const scriptButton = container.querySelector('button[aria-label="Run teacher_script"]');
     expect(scriptButton).not.toBeNull();
-    const fullPipelineButton = container.querySelector('button[aria-label="Run full pipeline"]');
-    expect(fullPipelineButton).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Run full pipeline"]')).toBeNull();
 
     await act(async () => {
       scriptButton?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
 
     expect(onGenerateScript).toHaveBeenCalledOnce();
-
-    await act(async () => {
-      fullPipelineButton?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
-    });
-
-    expect(onRunFullPipeline).toHaveBeenCalledOnce();
 
     await act(async () => {
       root.render(
@@ -198,9 +203,6 @@ describe("LessonResult", () => {
           lesson={scriptResponse.lesson as never}
           onGenerateNarration={vi.fn()}
           onGenerateScript={vi.fn()}
-          onRetryNarration={vi.fn()}
-          onRetryNarrationSegment={vi.fn()}
-          onRunFullPipeline={vi.fn()}
           narration={
             {
               status: "completed",
@@ -230,11 +232,9 @@ describe("LessonResult", () => {
       );
     });
 
-    expect(container.querySelector('button[aria-label="Run full pipeline"]')).toHaveProperty("disabled", true);
-    expect(container.querySelector('button[aria-label="Regenerate ElevenLabs audio"]')).toHaveProperty("disabled", true);
-    expect(
-      container.querySelector('button[aria-label="Regenerate ElevenLabs audio for Factor the quadratic"]')
-    ).toHaveProperty("disabled", true);
+    expect(container.querySelector('button[aria-label="Run full pipeline"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Regenerate ElevenLabs audio"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Regenerate ElevenLabs audio for Factor the quadratic"]')).toBeNull();
 
     await act(async () => {
       root.unmount();
@@ -272,11 +272,10 @@ describe("LessonResult", () => {
     });
   });
 
-  it("calls the retry handler from the ElevenLabs audio log", async () => {
+  it("does not show a whole-audio regenerate control", async () => {
     container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    const onRetryNarration = vi.fn();
 
     await act(async () => {
       root.render(
@@ -290,31 +289,22 @@ describe("LessonResult", () => {
               speechText: 'First factor the quadratic.<break time="0.7s" />'
             } as never
           }
-          onRetryNarration={onRetryNarration}
           script={scriptResponse.script as never}
         />
       );
     });
 
-    const button = container.querySelector('button[aria-label="Regenerate ElevenLabs audio"]');
-    expect(button).not.toBeNull();
-
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
-    });
-
-    expect(onRetryNarration).toHaveBeenCalledOnce();
+    expect(container.querySelector('button[aria-label="Regenerate ElevenLabs audio"]')).toBeNull();
 
     await act(async () => {
       root.unmount();
     });
   });
 
-  it("renders segmented ElevenLabs audio with per-segment retry controls", async () => {
+  it("renders segmented ElevenLabs audio without regenerate controls", async () => {
     container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
-    const onRetryNarrationSegment = vi.fn();
 
     await act(async () => {
       root.render(
@@ -356,7 +346,6 @@ describe("LessonResult", () => {
               ]
             } as never
           }
-          onRetryNarrationSegment={onRetryNarrationSegment}
           script={scriptResponse.script as never}
         />
       );
@@ -365,15 +354,7 @@ describe("LessonResult", () => {
     expect(container.textContent).toContain("Factor first.");
     expect(container.textContent).toContain("Then solve.");
     expect(container.querySelectorAll("audio")).toHaveLength(2);
-
-    const button = container.querySelector(
-      'button[aria-label="Regenerate ElevenLabs audio for Solve each factor"]'
-    );
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
-    });
-
-    expect(onRetryNarrationSegment).toHaveBeenCalledWith("script_solve_factors");
+    expect(container.querySelector('button[aria-label="Regenerate ElevenLabs audio for Solve each factor"]')).toBeNull();
 
     await act(async () => {
       root.unmount();

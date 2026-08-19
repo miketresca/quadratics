@@ -25,9 +25,6 @@ export function LessonResult({
   narrationLoading = false,
   onGenerateNarration,
   onGenerateScript,
-  onRetryNarration,
-  onRetryNarrationSegment,
-  onRunFullPipeline,
   onRunStage,
   speechMarkupLoading = false,
   script,
@@ -41,9 +38,6 @@ export function LessonResult({
   narrationLoading?: boolean;
   onGenerateNarration?: () => void;
   onGenerateScript?: () => void;
-  onRetryNarration?: () => void;
-  onRetryNarrationSegment?: (scriptSegmentId: string) => void;
-  onRunFullPipeline?: () => void;
   onRunStage?: (stage: string, options?: StageRunOptions) => void;
   speechMarkupLoading?: boolean;
   script?: LessonScript;
@@ -69,22 +63,10 @@ export function LessonResult({
             Logs
           </button>
         </div>
-        {lesson && onRunFullPipeline ? (
-          <button
-            aria-label="Run full pipeline"
-            className="flex h-10 items-center gap-2 rounded-md border border-emerald-400/35 bg-zinc-950/70 px-3 text-sm font-medium text-emerald-200 shadow-xl shadow-black/30 transition hover:bg-emerald-400/10 disabled:opacity-40"
-            disabled={actionDisabled}
-            onClick={onRunFullPipeline}
-            type="button"
-          >
-            <RunIcon />
-            Run A to Z
-          </button>
-        ) : null}
       </div>
 
       {activeView === "lesson" ? (
-        <LessonPreview artifact={baseVideo} loading={loadingStage === "motion_canvas_render" || loadingStage === "run_all"} />
+        <LessonPreview artifact={baseVideo} loading={loadingStage === "motion_canvas_render"} />
       ) : (
         <>
           {lesson ? <AnswerLog lesson={lesson} /> : <PendingLog title="answer" />}
@@ -101,7 +83,7 @@ export function LessonResult({
 
           {speechMarkup?.speechText ? (
             <SpeechMarkupLog artifact={artifactForStage(generation, "elevenlabs_request")} narration={speechMarkup} />
-          ) : speechMarkupLoading || loadingStage === "run_all" ? (
+          ) : speechMarkupLoading ? (
             <PendingLog accent="amber" className="mt-6" title="elevenlabs_request" />
           ) : effectiveScript?.status === "completed" ? (
             <RunnableLog accent="amber" className="mt-6" disabled={actionDisabled || !onGenerateNarration} onRun={onGenerateNarration} title="elevenlabs_request" />
@@ -109,13 +91,10 @@ export function LessonResult({
 
           {effectiveNarration ? (
             <NarrationLog
-              actionDisabled={actionDisabled}
               artifact={artifactForStage(generation, "elevenlabs_audio")}
               narration={effectiveNarration}
-              onRetry={onRetryNarration}
-              onRetrySegment={onRetryNarrationSegment}
             />
-          ) : narrationLoading || loadingStage === "run_all" ? (
+          ) : narrationLoading ? (
             <PendingLog accent="fuchsia" className="mt-6" title="elevenlabs_audio" />
           ) : null}
 
@@ -128,7 +107,7 @@ export function LessonResult({
               plan={animationPlan}
               timeline={resolvedTimeline}
             />
-          ) : loadingStage === "animation_plan" || loadingStage === "run_all" ? (
+          ) : loadingStage === "animation_plan" ? (
             <PendingLog accent="violet" className="mt-6" title="animation_plan" />
           ) : effectiveNarration?.status === "completed" ? (
             <RunnableLog
@@ -148,7 +127,7 @@ export function LessonResult({
               onRun={onRunStage ? () => onRunStage("resolved_timeline", {force: true}) : undefined}
               timeline={resolvedTimeline}
             />
-          ) : loadingStage === "resolved_timeline" || loadingStage === "run_all" ? (
+          ) : loadingStage === "resolved_timeline" ? (
             <PendingLog accent="cyan" className="mt-6" title="resolved_timeline" />
           ) : animationPlan ? (
             <RunnableLog
@@ -167,7 +146,7 @@ export function LessonResult({
               loading={loadingStage === "motion_canvas_render"}
               onRun={onRunStage ? () => onRunStage("motion_canvas_render", {force: true}) : undefined}
             />
-          ) : loadingStage === "motion_canvas_render" || loadingStage === "run_all" ? (
+          ) : loadingStage === "motion_canvas_render" ? (
             <PendingLog accent="lime" className="mt-6" title="motion_canvas_render" />
           ) : resolvedTimeline ? (
             <RunnableLog
@@ -308,29 +287,16 @@ function SpeechMarkupLog({artifact, narration}: {artifact?: GenerationArtifact; 
 }
 
 function NarrationLog({
-  actionDisabled = false,
   artifact,
-  narration,
-  onRetry,
-  onRetrySegment
+  narration
 }: {
-  actionDisabled?: boolean;
   artifact?: GenerationArtifact;
   narration: LessonNarration;
-  onRetry?: () => void;
-  onRetrySegment?: (scriptSegmentId: string) => void;
 }) {
   const segments = narration.segments ?? [];
   return (
     <StageCard
       accent="fuchsia"
-      action={
-        onRetry ? (
-          <IconButton disabled={actionDisabled} label="Regenerate ElevenLabs audio" onClick={onRetry}>
-            <RegenerateIcon />
-          </IconButton>
-        ) : null
-      }
       artifact={artifact}
       title="elevenlabs_audio"
     >
@@ -338,10 +304,8 @@ function NarrationLog({
         <ol className="mt-4 grid gap-3">
           {segments.map((segment, index) => (
             <NarrationSegmentLog
-              actionDisabled={actionDisabled}
               index={index}
               key={segment.scriptSegmentId}
-              onRetry={onRetrySegment}
               segment={segment}
             />
           ))}
@@ -365,14 +329,10 @@ function NarrationLog({
 }
 
 function NarrationSegmentLog({
-  actionDisabled = false,
   index,
-  onRetry,
   segment
 }: {
-  actionDisabled?: boolean;
   index: number;
-  onRetry?: (scriptSegmentId: string) => void;
   segment: NarrationSegment;
 }) {
   const hasInlineAudio = Boolean(segment.audioBase64);
@@ -387,11 +347,6 @@ function NarrationSegmentLog({
             {segment.stepId} / {Math.round(segment.durationSeconds ?? 0)}s
           </p>
         </div>
-        {onRetry ? (
-          <IconButton disabled={actionDisabled} label={`Regenerate ElevenLabs audio for ${segment.title}`} onClick={() => onRetry(segment.scriptSegmentId)}>
-            <RegenerateIcon />
-          </IconButton>
-        ) : null}
       </div>
       {hasInlineAudio ? (
         <audio className="mt-3 w-full" controls src={`data:${segment.audioMimeType ?? "audio/mpeg"};base64,${segment.audioBase64}`}>

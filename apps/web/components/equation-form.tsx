@@ -8,7 +8,6 @@ import {LessonResult} from "@/components/lesson-result";
 import {MathEquationInput} from "@/components/math-equation-input";
 import {
   createGeneration,
-  runGenerationPipeline,
   runGenerationStage
 } from "@/lib/api";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
@@ -73,37 +72,6 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
 
   function finishPipelineOperation() {
     pipelineInFlightRef.current = false;
-  }
-
-  function runFullPipeline() {
-    if (!lesson || !startPipelineOperation()) {
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        if (!supabaseConfigured) {
-          throw new Error("Sign in to run the pipeline.");
-        }
-        const accessToken = await getAccessToken();
-        if (!generation) {
-          throw new Error("Solve the equation before running the pipeline.");
-        }
-        setViewState({kind: "submitting", lesson, script, narration, generation, loadingStage: "run_all"});
-        const nextGeneration = await runGenerationPipeline({
-          accessToken,
-          generationId: generation.job.id
-        });
-        setViewState(stateForLesson(nextGeneration.lesson as Lesson, undefined, undefined, nextGeneration));
-      } catch (pipelineError) {
-        if (process.env.NODE_ENV === "development") {
-          console.error("[quadratics] full pipeline failed", pipelineError);
-        }
-        setViewState(stateForLesson(lesson, script, narration, generation));
-      } finally {
-        finishPipelineOperation();
-      }
-    });
   }
 
   function runScript() {
@@ -210,15 +178,13 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   const loadingStage = viewState.kind === "submitting" ? viewState.loadingStage : undefined;
   const scriptLoading =
     viewState.kind === "submitting" &&
-    (viewState.scriptLoading === true || loadingStage === "teacher_script" || loadingStage === "run_all");
+    (viewState.scriptLoading === true || loadingStage === "teacher_script");
   const speechMarkupLoading =
     viewState.kind === "submitting" &&
-    (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_audio" || loadingStage === "run_all");
+    (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_audio");
   const narrationLoading =
     viewState.kind === "submitting" &&
-    (viewState.narrationLoading === true ||
-      loadingStage === "elevenlabs_audio" ||
-      loadingStage === "run_all");
+    (viewState.narrationLoading === true || loadingStage === "elevenlabs_audio");
 
   return (
     <div className="w-full">
@@ -324,10 +290,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           loadingStage={loadingStage}
           onGenerateNarration={generation ? retryNarration : undefined}
           onGenerateScript={runScript}
-          onRunFullPipeline={runFullPipeline}
           onRunStage={(stage, options) => runStage(stage, options)}
-          onRetryNarration={generation ? retryNarration : undefined}
-          onRetryNarrationSegment={generation ? retryNarrationSegment : undefined}
           speechMarkupLoading={speechMarkupLoading}
           script={script}
           scriptLoading={scriptLoading}
