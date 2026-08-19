@@ -1,4 +1,5 @@
 import type {CurrentUser} from "@quadratics/types";
+import {execSync} from "node:child_process";
 import {readFile} from "node:fs/promises";
 import path from "node:path";
 
@@ -44,12 +45,14 @@ export default async function AppPage({
       ? await getMe(sessionToken).catch(() => sessionUserFallback)
       : null;
   const readmeMarkdown = await readFile(readmePath, "utf8");
+  const buildInfo = getBuildInfo();
 
   return (
     <main className="quadratics-app-bg min-h-screen bg-black text-zinc-100">
       <header className="fixed left-0 top-0 z-10 flex w-full items-center justify-between px-5 py-5 sm:px-8">
         <Logo />
         <div className="flex items-center gap-2">
+          <BuildChip buildInfo={buildInfo} />
           <a
             aria-label="Open quadratics GitHub repository"
             className="flex h-10 w-10 items-center justify-center rounded border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-emerald-400/70 hover:text-emerald-300"
@@ -64,6 +67,48 @@ export default async function AppPage({
       </header>
       <AppModeShell initialUser={user} readmeMarkdown={readmeMarkdown} />
     </main>
+  );
+}
+
+type BuildInfo = {
+  commit: string;
+  committedAt: string;
+};
+
+function getBuildInfo(): BuildInfo {
+  try {
+    const output = execSync("git log -1 --format=%h|%cd --date=format:%Y-%m-%d %H:%M", {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+    const [commit, committedAt] = output.split("|");
+    if (commit && committedAt) {
+      return {commit, committedAt};
+    }
+  } catch {
+    // Deployment environments do not always expose the .git directory.
+  }
+
+  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA;
+  return {
+    commit: sha ? sha.slice(0, 7) : "local",
+    committedAt: "runtime"
+  };
+}
+
+function BuildChip({buildInfo}: {buildInfo: BuildInfo}) {
+  return (
+    <div
+      aria-label={`Current build ${buildInfo.commit}, last commit ${buildInfo.committedAt}`}
+      className="hidden h-10 items-center gap-2 rounded border border-emerald-400/20 bg-black/45 px-3 font-mono text-[11px] uppercase tracking-wide text-emerald-300/90 shadow-[0_0_24px_rgba(16,185,129,0.08)] sm:flex"
+      title={`Last commit: ${buildInfo.committedAt}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.85)]" />
+      <span>{buildInfo.commit}</span>
+      <span className="text-zinc-600">/</span>
+      <time className="text-emerald-200/80">{buildInfo.committedAt}</time>
+    </div>
   );
 }
 

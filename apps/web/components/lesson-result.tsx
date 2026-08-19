@@ -657,11 +657,13 @@ function RenderLog({
         <div className="mt-3 flex flex-col gap-3 rounded border border-lime-400/25 bg-lime-950/10 p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-lime-100">Video is ready in the Lesson tab.</p>
           <button
-            className="inline-flex h-9 items-center justify-center rounded border border-lime-400/40 px-3 font-mono text-xs uppercase tracking-wide text-lime-200 transition hover:border-lime-300 hover:bg-lime-300/10 hover:text-lime-100"
+            aria-label="Open Lesson tab"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-lime-400/30 text-lime-200 transition hover:border-lime-300/70 hover:bg-lime-300/10 hover:text-lime-100"
             onClick={onOpenLesson}
+            title="Open Lesson tab"
             type="button"
           >
-            Open lesson
+            <OpenLessonIcon />
           </button>
         </div>
       ) : (
@@ -999,6 +1001,15 @@ function RunIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
       <path d="M8 5v14l11-7z" />
+    </svg>
+  );
+}
+
+function OpenLessonIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M7 17 17 7" />
+      <path d="M9 7h8v8" />
     </svg>
   );
 }

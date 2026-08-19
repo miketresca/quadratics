@@ -766,7 +766,7 @@ describe("LessonResult", () => {
 
     expect(onRunStage).toHaveBeenCalledWith("animation_plan", {force: true});
 
-    const openLesson = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Open lesson");
+    const openLesson = container.querySelector('button[aria-label="Open Lesson tab"]');
     await act(async () => {
       openLesson?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
