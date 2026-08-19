@@ -743,6 +743,7 @@ describe("LessonResult", () => {
     expect(animationPlanRows[1]).toContain("We need two numbers");
     expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/narration/audio-artifact.mp3");
     expect(container.querySelector('audio[src="https://media.example/audio-artifact.mp3"]')).not.toBeNull();
+    expect(container.textContent).toContain("Video is ready in the Lesson tab.");
 
     const regenerateRequest = container.querySelector('button[aria-label="Regenerate elevenlabs_request"]');
     await act(async () => {
@@ -765,9 +766,9 @@ describe("LessonResult", () => {
 
     expect(onRunStage).toHaveBeenCalledWith("animation_plan", {force: true});
 
-    const lessonTab = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Lesson");
+    const openLesson = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Open lesson");
     await act(async () => {
-      lessonTab?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+      openLesson?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
 
     expect(container.textContent).toContain("base video ready");

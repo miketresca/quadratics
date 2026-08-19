@@ -233,6 +233,7 @@ export function LessonResult({
               artifact={visibleRenderArtifact}
               loading={loadingStage === "motion_canvas_render"}
               narration={effectiveNarration}
+              onOpenLesson={() => setActiveView("lesson")}
               onRun={onRunStage ? () => onRunStage("motion_canvas_render", {force: true}) : undefined}
               timeline={resolvedTimeline}
             />
@@ -321,8 +322,7 @@ function AnswerLog({lesson}: {lesson: Lesson}) {
 
 function SolutionLinesLog({lines}: {lines: ReturnType<typeof flattenLessonMathLines>}) {
   return (
-    <div className="relative mt-8 rounded border border-emerald-400/35 bg-emerald-950/10 p-4">
-      <PipelineConnector />
+    <div className="mt-6 rounded border border-emerald-400/35 bg-emerald-950/10 p-4">
       <StageTitle accent="lime" title="solution_lines" />
       <ol className="mt-4 grid gap-2 font-mono text-sm text-zinc-100">
         {lines.map((line, index) => (
@@ -631,6 +631,7 @@ function RenderLog({
   artifact,
   loading = false,
   narration,
+  onOpenLesson,
   onRun,
   timeline
 }: {
@@ -638,6 +639,7 @@ function RenderLog({
   artifact: GenerationArtifact;
   loading?: boolean;
   narration?: LessonNarration;
+  onOpenLesson?: () => void;
   onRun?: () => void;
   timeline?: ResolvedAnimationTimeline;
 }) {
@@ -650,10 +652,21 @@ function RenderLog({
       loading={stageLoading}
       title="motion_canvas_render"
     >
-      <p className="mt-3 text-sm text-zinc-300">
-        {artifact.status === "completed" ? "Blackboard video render completed. Stored narration is included when playback URLs are available to the renderer." : artifact.errorMessage ?? "Render artifact is not current."}
-      </p>
       {timeline ? <RenderInputSummary narration={narration} renderArtifact={artifact} timeline={timeline} /> : null}
+      {artifact.status === "completed" ? (
+        <div className="mt-3 flex flex-col gap-3 rounded border border-lime-400/25 bg-lime-950/10 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-lime-100">Video is ready in the Lesson tab.</p>
+          <button
+            className="inline-flex h-9 items-center justify-center rounded border border-lime-400/40 px-3 font-mono text-xs uppercase tracking-wide text-lime-200 transition hover:border-lime-300 hover:bg-lime-300/10 hover:text-lime-100"
+            onClick={onOpenLesson}
+            type="button"
+          >
+            Open lesson
+          </button>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-300">{artifact.errorMessage ?? "Render artifact is not current."}</p>
+      )}
       {artifact.storageObjects?.[0] ? <ArtifactStorage object={artifact.storageObjects[0]} /> : null}
     </StageCard>
   );
@@ -712,8 +725,7 @@ function StageCard({
 }) {
   const isLoading = loading || artifact?.status === "running";
   return (
-    <div className={`relative mt-8 rounded border ${accentBorderClass(accent)} p-4`}>
-      <PipelineConnector />
+    <div className={`mt-6 rounded border ${accentBorderClass(accent)} p-4`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <StageTitle accent={accent} title={title} />
@@ -791,8 +803,7 @@ type Accent = "amber" | "cyan" | "fuchsia" | "lime" | "sky" | "violet" | "zinc";
 
 function PendingLog({accent = "zinc", className = "", title}: {accent?: Accent; className?: string; title: string}) {
   return (
-    <div className={`${className} relative rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
-      {title !== "answer" ? <PipelineConnector /> : null}
+    <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
       <div className="flex items-center justify-between gap-4">
         <StageTitle accent={accent} title={title} />
         <Spinner />
@@ -819,8 +830,7 @@ function RunnableLog({
   title: string;
 }) {
   return (
-    <div className={`${className} relative rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
-      <PipelineConnector />
+    <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
       <div className="flex items-center justify-between gap-4">
         <StageTitle accent={accent} title={title} />
         <div className="flex items-center gap-2">
@@ -950,15 +960,6 @@ const stageDescriptions: Record<string, string> = {
   motion_canvas_render: "The API calls the configured Motion Canvas command adapter. It renders the blackboard scene from the resolved timeline, downloads signed narration segments, and muxes the MP4 with ffmpeg."
 };
 
-function PipelineConnector() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute -top-8 left-1/2 flex h-8 -translate-x-1/2 flex-col items-center justify-center">
-      <span className="h-2 w-2 rounded-full border border-cyan-300/45 bg-[#090d14] shadow-[0_0_10px_rgba(103,232,249,0.18)]" />
-      <span className="h-4 w-px bg-gradient-to-b from-cyan-300/45 via-emerald-300/35 to-cyan-300/45" />
-      <span className="h-2 w-2 rounded-full border border-emerald-300/45 bg-[#090d14] shadow-[0_0_10px_rgba(110,231,183,0.18)]" />
-    </div>
-  );
-}
 
 function accentTextClass(accent: Accent) {
   return {
