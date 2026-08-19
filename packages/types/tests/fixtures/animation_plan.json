@@ -1,0 +1,53 @@
+{
+  "version": "animation-plan/v1",
+  "lessonArtifactId": "lesson-artifact-1",
+  "narrationArtifactId": "narration-artifact-1",
+  "durationSeconds": 24,
+  "layout": {
+    "theme": "chalkboard",
+    "verticalFlow": true
+  },
+  "cues": [
+    {
+      "id": "cue_write_original",
+      "lessonStepId": "factor",
+      "mathLineId": "standard_form",
+      "trigger": {
+        "type": "narration_text",
+        "scriptSegmentId": "script_factor",
+        "text": "Start with x squared plus five x plus six equals zero"
+      },
+      "visual": {
+        "action": "write_math",
+        "target": {
+          "lessonStepId": "factor",
+          "mathLineId": "standard_form"
+        }
+      },
+      "sync": {"mode": "before_narration"}
+    },
+    {
+      "id": "cue_write_factored",
+      "lessonStepId": "factor",
+      "mathLineId": "factored_form",
+      "trigger": {
+        "type": "narration_text",
+        "scriptSegmentId": "script_factor",
+        "text": "factors into x plus two times x plus three"
+      },
+      "visual": {
+        "action": "write_math",
+        "target": {
+          "lessonStepId": "factor",
+          "mathLineId": "factored_form",
+          "fragment": "x plus two times x plus three"
+        }
+      },
+      "sync": {"mode": "with_narration"}
+    }
+  ],
+  "soundCues": [],
+  "metadata": {
+    "provider": "fixture"
+  }
+}
