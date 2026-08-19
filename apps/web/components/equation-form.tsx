@@ -339,8 +339,8 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
 
   return (
     <div className="w-full">
-      <div className="relative mx-auto w-full max-w-sm rounded-md border border-emerald-400/15 bg-[#080c12]/92 p-4 shadow-[0_0_70px_rgba(16,185,129,0.14),0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur sm:max-w-3xl sm:p-5">
-        <div className="pointer-events-none absolute inset-x-6 -bottom-8 h-20 bg-emerald-400/10 blur-3xl" aria-hidden="true" />
+      <div className="relative mx-auto w-full max-w-sm rounded-md border border-emerald-400/15 bg-[#080c12]/92 p-4 shadow-[0_0_34px_rgba(16,185,129,0.1),0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur sm:max-w-3xl sm:p-5">
+        <div className="pointer-events-none absolute inset-x-16 -bottom-4 h-10 bg-emerald-400/8 blur-2xl" aria-hidden="true" />
         <form action={onSubmit} className="grid gap-4">
           <div
             className={[

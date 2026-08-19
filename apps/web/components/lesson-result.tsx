@@ -10,13 +10,13 @@ import type {
   NarrationSegment,
   ResolvedAnimationTimeline
 } from "@quadratics/types";
-import {useState} from "react";
+import {useRef, useState} from "react";
 
 import {flattenLessonMathLines} from "@/lib/lesson-view";
 
 type StageRunOptions = {force?: boolean};
 const HEYGEN_AVATAR_COST_PER_SECOND_USD = Number(
-  process.env.NEXT_PUBLIC_HEYGEN_AVATAR_COST_PER_SECOND_USD ?? "0.0667"
+  process.env.NEXT_PUBLIC_HEYGEN_AVATAR_COST_PER_SECOND_USD ?? "0.0167"
 );
 
 export function LessonResult({
@@ -1167,26 +1167,63 @@ function StageTitle({accent, title}: {accent: Accent; title: string}) {
 }
 
 function StageInfo({title}: {title: string}) {
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const [position, setPosition] = useState<{left: number; top: number} | null>(null);
   const details = stageDetails[title] ?? fallbackStageDetails;
+  const open = position !== null;
+
+  function openPanel() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    const width = Math.min(420, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const preferredTop = rect.bottom + 8;
+    const maxPanelHeight = Math.min(440, window.innerHeight - 24);
+    const top =
+      preferredTop + maxPanelHeight > window.innerHeight
+        ? Math.max(12, rect.top - maxPanelHeight - 8)
+        : preferredTop;
+    setPosition({left, top});
+  }
+
   return (
-    <span className="group/info relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+    <span
+      className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center"
+      onBlur={() => setPosition(null)}
+      onFocus={openPanel}
+      onMouseEnter={openPanel}
+      onMouseLeave={() => setPosition(null)}
+    >
       <span
         aria-label={`${title} info`}
-        className="flex h-4 w-4 items-center justify-center rounded-full border border-zinc-700 font-mono text-[10px] font-semibold text-zinc-500 transition group-hover/info:border-emerald-400/60 group-hover/info:text-emerald-300"
+        className={[
+          "flex h-4 w-4 items-center justify-center rounded-full border font-mono text-[10px] font-semibold transition",
+          open
+            ? "border-emerald-400/60 text-emerald-300"
+            : "border-zinc-700 text-zinc-500"
+        ].join(" ")}
+        ref={triggerRef}
         tabIndex={0}
       >
         i
       </span>
-      <span className="pointer-events-none absolute left-0 top-7 z-50 hidden w-[22rem] rounded border border-zinc-700 bg-[#090d14]/98 p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/70 backdrop-blur group-hover/info:block group-focus-within/info:block">
-        <span className="block font-mono text-[11px] uppercase tracking-wide text-emerald-300">{title}</span>
-        <span className="mt-2 block text-zinc-200">{details.summary}</span>
-        <span className="mt-3 grid gap-2">
-          <StageInfoRow label="Inputs" value={details.inputs} />
-          <StageInfoRow label="Guardrails" value={details.guardrails} />
-          <StageInfoRow label="Cost" value={details.cost} />
-          {details.prompt ? <StageInfoRow label="Prompt" value={details.prompt} /> : null}
+      {position ? (
+        <span
+          className="pointer-events-none fixed z-[120] max-h-[min(440px,calc(100vh-24px))] w-[min(420px,calc(100vw-24px))] overflow-auto rounded border border-zinc-700 bg-[#090d14]/98 p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/70 backdrop-blur"
+          style={{left: position.left, top: position.top}}
+        >
+          <span className="block break-words font-mono text-[11px] uppercase tracking-wide text-emerald-300">{title}</span>
+          <span className="mt-2 block break-words text-zinc-200">{details.summary}</span>
+          <span className="mt-3 grid gap-2">
+            <StageInfoRow label="Inputs" value={details.inputs} />
+            <StageInfoRow label="Guardrails" value={details.guardrails} />
+            <StageInfoRow label="Cost" value={details.cost} />
+            {details.prompt ? <StageInfoRow label="Prompt" value={details.prompt} /> : null}
+          </span>
         </span>
-      </span>
+      ) : null}
     </span>
   );
 }
@@ -1195,7 +1232,7 @@ function StageInfoRow({label, value}: {label: string; value: string}) {
   return (
     <span className="grid gap-0.5 border-t border-zinc-800 pt-2">
       <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{label}</span>
-      <span className="text-zinc-300">{value}</span>
+      <span className="break-words text-zinc-300">{value}</span>
     </span>
   );
 }
@@ -1252,7 +1289,7 @@ const stageDetails: Record<string, StageDetails> = {
     summary: "Optional paid avatar pass. It creates one transparent avatar clip per narration segment.",
     inputs: "Completed ElevenLabs segment audio URLs and the selected instructor HeyGen avatar ID.",
     guardrails: "The stage is explicit and confirmed before running. Regenerating it only makes downstream render artifacts stale.",
-    cost: `HeyGen estimate uses ${formatCurrency(HEYGEN_AVATAR_COST_PER_SECOND_USD)} per generated second.`
+    cost: `Estimate uses ${formatCurrency(HEYGEN_AVATAR_COST_PER_SECOND_USD)} per generated second. Override with NEXT_PUBLIC_HEYGEN_AVATAR_COST_PER_SECOND_USD.`
   },
   animation_plan: {
     summary: "Chooses semantic blackboard actions for the lesson.",
