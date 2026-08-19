@@ -50,9 +50,9 @@ describe("LessonResult", () => {
       lessonTab?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
 
-    expect(container.textContent).toContain("Graph Explorer");
+    expect(container.textContent).toContain("IRL Example");
     expect(container.textContent).toContain("Vertex");
-    expect(container.textContent).toContain("Real-World Context");
+    expect(container.textContent).toContain("Graph");
     expect(container.textContent).toContain("Run real_world_context from the Logs tab");
     expect(container.querySelector('button[aria-label="Generate real-world context"]')).toBeNull();
 

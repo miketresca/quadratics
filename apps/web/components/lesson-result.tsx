@@ -460,11 +460,11 @@ function LessonPreview({
           </div>
         )}
       </div>
-      {lesson?.status === "completed" ? <ParabolaExplorer lesson={lesson} /> : null}
       {lesson?.status === "completed" ? (
-        <RealWorldContextPanel
+        <IRLExamplePanel
           context={context}
           contextArtifact={contextArtifact}
+          lesson={lesson}
           loading={contextLoading}
         />
       ) : null}
@@ -472,7 +472,58 @@ function LessonPreview({
   );
 }
 
-function ParabolaExplorer({lesson}: {lesson: Lesson}) {
+function IRLExamplePanel({
+  context,
+  contextArtifact,
+  lesson,
+  loading
+}: {
+  context?: RealWorldContext;
+  contextArtifact?: GenerationArtifact;
+  lesson: Lesson;
+  loading?: boolean;
+}) {
+  return (
+    <section className="overflow-hidden rounded border border-cyan-400/25 bg-cyan-950/10 backdrop-blur" aria-label="IRL Example">
+      <div className="flex items-center justify-between gap-4 border-b border-zinc-800/80 p-4">
+        <div>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">IRL Example</h2>
+          <p className="mt-1 text-xs text-zinc-500">Graph + optional Algebra 1 context</p>
+        </div>
+        {loading ? (
+          <span className="inline-flex items-center gap-2 rounded border border-cyan-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-cyan-100">
+            <Spinner />
+            Generating
+          </span>
+        ) : context?.status === "completed" ? (
+          <span className="rounded border border-cyan-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-cyan-100">
+            Ready
+          </span>
+        ) : null}
+      </div>
+      <div className="grid gap-4 p-4">
+        <GraphExplorer lesson={lesson} />
+        {context?.status === "completed" ? (
+          <div className="grid gap-3 border-t border-zinc-800/80 pt-4">
+            <h3 className="text-lg font-semibold text-zinc-100">{context.title}</h3>
+            <p className="text-sm leading-6 text-zinc-300">{context.scenario}</p>
+            <p className="rounded border border-cyan-400/20 bg-black/25 p-3 text-sm leading-6 text-cyan-100">{context.takeaway}</p>
+          </div>
+        ) : contextArtifact?.status === "failed" ? (
+          <p className="rounded border border-red-400/30 bg-red-950/20 p-3 text-sm text-red-100">
+            {contextArtifact.errorMessage ?? "Could not generate the lesson context."}
+          </p>
+        ) : (
+          <p className="rounded border border-zinc-800 bg-black/25 p-3 text-sm leading-6 text-zinc-400">
+            Run real_world_context from the Logs tab to generate a short example for this lesson. This does not affect the video pipeline.
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function GraphExplorer({lesson}: {lesson: Lesson}) {
   const model = parabolaModel(lesson);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   if (!model) {
@@ -487,10 +538,10 @@ function ParabolaExplorer({lesson}: {lesson: Lesson}) {
   }
 
   return (
-    <section className="overflow-hidden rounded border border-emerald-400/25 bg-black/35 backdrop-blur" aria-label="Interactive parabola">
+    <div className="overflow-hidden rounded border border-zinc-800 bg-black/25" aria-label="Interactive graph">
       <div className="flex flex-col gap-3 border-b border-zinc-800/80 p-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Graph Explorer</h2>
+          <h3 className="font-mono text-xs font-semibold uppercase tracking-wide text-zinc-300">Graph</h3>
           <p className="mt-1 text-xs text-zinc-500">{lesson.normalizedEquation}</p>
         </div>
         <dl className="grid grid-cols-3 gap-2 text-right font-mono text-[11px] uppercase tracking-wide text-zinc-500">
@@ -540,53 +591,7 @@ function ParabolaExplorer({lesson}: {lesson: Lesson}) {
           <p className="text-xs leading-5 text-zinc-500">Move across the visible branch to inspect the quadratic output at different x-values.</p>
         </div>
       </div>
-    </section>
-  );
-}
-
-function RealWorldContextPanel({
-  context,
-  contextArtifact,
-  loading
-}: {
-  context?: RealWorldContext;
-  contextArtifact?: GenerationArtifact;
-  loading?: boolean;
-}) {
-  return (
-    <section className="rounded border border-cyan-400/25 bg-cyan-950/10 p-4 backdrop-blur" aria-label="Real-world context">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Real-World Context</h2>
-          <p className="mt-1 text-xs text-zinc-500">Optional AI lesson enrichment</p>
-        </div>
-        {loading ? (
-          <span className="inline-flex items-center gap-2 rounded border border-cyan-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-cyan-100">
-            <Spinner />
-            Generating
-          </span>
-        ) : context?.status === "completed" ? (
-          <span className="rounded border border-cyan-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-cyan-100">
-            Ready
-          </span>
-        ) : null}
-      </div>
-      {context?.status === "completed" ? (
-        <div className="mt-4 grid gap-3">
-          <h3 className="text-lg font-semibold text-zinc-100">{context.title}</h3>
-          <p className="text-sm leading-6 text-zinc-300">{context.scenario}</p>
-          <p className="rounded border border-cyan-400/20 bg-black/25 p-3 text-sm leading-6 text-cyan-100">{context.takeaway}</p>
-        </div>
-      ) : contextArtifact?.status === "failed" ? (
-        <p className="mt-4 rounded border border-red-400/30 bg-red-950/20 p-3 text-sm text-red-100">
-          {contextArtifact.errorMessage ?? "Could not generate the lesson context."}
-        </p>
-      ) : (
-        <p className="mt-4 rounded border border-zinc-800 bg-black/25 p-3 text-sm leading-6 text-zinc-400">
-          Run real_world_context from the Logs tab to generate a short example for this lesson. This does not affect the video pipeline.
-        </p>
-      )}
-    </section>
+    </div>
   );
 }
 
