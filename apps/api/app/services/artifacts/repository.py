@@ -187,6 +187,25 @@ class InMemoryArtifactRepository:
                 if dependency.upstream_artifact_id == artifact_id
             ]
 
+    def list_for_generation(self, generation_job_id: str) -> list[ArtifactRecord]:
+        with self._lock:
+            return sorted(
+                [
+                    artifact
+                    for artifact in self._artifacts.values()
+                    if artifact.generation_job_id == generation_job_id
+                ],
+                key=lambda artifact: (artifact.created_at, artifact.version),
+            )
+
+    def dependencies_for_generation(self, generation_job_id: str) -> list[ArtifactDependencyRecord]:
+        with self._lock:
+            return [
+                dependency
+                for dependency in self._dependencies
+                if dependency.generation_job_id == generation_job_id
+            ]
+
     def mark_descendants_stale(self, artifact_id: str, *, reason: str) -> list[ArtifactRecord]:
         with self._lock:
             return self._mark_descendants_stale_locked(artifact_id, reason=reason)
@@ -205,7 +224,12 @@ class InMemoryArtifactRepository:
             raise KeyError(f"unknown artifact {artifact_id}")
         return artifact
 
-    def _mark_descendants_stale_locked(self, artifact_id: str, *, reason: str) -> list[ArtifactRecord]:
+    def _mark_descendants_stale_locked(
+        self,
+        artifact_id: str,
+        *,
+        reason: str,
+    ) -> list[ArtifactRecord]:
         stale_records: list[ArtifactRecord] = []
         queue = [artifact_id]
         seen = {artifact_id}

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from app.api.dependencies.auth import get_current_user
 from app.core.config import Settings, get_settings
@@ -26,16 +26,13 @@ from app.schemas.script import (
     ScriptEquationRequest,
     ScriptEquationResponse,
 )
-from app.services.lessons.builder import build_lesson
-from app.services.math.parser import EquationParseError, parse_equation
-from app.services.math.solver import solve_quadratic
-from app.services.math.validator import QuadraticValidationError, validate_quadratic
 from app.services.narration.base import NarrationProvider
 from app.services.narration.builder import build_lesson_narration, unsupported_narration
 from app.services.narration.speech_markup import (
     DeterministicSpeechMarkupProvider,
     SpeechMarkupProvider,
 )
+from app.services.pipeline.solve_snapshot import lesson_from_equation
 from app.services.scripts.builder import build_lesson_script
 from app.services.scripts.development import DevelopmentScriptProvider
 from app.services.scripts.validator import ScriptValidationError
@@ -48,7 +45,7 @@ async def solve_equation(
     request: SolveEquationRequest,
     _current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> LessonResponse:
-    return _lesson_from_equation(request.equation)
+    return lesson_from_equation(request.equation)
 
 
 @router.post("/script", response_model=ScriptEquationResponse)
@@ -57,7 +54,7 @@ async def script_equation(
     _current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ScriptEquationResponse:
-    lesson = _lesson_from_equation(request.equation)
+    lesson = lesson_from_equation(request.equation)
     try:
         provider = _script_provider(settings, lesson)
         script = await build_lesson_script(
@@ -102,19 +99,6 @@ async def narrate_equation(
     ) as exc:
         narration = unsupported_narration(str(exc))
     return NarrationEquationResponse(narration=narration)
-
-
-def _lesson_from_equation(equation: str) -> LessonResponse:
-    try:
-        parsed = parse_equation(equation)
-        quadratic = validate_quadratic(parsed)
-        solution = solve_quadratic(quadratic)
-    except (EquationParseError, QuadraticValidationError) as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=str(exc),
-        ) from exc
-    return build_lesson(solution)
 
 
 def _script_provider(
