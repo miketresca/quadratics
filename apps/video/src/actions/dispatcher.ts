@@ -19,6 +19,10 @@ export function assertSupportedCue(cue: ResolvedAnimationCue): void {
   }
 }
 
+export function isRenderableAction(action: string): action is RenderableAction {
+  return supportedActions.has(action as RenderableAction);
+}
+
 export function durationForCue(cue: ResolvedAnimationCue): number {
   return Math.max(0, cue.animation.endSeconds - cue.animation.startSeconds);
 }

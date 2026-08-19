@@ -1,8 +1,8 @@
 import {Rect, Txt, makeScene2D} from "@motion-canvas/2d";
 import {createRef, waitFor} from "@motion-canvas/core";
 
-import {showHighlight} from "../actions/highlight";
-import {assertSupportedCue, durationForCue} from "../actions/dispatcher";
+import {showVisualAction} from "../actions/highlight";
+import {assertSupportedCue, durationForCue, isRenderableAction} from "../actions/dispatcher";
 import {writeMath} from "../actions/writeMath";
 import {chalkSfxTracksForTimeline} from "../audio/chalkEffects";
 import {Blackboard} from "../components/Blackboard";
@@ -52,9 +52,10 @@ export default makeScene2D(function* (view) {
     } else if (
       lineId &&
       lineIndex !== undefined &&
+      isRenderableAction(cue.animation.action) &&
       ["highlight", "emphasize", "circle", "underline", "box"].includes(cue.animation.action)
     ) {
-      yield* showHighlight(highlightRefs[lineIndex](), duration);
+      yield* showVisualAction(highlightRefs[lineIndex](), cue.animation.action, duration);
     } else {
       yield* waitFor(duration);
     }

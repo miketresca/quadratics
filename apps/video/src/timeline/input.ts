@@ -20,7 +20,7 @@ export function flattenLessonLines(lesson: Lesson): BlackboardLine[] {
         ...line,
         stepId: step.id,
         stepTitle: step.title,
-        y: index * 82
+        y: index * 96
       });
       index += 1;
     }

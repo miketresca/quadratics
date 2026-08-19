@@ -1,7 +1,7 @@
 export const board = {
-  background: "#050607",
-  surface: "#101915",
-  surfaceDark: "#0a120f",
+  background: "#000000",
+  surface: "#030303",
+  surfaceDark: "#000000",
   frame: "#6e4f32",
   chalk: "#f6f1dc",
   muted: "#bbc6b7",
