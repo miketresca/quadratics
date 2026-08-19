@@ -42,6 +42,7 @@ from app.services.storage.media_store import MediaStore
 
 SOLVER_VERSION = "sympy-quadratic-v1"
 LESSON_BUILDER_VERSION = "factoring-lesson-v1"
+GOLDEN_DEVELOPMENT_CHECKPOINT_EQUATION = "x**2 + 5*x + 6 = 0"
 
 
 class SolveGenerationService:
@@ -61,8 +62,25 @@ class SolveGenerationService:
         user_id: str,
         equation: str,
         instructor_id: str | None = None,
+        reuse_development_checkpoint: bool = False,
     ) -> GenerationSnapshot:
         lesson = lesson_from_equation(equation)
+        if (
+            reuse_development_checkpoint
+            and lesson.normalized_equation == GOLDEN_DEVELOPMENT_CHECKPOINT_EQUATION
+        ):
+            existing_job = self._jobs.latest_for_user_equation(
+                user_id=user_id,
+                normalized_equation=lesson.normalized_equation,
+                instructor_id=instructor_id,
+            )
+            if existing_job is not None:
+                existing_snapshot = self.get_snapshot(
+                    generation_job_id=existing_job.id,
+                    user_id=user_id,
+                )
+                if existing_snapshot is not None:
+                    return existing_snapshot
         job = self._jobs.create_solve_job(
             user_id=user_id,
             equation_input=equation,

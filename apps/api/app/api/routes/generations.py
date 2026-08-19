@@ -48,6 +48,7 @@ async def create_generation(
         user_id=current_user.id,
         equation=request.equation,
         instructor_id=request.instructor_id,
+        reuse_development_checkpoint=settings.app_environment == "development",
     )
 
 

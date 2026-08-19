@@ -617,4 +617,76 @@ describe("LessonResult", () => {
       root.unmount();
     });
   });
+
+  it("shows failed animation plan artifacts without crashing", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const onRunStage = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={
+            {
+              job: {
+                id: "generation-3",
+                userId: "user-1",
+                equationInput: "x^2 + 5x + 6",
+                status: "completed",
+                creditsUsed: 0
+              },
+              lesson: scriptResponse.lesson,
+              artifacts: [
+                {
+                  id: "audio-artifact",
+                  generationJobId: "generation-3",
+                  userId: "user-1",
+                  stage: "elevenlabs_audio",
+                  version: 1,
+                  status: "completed",
+                  inputHash: "sha256:audio",
+                  payload: {
+                    status: "completed",
+                    provider: "elevenlabs",
+                    voiceId: "male-voice",
+                    modelId: "eleven_multilingual_v2",
+                    durationSeconds: 4,
+                    speechText: "We need two numbers."
+                  },
+                  isCurrent: true,
+                  createdAt: "2026-08-18T00:00:01Z"
+                },
+                {
+                  id: "failed-plan",
+                  generationJobId: "generation-3",
+                  userId: "user-1",
+                  stage: "animation_plan",
+                  version: 1,
+                  status: "failed",
+                  inputHash: "sha256:plan",
+                  errorCode: "animation_plan_failed",
+                  errorMessage: "planner exploded",
+                  payload: {},
+                  isCurrent: false,
+                  createdAt: "2026-08-18T00:00:02Z"
+                }
+              ]
+            } as never
+          }
+          lesson={scriptResponse.lesson as never}
+          onRunStage={onRunStage}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("animation_plan");
+    expect(container.textContent).toContain("FAILED");
+    expect(container.textContent).toContain("planner exploded");
+    expect(container.querySelector('button[aria-label="Run animation_plan"]')).not.toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });

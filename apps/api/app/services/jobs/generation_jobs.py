@@ -73,6 +73,23 @@ class InMemoryGenerationJobRepository:
                 return None
             return job
 
+    def latest_for_user_equation(
+        self,
+        *,
+        user_id: str,
+        normalized_equation: str,
+        instructor_id: str | None,
+    ) -> GenerationJobRecord | None:
+        with self._lock:
+            matches = [
+                job
+                for job in self._jobs.values()
+                if job.user_id == user_id
+                and job.normalized_equation == normalized_equation
+                and job.instructor_id == instructor_id
+            ]
+            return matches[-1] if matches else None
+
 
 class SupabaseGenerationJobRepository:
     def __init__(self, settings: Settings) -> None:
@@ -127,6 +144,34 @@ class SupabaseGenerationJobRepository:
                     "select": _JOB_COLUMNS,
                     "limit": "1",
                 },
+            )
+        _raise_for_job_storage_error(response)
+        rows = response.json()
+        return _job_from_row(rows[0]) if rows else None
+
+    def latest_for_user_equation(
+        self,
+        *,
+        user_id: str,
+        normalized_equation: str,
+        instructor_id: str | None,
+    ) -> GenerationJobRecord | None:
+        params = {
+            "user_id": f"eq.{user_id}",
+            "normalized_equation": f"eq.{normalized_equation}",
+            "select": _JOB_COLUMNS,
+            "order": "created_at.desc",
+            "limit": "1",
+        }
+        if instructor_id is None:
+            params["instructor_id"] = "is.null"
+        else:
+            params["instructor_id"] = f"eq.{instructor_id}"
+        with httpx.Client() as client:
+            response = client.get(
+                f"{self._base_url}/rest/v1/generation_jobs",
+                headers=self._headers,
+                params=params,
             )
         _raise_for_job_storage_error(response)
         rows = response.json()

@@ -46,8 +46,14 @@ export function LessonResult({
   const effectiveScript = script ?? payloadForStage<LessonScript>(generation, "teacher_script");
   const effectiveNarration = narration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_audio");
   const speechMarkup = effectiveNarration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_request");
-  const animationPlan = payloadForStage<AnimationPlan>(generation, "animation_plan");
-  const resolvedTimeline = payloadForStage<ResolvedAnimationTimeline>(generation, "resolved_timeline");
+  const animationPlanArtifact = artifactForStage(generation, "animation_plan");
+  const resolvedTimelineArtifact = artifactForStage(generation, "resolved_timeline");
+  const animationPlan = isAnimationPlanPayload(animationPlanArtifact?.payload)
+    ? animationPlanArtifact.payload
+    : undefined;
+  const resolvedTimeline = isResolvedTimelinePayload(resolvedTimelineArtifact?.payload)
+    ? resolvedTimelineArtifact.payload
+    : undefined;
   const baseVideo = artifactForStage(generation, "base_video");
 
   return (
@@ -105,7 +111,7 @@ export function LessonResult({
           {animationPlan ? (
             <AnimationPlanLog
               actionDisabled={actionDisabled}
-              artifact={artifactForStage(generation, "animation_plan")}
+              artifact={animationPlanArtifact}
               loading={loadingStage === "animation_plan"}
               onRun={onRunStage ? () => onRunStage("animation_plan", {force: true}) : undefined}
               plan={animationPlan}
@@ -113,6 +119,14 @@ export function LessonResult({
             />
           ) : loadingStage === "animation_plan" ? (
             <PendingLog accent="violet" className="mt-6" title="animation_plan" />
+          ) : animationPlanArtifact?.status === "failed" ? (
+            <FailedStageLog
+              accent="violet"
+              artifact={animationPlanArtifact}
+              disabled={actionDisabled || !onRunStage}
+              onRun={onRunStage ? () => onRunStage("animation_plan", {force: true}) : undefined}
+              title="animation_plan"
+            />
           ) : effectiveNarration?.status === "completed" ? (
             <RunnableLog
               accent="violet"
@@ -126,7 +140,7 @@ export function LessonResult({
           {resolvedTimeline ? (
             <TimelineLog
               actionDisabled={actionDisabled}
-              artifact={artifactForStage(generation, "resolved_timeline")}
+              artifact={resolvedTimelineArtifact}
               loading={loadingStage === "resolved_timeline"}
               onRun={onRunStage ? () => onRunStage("resolved_timeline", {force: true}) : undefined}
               timeline={resolvedTimeline}
@@ -636,14 +650,58 @@ function RunnableLog({
   );
 }
 
+function FailedStageLog({
+  accent = "zinc",
+  artifact,
+  disabled = false,
+  onRun,
+  title
+}: {
+  accent?: Accent;
+  artifact: GenerationArtifact;
+  disabled?: boolean;
+  onRun?: () => void;
+  title: string;
+}) {
+  return (
+    <StageCard
+      accent={accent}
+      action={onRun ? <IconButton disabled={disabled} label={`Run ${title}`} onClick={onRun}><RunIcon /></IconButton> : null}
+      artifact={artifact}
+      title={title}
+    >
+      <p className="mt-3 rounded border border-red-400/30 bg-red-950/20 p-3 text-sm text-red-100">
+        {artifact.errorMessage ?? "This stage failed."}
+      </p>
+    </StageCard>
+  );
+}
+
 function artifactForStage(generation: GenerationSnapshot | undefined, stage: string) {
   const artifacts = generation?.artifacts.filter((artifact) => artifact.stage === stage) ?? [];
-  return artifacts.find((artifact) => artifact.isCurrent !== false) ?? artifacts[0];
+  return artifacts.find((artifact) => artifact.isCurrent !== false) ?? artifacts.at(-1);
 }
 
 function payloadForStage<T>(generation: GenerationSnapshot | undefined, stage: string): T | undefined {
   const artifact = artifactForStage(generation, stage);
   return artifact?.payload as T | undefined;
+}
+
+function isAnimationPlanPayload(payload: unknown): payload is AnimationPlan {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    Array.isArray((payload as {cues?: unknown}).cues)
+  );
+}
+
+function isResolvedTimelinePayload(payload: unknown): payload is ResolvedAnimationTimeline {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    Array.isArray((payload as {cues?: unknown}).cues) &&
+    typeof (payload as {durationSeconds?: unknown}).durationSeconds === "number"
+  );
 }
 
 function formatSeconds(value: number) {

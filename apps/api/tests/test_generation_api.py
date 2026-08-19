@@ -239,3 +239,81 @@ async def test_animation_plan_stage_records_provider_failure(
     assert plan_artifacts[-1]["status"] == "failed"
     assert plan_artifacts[-1]["errorCode"] == "animation_plan_failed"
     assert "planner exploded" in plan_artifacts[-1]["errorMessage"]
+
+
+@pytest.mark.asyncio
+async def test_development_golden_equation_reuses_latest_generation_checkpoint(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    monkeypatch.setenv("APP_ENVIRONMENT", "development")
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_environment="development",
+        script_generation_enabled=False,
+        supabase_url="",
+        supabase_service_role_key="",
+        supabase_anon_key="",
+        supabase_jwt_secret="test-secret",
+        supabase_jwks_url="",
+    )
+    try:
+        first = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0", "instructorId": "male"},
+        )
+        generation_id = first.json()["job"]["id"]
+        scripted = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/teacher_script",
+            json={},
+        )
+
+        second = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6", "instructorId": "male"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert first.status_code == 200
+    assert scripted.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["job"]["id"] == generation_id
+    assert [artifact["stage"] for artifact in second.json()["artifacts"]] == [
+        "solution",
+        "lesson",
+        "teacher_script",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_development_checkpoint_reuse_is_limited_to_golden_equation(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    monkeypatch.setenv("APP_ENVIRONMENT", "development")
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_environment="development",
+        script_generation_enabled=False,
+        supabase_url="",
+        supabase_service_role_key="",
+        supabase_anon_key="",
+        supabase_jwt_secret="test-secret",
+        supabase_jwks_url="",
+    )
+    try:
+        first = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 - x = 0", "instructorId": "male"},
+        )
+        second = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 - x = 0", "instructorId": "male"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["job"]["id"] != first.json()["job"]["id"]

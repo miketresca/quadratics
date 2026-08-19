@@ -71,6 +71,8 @@ pnpm video:fixture
 
 The fixture covers `x^2 + 5x + 6 = 0` and includes lesson, script, narration-shaped metadata, animation plan, and resolved timeline data. It is designed to run without OpenAI or ElevenLabs credentials.
 
+In `APP_ENVIRONMENT=development`, submitting the normalized equation `x**2 + 5*x + 6 = 0` reopens the latest matching generation for the same user and instructor instead of creating a fresh generation. This is a temporary hidden checkpoint for manual pipeline testing: refresh the page, submit the same equation, and continue from the artifacts already created.
+
 ## Current Limits
 
 The API now has Supabase-backed artifact repositories, Supabase Storage media upload, signed playback URL support, and a command-backed render adapter. Local/test runs without Supabase or render-command configuration still use in-memory repositories and the development renderer.
