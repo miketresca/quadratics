@@ -61,6 +61,8 @@ export function LessonResult({
     : undefined;
   const baseVideo = artifactForStage(generation, "base_video");
   const visibleRenderArtifact = baseVideo ?? renderArtifact;
+  const elevenLabsRequestLoading = loadingStage === "elevenlabs_request" || loadingStage === "elevenlabs_audio";
+  const elevenLabsAudioLoading = loadingStage === "elevenlabs_audio";
 
   return (
     <section className="mx-auto mt-6 max-w-3xl" aria-live="polite">
@@ -117,7 +119,7 @@ export function LessonResult({
             <SpeechMarkupLog
               actionDisabled={actionDisabled}
               artifact={speechMarkupArtifact}
-              loading={loadingStage === "elevenlabs_audio"}
+              loading={elevenLabsRequestLoading}
               narration={speechMarkup}
               onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
             />
@@ -127,8 +129,8 @@ export function LessonResult({
             <FailedStageLog
               accent="amber"
               artifact={speechMarkupArtifact}
-              disabled={actionDisabled || !onRunStage || loadingStage === "elevenlabs_audio"}
-              loading={loadingStage === "elevenlabs_audio"}
+              disabled={actionDisabled || !onRunStage || elevenLabsRequestLoading}
+              loading={elevenLabsRequestLoading}
               onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
               title="elevenlabs_request"
             />
@@ -136,8 +138,8 @@ export function LessonResult({
             <RunnableLog
               accent="amber"
               className="mt-6"
-              disabled={actionDisabled || !onRunStage || loadingStage === "elevenlabs_audio"}
-              loading={loadingStage === "elevenlabs_audio"}
+              disabled={actionDisabled || !onRunStage || elevenLabsRequestLoading}
+              loading={elevenLabsRequestLoading}
               onRun={onRunStage ? () => onRunStage("elevenlabs_audio") : undefined}
               title="elevenlabs_request"
             />
@@ -147,7 +149,7 @@ export function LessonResult({
             <NarrationLog
               actionDisabled={actionDisabled}
               artifact={narrationArtifact}
-              loading={loadingStage === "elevenlabs_audio" || narrationLoading}
+              loading={elevenLabsAudioLoading || narrationLoading}
               narration={effectiveNarration}
               onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
             />
@@ -157,8 +159,8 @@ export function LessonResult({
             <FailedStageLog
               accent="fuchsia"
               artifact={narrationArtifact}
-              disabled={actionDisabled || !onRunStage || loadingStage === "elevenlabs_audio"}
-              loading={loadingStage === "elevenlabs_audio"}
+              disabled={actionDisabled || !onRunStage || elevenLabsAudioLoading}
+              loading={elevenLabsAudioLoading}
               onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
               title="elevenlabs_audio"
             />
@@ -664,7 +666,8 @@ function StageCard({
         <div className="flex items-center gap-2">
           {artifact?.status === "stale" ? <StageBadge tone="amber">STALE</StageBadge> : null}
           {artifact?.status === "failed" ? <StageBadge tone="red">FAILED</StageBadge> : null}
-          {loading ? <Spinner /> : action}
+          {loading ? <Spinner /> : null}
+          {action}
         </div>
       </div>
       {artifact?.status === "stale" && artifact.staleReason ? (
@@ -758,13 +761,10 @@ function RunnableLog({
     <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
       <div className="flex items-center justify-between gap-4">
         <h3 className={`font-mono text-sm uppercase tracking-wide ${accentTextClass(accent)}`}>{title}</h3>
-        {loading ? (
-          <Spinner />
-        ) : (
-          <IconButton disabled={disabled} label={`Run ${title}`} onClick={onRun}>
-            <RunIcon />
-          </IconButton>
-        )}
+        {loading ? <Spinner /> : null}
+        <IconButton disabled={disabled || loading || !onRun} label={`Run ${title}`} onClick={onRun}>
+          <RunIcon />
+        </IconButton>
       </div>
     </div>
   );

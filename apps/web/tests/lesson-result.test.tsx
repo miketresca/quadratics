@@ -170,7 +170,9 @@ describe("LessonResult", () => {
       );
     });
 
-    expect(container.querySelector('button[aria-label="Regenerate teacher_script"]')).toBeNull();
+    const loadingRegenerateButton = container.querySelector<HTMLButtonElement>('button[aria-label="Regenerate teacher_script"]');
+    expect(loadingRegenerateButton).not.toBeNull();
+    expect(loadingRegenerateButton?.disabled).toBe(true);
     expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(1);
 
     await act(async () => {
@@ -775,7 +777,7 @@ describe("LessonResult", () => {
     });
   });
 
-  it("swaps completed downstream stage actions to a spinner while that stage is loading", async () => {
+  it("shows an inline spinner beside completed stage actions while that stage is loading", async () => {
     const generation = {
       job: {
         id: "generation-loading",
@@ -915,7 +917,9 @@ describe("LessonResult", () => {
         );
       });
 
-      expect(container.querySelector(`button[aria-label="${label}"]`)).toBeNull();
+      const actionButton = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+      expect(actionButton).not.toBeNull();
+      expect(actionButton?.disabled).toBe(true);
       expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(1);
 
       await act(async () => {
@@ -942,9 +946,83 @@ describe("LessonResult", () => {
 
     expect(container.textContent).toContain("elevenlabs_request");
     expect(container.textContent).toContain("elevenlabs_audio");
-    expect(container.querySelector('button[aria-label="Regenerate elevenlabs_request"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="Regenerate elevenlabs_audio"]')).toBeNull();
+    const regenerateRequest = container.querySelector<HTMLButtonElement>('button[aria-label="Regenerate elevenlabs_request"]');
+    const regenerateAudio = container.querySelector<HTMLButtonElement>('button[aria-label="Regenerate elevenlabs_audio"]');
+    expect(regenerateRequest).not.toBeNull();
+    expect(regenerateRequest?.disabled).toBe(true);
+    expect(regenerateAudio).not.toBeNull();
+    expect(regenerateAudio?.disabled).toBe(true);
     expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(2);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("shows the ElevenLabs request spinner when the request stage is running", async () => {
+    const generation = {
+      job: {
+        id: "generation-request-loading",
+        userId: "user-1",
+        equationInput: "x^2 + 5x + 6",
+        status: "processing",
+        creditsUsed: 0
+      },
+      lesson: scriptResponse.lesson,
+      artifacts: [
+        {
+          id: "request-artifact",
+          generationJobId: "generation-request-loading",
+          userId: "user-1",
+          stage: "elevenlabs_request",
+          version: 1,
+          status: "completed",
+          inputHash: "sha256:request",
+          payload: {
+            status: "completed",
+            provider: "openai",
+            voiceId: "male-voice",
+            modelId: "speech-markup",
+            durationSeconds: 4,
+            speechText: "First, factor the quadratic.",
+            segments: [
+              {
+                scriptSegmentId: "script_factor",
+                stepId: "factor",
+                title: "Factor the quadratic",
+                provider: "openai",
+                voiceId: "male-voice",
+                modelId: "speech-markup",
+                durationSeconds: 4,
+                speechText: "First, factor the quadratic."
+              }
+            ]
+          },
+          isCurrent: true,
+          createdAt: "2026-08-18T00:00:01Z"
+        }
+      ]
+    };
+
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={generation as never}
+          lesson={scriptResponse.lesson as never}
+          loadingStage="elevenlabs_request"
+          onRunStage={vi.fn()}
+        />
+      );
+    });
+
+    const regenerateRequest = container.querySelector<HTMLButtonElement>('button[aria-label="Regenerate elevenlabs_request"]');
+    expect(regenerateRequest).not.toBeNull();
+    expect(regenerateRequest?.disabled).toBe(true);
+    expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(1);
 
     await act(async () => {
       root.unmount();
