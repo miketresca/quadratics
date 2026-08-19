@@ -24,3 +24,8 @@ class GenerationSnapshot(ApiModel):
     lesson: LessonResponse
     artifacts: list[GenerationArtifact]
     dependencies: list[GenerationArtifactDependency] = []
+
+
+class GenerationStageRunRequest(ApiModel):
+    force: bool = False
+    script_segment_id: str | None = None

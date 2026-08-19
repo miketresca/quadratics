@@ -4,9 +4,14 @@ from dataclasses import asdict
 
 from fastapi import HTTPException
 
-from app.schemas.artifact import GenerationArtifact, GenerationArtifactDependency
+from app.schemas.artifact import (
+    ArtifactStorageObject,
+    GenerationArtifact,
+    GenerationArtifactDependency,
+)
 from app.schemas.generation import GenerationJob, GenerationSnapshot
 from app.schemas.lesson import LessonResponse
+from app.schemas.script import LessonScript, OutputMode
 from app.services.artifacts import ArtifactLifecycleService, InMemoryArtifactRepository
 from app.services.artifacts.repository import ArtifactDependencyRecord, ArtifactRecord
 from app.services.jobs.generation_jobs import (
@@ -17,6 +22,13 @@ from app.services.lessons.builder import build_lesson
 from app.services.math.parser import EquationParseError, parse_equation
 from app.services.math.solver import solve_quadratic
 from app.services.math.validator import QuadraticValidationError, validate_quadratic
+from app.services.narration.artifacts import NarrationArtifactService
+from app.services.narration.base import NarrationProvider
+from app.services.narration.builder import build_lesson_narration
+from app.services.narration.speech_markup import SpeechMarkupProvider
+from app.services.scripts.base import ScriptProvider
+from app.services.scripts.builder import build_lesson_script
+from app.services.storage.media_store import MediaStore
 
 SOLVER_VERSION = "sympy-quadratic-v1"
 LESSON_BUILDER_VERSION = "factoring-lesson-v1"
@@ -100,6 +112,143 @@ class SolveGenerationService:
         lesson = LessonResponse.model_validate(lesson_artifact.payload)
         return self.snapshot_for_job(job=job, lesson=lesson)
 
+    async def run_teacher_script(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+        provider: ScriptProvider,
+        instructor_id: str | None,
+        output_mode: OutputMode,
+        word_budget: int,
+        force: bool = False,
+    ) -> GenerationSnapshot:
+        job, lesson, lesson_artifact = self._current_lesson_context(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+        )
+        stage_run = self._lifecycle.start_stage(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            stage="teacher_script",
+            input_payload={
+                "lessonArtifactId": lesson_artifact.id,
+                "instructorId": instructor_id,
+                "outputMode": output_mode,
+                "wordBudget": word_budget,
+            },
+            upstream_artifact_ids=[lesson_artifact.id],
+            provider=provider.__class__.__name__,
+            model=getattr(provider, "model", None),
+            force=force,
+        )
+        if stage_run.cache_hit:
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        script = await build_lesson_script(
+            lesson=lesson,
+            provider=provider,
+            instructor_id=instructor_id,
+            output_mode=output_mode,
+            word_budget=word_budget,
+        )
+        self._artifacts.complete_attempt(
+            stage_run.artifact.id,
+            payload=script.model_dump(mode="json", by_alias=True),
+        )
+        return self.snapshot_for_job(job=job, lesson=lesson)
+
+    async def run_narration(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+        provider: NarrationProvider,
+        speech_markup_provider: SpeechMarkupProvider,
+        media_store: MediaStore,
+        instructor_id: str | None,
+        voice_id: str | None,
+        model_id: str,
+        force: bool = False,
+        script_segment_id: str | None = None,
+    ) -> GenerationSnapshot:
+        job, lesson, _lesson_artifact = self._current_lesson_context(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+        )
+        script_artifact = self._artifacts.current_for_stage(
+            generation_job_id=generation_job_id,
+            stage="teacher_script",
+        )
+        if script_artifact is None:
+            raise HTTPException(status_code=409, detail="Teacher script artifact is required")
+        script = LessonScript.model_validate(script_artifact.payload)
+        if not script.segments:
+            raise HTTPException(status_code=409, detail="Completed teacher script is required")
+
+        narration_service = NarrationArtifactService(
+            repository=self._artifacts,
+            media_store=media_store,
+        )
+        reusable = None
+        request_artifact = self._artifacts.current_for_stage(
+            generation_job_id=generation_job_id,
+            stage="elevenlabs_request",
+        )
+        if request_artifact and not force and request_artifact.payload.get("speechText"):
+            reusable = narration_service.find_reusable_narration(
+                generation_job_id=generation_job_id,
+                script_artifact_id=script_artifact.id,
+                speech_text=str(request_artifact.payload["speechText"]),
+                voice_id=voice_id or "",
+                model_id=model_id,
+                voice_settings={},
+            )
+        if reusable is not None:
+            return self.snapshot_for_job(job=job, lesson=lesson)
+
+        narration = await build_lesson_narration(
+            script=script,
+            provider=provider,
+            instructor_id=instructor_id,
+            output_mode="audio",
+            voice_id=voice_id,
+            model_id=model_id,
+            speech_markup_provider=speech_markup_provider,
+            script_segment_id=script_segment_id,
+        )
+        if narration.status != "completed":
+            failed_run = self._lifecycle.start_stage(
+                generation_job_id=generation_job_id,
+                user_id=user_id,
+                stage="elevenlabs_audio",
+                input_payload={
+                    "scriptArtifactId": script_artifact.id,
+                    "status": narration.status,
+                    "reason": narration.unsupported_reason,
+                },
+                upstream_artifact_ids=[script_artifact.id],
+                provider="elevenlabs",
+                model=model_id,
+                force=True,
+            )
+            self._artifacts.fail_attempt(
+                failed_run.artifact.id,
+                error_code=narration.status,
+                error_message=narration.unsupported_reason or "Narration failed",
+            )
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        narration_service.persist_completed_narration(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            script_artifact_id=script_artifact.id,
+            narration=narration,
+            voice_id=voice_id or "",
+            model_id=model_id,
+            voice_settings={},
+            force=force,
+        )
+        return self.snapshot_for_job(job=job, lesson=lesson)
+
     def snapshot_for_job(
         self,
         *,
@@ -118,6 +267,24 @@ class SolveGenerationService:
                 for dependency in self._artifacts.dependencies_for_generation(job.id)
             ],
         )
+
+    def _current_lesson_context(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+    ) -> tuple[GenerationJobRecord, LessonResponse, ArtifactRecord]:
+        job = self._jobs.get_for_user(generation_job_id=generation_job_id, user_id=user_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Generation not found")
+        lesson_artifact = self._artifacts.current_for_stage(
+            generation_job_id=generation_job_id,
+            stage="lesson",
+        )
+        if lesson_artifact is None:
+            raise HTTPException(status_code=409, detail="Lesson artifact is required")
+        lesson = LessonResponse.model_validate(lesson_artifact.payload)
+        return job, lesson, lesson_artifact
 
 
 def lesson_from_equation(equation: str) -> LessonResponse:
@@ -148,7 +315,18 @@ def _artifact_schema(artifact: ArtifactRecord) -> GenerationArtifact:
         model=artifact.model,
         config_metadata=artifact.config_metadata,
         payload=artifact.payload,
-        storage_objects=[storage_reference for storage_reference in artifact.storage_objects],
+        storage_objects=[
+            ArtifactStorageObject(
+                bucket=storage_reference.bucket,
+                path=storage_reference.path,
+                content_type=storage_reference.content_type,
+                size_bytes=storage_reference.size_bytes,
+                checksum_sha256=storage_reference.checksum_sha256,
+                duration_seconds=storage_reference.duration_seconds,
+                metadata=storage_reference.metadata,
+            )
+            for storage_reference in artifact.storage_objects
+        ],
         is_current=artifact.is_current,
         cache_hit=artifact.cache_hit,
         stale_reason=artifact.stale_reason,

@@ -198,6 +198,24 @@ class InMemoryArtifactRepository:
                 key=lambda artifact: (artifact.created_at, artifact.version),
             )
 
+    def current_for_stage(
+        self,
+        *,
+        generation_job_id: str,
+        stage: ArtifactStage,
+    ) -> ArtifactRecord | None:
+        with self._lock:
+            currents = [
+                artifact
+                for artifact in self._artifacts.values()
+                if artifact.generation_job_id == generation_job_id
+                and artifact.stage == stage
+                and artifact.is_current
+            ]
+            if not currents:
+                return None
+            return max(currents, key=lambda artifact: artifact.version)
+
     def dependencies_for_generation(self, generation_job_id: str) -> list[ArtifactDependencyRecord]:
         with self._lock:
             return [
