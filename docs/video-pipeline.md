@@ -11,13 +11,14 @@ equation input
   -> teacher_script
   -> elevenlabs_request
   -> elevenlabs_audio
+  -> heygen_avatar (optional)
   -> animation_plan
   -> resolved_timeline
   -> motion_canvas_render
   -> base_video
 ```
 
-The user-facing `Audio only` option means no optional avatar. It does not mean no board animation or no video. The standard non-avatar pipeline still produces the base educational blackboard video. Future avatar stages should be modeled as skipped only when avatar output is disabled.
+The standard pipeline produces the base educational blackboard video. HeyGen avatar generation is optional and paid; it can run after ElevenLabs audio exists and should only make downstream render artifacts stale.
 
 ## Artifacts
 
@@ -42,6 +43,8 @@ Normal reruns reuse a completed artifact when the input hash is unchanged. Force
 `elevenlabs_audio` stores narration metadata, per-segment timing, raw and normalized ElevenLabs alignment, and private media references. The primary persisted contract should use storage object metadata rather than embedding MP3 base64.
 
 ElevenLabs character alignment is the timestamp source of truth. Do not send rendered audio to another model to rediscover timings.
+
+`heygen_avatar` stores optional avatar clips generated from completed narration segments. It should be explicitly triggered because it spends provider credits.
 
 ## Animation
 

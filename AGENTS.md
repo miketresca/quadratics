@@ -36,20 +36,24 @@ LLMs may write instructional language or choose semantic animation cues after th
 The pipeline is a build system:
 
 ```text
-solution -> lesson -> teacher_script -> elevenlabs_request -> elevenlabs_audio -> animation_plan -> resolved_timeline -> motion_canvas_render -> base_video
+solution -> lesson -> teacher_script -> elevenlabs_request -> elevenlabs_audio -> heygen_avatar (optional) -> animation_plan -> resolved_timeline -> motion_canvas_render -> base_video
 ```
 
 Every stage should consume persisted upstream artifacts and produce a persisted downstream artifact. Reruns should reuse matching completed artifacts unless force regeneration is explicit. Replacing an upstream artifact should mark affected downstream artifacts stale rather than deleting them.
 
-The `Audio only` mode means no optional avatar. It does not mean no animation or no video.
+`heygen_avatar` is an optional paid stage after ElevenLabs audio exists. The standard pipeline still produces the Motion Canvas base video; optional avatar work should only stale downstream render artifacts.
 
 ## Provider Isolation
 
 Provider-specific SDK calls belong behind provider or adapter boundaries. Core math and lesson code must not import OpenAI, ElevenLabs, HeyGen, Supabase Storage, or Motion Canvas command details directly.
 
+## Code Comments
+
+New code should include concise, useful comments where they help a future reader understand intent, control flow, external contracts, or non-obvious tradeoffs. Use the idiomatic comment style for the language being edited. Do not narrate obvious syntax, but do leave short orientation comments for functions, methods, files, or complex blocks whose purpose would otherwise take time to reconstruct.
+
 ## Authentication And Security
 
-The `/app` shell may render publicly, but equation submission, generation access, provider key management, and user-owned data require authentication. API authorization is mandatory. Never trust frontend-only authorization.
+The root `/` app shell may render publicly, but equation submission, generation access, provider key management, and user-owned data require authentication. API authorization is mandatory. Never trust frontend-only authorization.
 
 Never expose Supabase service-role credentials client-side. User-owned records must be protected by API authorization and Supabase RLS. Do not log bearer tokens, service-role keys, provider keys, or raw provider request bodies by default.
 

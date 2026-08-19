@@ -18,10 +18,10 @@ The main workflow is manual and stage-by-stage. Submit an equation to get the de
 The visible stage order should match the backend artifact pipeline:
 
 ```text
-teacher_script -> elevenlabs_request -> elevenlabs_audio -> animation_plan -> resolved_timeline -> motion_canvas_render
+teacher_script -> elevenlabs_request -> elevenlabs_audio -> heygen_avatar -> animation_plan -> resolved_timeline -> motion_canvas_render
 ```
 
-`elevenlabs_request` should show the exact speech-markup text that will be sent to ElevenLabs, including break tags. `elevenlabs_audio` should show generated narration playback and segment metadata. Animation logs should make the relationship clear: narration phrase, timestamp, visual action, and resolved timing.
+`elevenlabs_request` should show the exact speech-markup text that will be sent to ElevenLabs, including break tags. `elevenlabs_audio` should show generated narration playback and segment metadata. `heygen_avatar` is optional, paid, and should clearly show estimates before running. Animation logs should make the relationship clear: narration phrase, timestamp, visual action, and resolved timing.
 
 The final rendered video belongs in the Lesson view. Logs may mention render success and metadata, but they are not the primary video playback surface.
 
@@ -29,13 +29,13 @@ Do not add marketing/landing-page patterns inside the authenticated app. This is
 
 ## Auth And Security
 
-Keep `/login` public and allow the `/app` shell to render as the main product surface. Gate equation submission, generation access, provider key management, and user-owned data behind Supabase auth. API calls must include the authenticated user context. Never expose service-role keys or provider secrets in client code.
+Keep `/login` public as a redirect-only compatibility route and allow the root `/` shell to render as the main product surface. Gate equation submission, generation access, provider key management, and user-owned data behind Supabase auth. API calls must include the authenticated user context. Never expose service-role keys or provider secrets in client code.
 
 Use shared contracts from `@quadratics/types` instead of duplicating backend shapes in ad hoc frontend-only types.
 
 ## Current System Knowledge
 
-The current `Audio only` label means no optional avatar. It still expects animation planning, Motion Canvas rendering, and a playable base video.
+The standard path expects animation planning, Motion Canvas rendering, and a playable base video. Optional HeyGen avatar generation is a separate paid stage, not a separate app mode.
 
 For the golden equation `x^2 + 5x + 6 = 0`, the UI may receive already completed artifacts after refresh. Treat those as resumable checkpoints, not as a reason to regenerate from scratch.
 

@@ -13,8 +13,9 @@
 - Generation artifact: versioned output of one pipeline stage with lifecycle status, input hash, upstream artifact IDs, provider metadata, cache metadata, and optional storage references.
 - Animation plan: constrained semantic visual plan generated from lesson/script/narration artifacts. It names supported primitives and narration trigger phrases, but does not contain exact render timing.
 - Resolved animation timeline: deterministic timestamped animation and SFX windows derived from an animation plan and ElevenLabs alignment.
-- Base video: rendered educational blackboard video artifact. In the current product mode, this is still produced when the UI says `Audio only`; that label means only the optional avatar is omitted.
-- Instructor: placeholder data record such as `male` or `female`.
+- HeyGen avatar: optional paid avatar clip artifact generated from completed narration segments.
+- Base video: rendered educational blackboard video artifact produced by the standard pipeline.
+- Instructor: global record containing a display name, ElevenLabs voice ID, optional HeyGen avatar ID, and optional reference image data.
 - Generation job: owned audit record for a generation attempt.
 - Credit transaction: legacy ledger entry from the initial scaffold. It is not part of the current user-facing internal pipeline.
 

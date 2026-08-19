@@ -23,7 +23,7 @@ User
 
 The LLM is not part of the mathematical truth path. SymPy validates equations, extracts coefficients, and computes exact roots. LLM-assisted script generation can happen only after the deterministic lesson model exists. The animation planner may choose semantic visual actions, but deterministic code validates references and resolves timestamps.
 
-FastAPI protects API routes with Supabase bearer-token verification. Next.js protects `/app` with Supabase session checks and never exposes service-role credentials.
+FastAPI protects API routes with Supabase bearer-token verification. Next.js renders the root `/` app shell and never exposes service-role credentials; authenticated actions still require Supabase session context.
 
 ## Pipeline Boundary
 
