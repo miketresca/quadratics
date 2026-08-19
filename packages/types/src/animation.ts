@@ -69,3 +69,40 @@ export interface AnimationPlan {
   soundCues?: Record<string, unknown>[];
   metadata?: Record<string, unknown>;
 }
+
+export interface ResolvedNarrationSpan {
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+}
+
+export interface ResolvedAnimationWindow {
+  action: AnimationPrimitive;
+  startSeconds: number;
+  endSeconds: number;
+}
+
+export interface ResolvedSfxWindow {
+  type: "chalk_write" | "none";
+  startSeconds: number;
+  endSeconds: number;
+}
+
+export interface ResolvedAnimationCue {
+  cueId: string;
+  lessonStepId: string;
+  mathLineId?: string | null;
+  narration: ResolvedNarrationSpan;
+  animation: ResolvedAnimationWindow;
+  sfx?: ResolvedSfxWindow | null;
+  warnings?: string[];
+}
+
+export interface ResolvedAnimationTimeline {
+  version: "resolved-animation-timeline/v1";
+  animationPlanArtifactId?: string | null;
+  narrationArtifactId: string;
+  durationSeconds: number;
+  cues: ResolvedAnimationCue[];
+  warnings?: string[];
+}

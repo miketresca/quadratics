@@ -1,0 +1,30 @@
+{
+  "version": "resolved-animation-timeline/v1",
+  "animationPlanArtifactId": "animation-plan-artifact-1",
+  "narrationArtifactId": "narration-artifact-1",
+  "durationSeconds": 24,
+  "cues": [
+    {
+      "cueId": "cue_write_original",
+      "lessonStepId": "factor",
+      "mathLineId": "standard_form",
+      "narration": {
+        "text": "Start with x squared plus five x plus six equals zero",
+        "startSeconds": 0,
+        "endSeconds": 3.6
+      },
+      "animation": {
+        "action": "write_math",
+        "startSeconds": 0,
+        "endSeconds": 3.25
+      },
+      "sfx": {
+        "type": "chalk_write",
+        "startSeconds": 0,
+        "endSeconds": 3.25
+      },
+      "warnings": []
+    }
+  ],
+  "warnings": []
+}

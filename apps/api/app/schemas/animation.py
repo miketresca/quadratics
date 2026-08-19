@@ -92,3 +92,40 @@ class AnimationPlan(ApiModel):
     cues: list[AnimationCue] = Field(min_length=1)
     sound_cues: list[dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResolvedNarrationSpan(ApiModel):
+    text: str
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(ge=0)
+
+
+class ResolvedAnimationWindow(ApiModel):
+    action: AnimationPrimitive
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(ge=0)
+
+
+class ResolvedSfxWindow(ApiModel):
+    type: Literal["chalk_write", "none"] = "none"
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(ge=0)
+
+
+class ResolvedAnimationCue(ApiModel):
+    cue_id: str
+    lesson_step_id: str
+    math_line_id: str | None = None
+    narration: ResolvedNarrationSpan
+    animation: ResolvedAnimationWindow
+    sfx: ResolvedSfxWindow | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ResolvedAnimationTimeline(ApiModel):
+    version: Literal["resolved-animation-timeline/v1"] = "resolved-animation-timeline/v1"
+    animation_plan_artifact_id: str | None = None
+    narration_artifact_id: str
+    duration_seconds: float
+    cues: list[ResolvedAnimationCue]
+    warnings: list[str] = Field(default_factory=list)
