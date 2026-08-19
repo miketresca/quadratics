@@ -39,6 +39,7 @@ from app.services.rendering.base import MotionCanvasRenderer, RenderRequest
 from app.services.scripts.base import ScriptProvider
 from app.services.scripts.builder import build_lesson_script
 from app.services.storage.media_store import MediaStore
+from app.services.usage.costs import UsageCostRepository
 
 SOLVER_VERSION = "sympy-quadratic-v1"
 LESSON_BUILDER_VERSION = "factoring-lesson-v1"
@@ -149,6 +150,9 @@ class SolveGenerationService:
         instructor_id: str | None,
         output_mode: OutputMode,
         word_budget: int,
+        usage_costs: UsageCostRepository | None = None,
+        input_token_cost_per_million_usd: float = 0,
+        output_token_cost_per_million_usd: float = 0,
         force: bool = False,
     ) -> GenerationSnapshot:
         job, lesson, lesson_artifact = self._current_lesson_context(
@@ -183,6 +187,16 @@ class SolveGenerationService:
             stage_run.artifact.id,
             payload=script.model_dump(mode="json", by_alias=True),
         )
+        await _record_openai_token_usage(
+            usage_costs=usage_costs,
+            user_id=user_id,
+            generation_job_id=generation_job_id,
+            stage="teacher_script",
+            model=getattr(provider, "model", None),
+            provider_metadata=script.provider_metadata,
+            input_token_cost_per_million_usd=input_token_cost_per_million_usd,
+            output_token_cost_per_million_usd=output_token_cost_per_million_usd,
+        )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
     async def run_narration(
@@ -196,6 +210,8 @@ class SolveGenerationService:
         instructor_id: str | None,
         voice_id: str | None,
         model_id: str,
+        usage_costs: UsageCostRepository | None = None,
+        elevenlabs_cost_per_credit_usd: float = 0,
         force: bool = False,
         script_segment_id: str | None = None,
     ) -> GenerationSnapshot:
@@ -275,6 +291,14 @@ class SolveGenerationService:
             voice_settings={},
             force=force,
         )
+        await _record_elevenlabs_usage(
+            usage_costs=usage_costs,
+            user_id=user_id,
+            generation_job_id=generation_job_id,
+            model_id=model_id,
+            narration=narration,
+            cost_per_credit_usd=elevenlabs_cost_per_credit_usd,
+        )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
     async def run_animation_plan(
@@ -283,6 +307,9 @@ class SolveGenerationService:
         generation_job_id: str,
         user_id: str,
         provider: AnimationPlanProvider,
+        usage_costs: UsageCostRepository | None = None,
+        input_token_cost_per_million_usd: float = 0,
+        output_token_cost_per_million_usd: float = 0,
         force: bool = False,
     ) -> GenerationSnapshot:
         job, lesson, lesson_artifact = self._current_lesson_context(
@@ -328,6 +355,16 @@ class SolveGenerationService:
         self._artifacts.complete_attempt(
             stage_run.artifact.id,
             payload=plan.model_dump(mode="json", by_alias=True),
+        )
+        await _record_openai_token_usage(
+            usage_costs=usage_costs,
+            user_id=user_id,
+            generation_job_id=generation_job_id,
+            stage="animation_plan",
+            model=getattr(provider, "model", None),
+            provider_metadata=plan.metadata,
+            input_token_cost_per_million_usd=input_token_cost_per_million_usd,
+            output_token_cost_per_million_usd=output_token_cost_per_million_usd,
         )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
@@ -596,3 +633,79 @@ def _storage_reference_payload(
         "durationSeconds": storage_reference.duration_seconds,
         "metadata": storage_reference.metadata,
     }
+
+
+async def _record_openai_token_usage(
+    *,
+    usage_costs: UsageCostRepository | None,
+    user_id: str,
+    generation_job_id: str,
+    stage: str,
+    model: str | None,
+    provider_metadata: dict[str, object],
+    input_token_cost_per_million_usd: float,
+    output_token_cost_per_million_usd: float,
+) -> None:
+    if usage_costs is None or model is None:
+        return
+    input_tokens = _numeric_metadata(provider_metadata, "inputTokens")
+    output_tokens = _numeric_metadata(provider_metadata, "outputTokens")
+    if input_tokens is not None:
+        await usage_costs.record(
+            user_id=user_id,
+            generation_job_id=generation_job_id,
+            stage=stage,
+            provider="openai",
+            model=model,
+            unit_type="input_tokens",
+            quantity=input_tokens,
+            unit_cost_usd=input_token_cost_per_million_usd / 1_000_000,
+            metadata={"source": "openai_usage"},
+        )
+    if output_tokens is not None:
+        await usage_costs.record(
+            user_id=user_id,
+            generation_job_id=generation_job_id,
+            stage=stage,
+            provider="openai",
+            model=model,
+            unit_type="output_tokens",
+            quantity=output_tokens,
+            unit_cost_usd=output_token_cost_per_million_usd / 1_000_000,
+            metadata={"source": "openai_usage"},
+        )
+
+
+async def _record_elevenlabs_usage(
+    *,
+    usage_costs: UsageCostRepository | None,
+    user_id: str,
+    generation_job_id: str,
+    model_id: str,
+    narration: LessonNarration,
+    cost_per_credit_usd: float,
+) -> None:
+    if usage_costs is None or narration.speech_text is None:
+        return
+    credits = len(narration.speech_text)
+    await usage_costs.record(
+        user_id=user_id,
+        generation_job_id=generation_job_id,
+        stage="elevenlabs_audio",
+        provider="elevenlabs",
+        model=model_id,
+        unit_type="credits",
+        quantity=credits,
+        unit_cost_usd=cost_per_credit_usd,
+        metadata={
+            "source": "speech_text_character_count",
+            "durationSeconds": narration.duration_seconds or 0,
+        },
+    )
+
+
+def _numeric_metadata(metadata: dict[str, object], key: str) -> float | None:
+    value = metadata.get(key)
+    if isinstance(value, int | float):
+        return float(value)
+    return None

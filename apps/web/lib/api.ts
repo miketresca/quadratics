@@ -10,7 +10,8 @@ import type {
   ProviderKeysResponse,
   LessonScript,
   ScriptEquationResponse,
-  SolveEquationResponse
+  SolveEquationResponse,
+  UsageSummary
 } from "@quadratics/types";
 
 import {apiUrl} from "@/lib/env";
@@ -122,6 +123,18 @@ export async function listInstructors(accessToken: string): Promise<Instructor[]
     throw new Error(body?.detail ?? "Could not load instructors");
   }
   return response.json() as Promise<Instructor[]>;
+}
+
+export async function getUsageSummary(accessToken: string): Promise<UsageSummary> {
+  const response = await fetch(`${apiUrl}/api/v1/usage/summary`, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load usage summary");
+  }
+  return response.json() as Promise<UsageSummary>;
 }
 
 export async function createInstructor(params: {

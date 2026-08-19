@@ -1,0 +1,81 @@
+import pytest
+
+from app.api.routes import generations
+from app.core.config import Settings, get_settings
+from app.schemas.narration import AudioAlignment
+from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
+
+
+class UsageCostNarrationProvider(NarrationProvider):
+    async def generate(self, request: NarrationRequest) -> NarrationResult:
+        return NarrationResult(
+            provider="elevenlabs",
+            audio_base64="ZmFrZS1tcDM=",
+            audio_mime_type="audio/mpeg",
+            duration_seconds=1.2,
+            normalized_alignment=AudioAlignment(
+                characters=list(request.text),
+                character_start_times_seconds=[index * 0.01 for index in range(len(request.text))],
+                character_end_times_seconds=[
+                    (index + 1) * 0.01 for index in range(len(request.text))
+                ],
+            ),
+            provider_metadata={"model": "eleven_multilingual_v2"},
+        )
+
+
+@pytest.mark.asyncio
+async def test_usage_summary_tracks_elevenlabs_generation_cost(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        generations,
+        "_narration_provider",
+        lambda _settings: UsageCostNarrationProvider(),
+    )
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_environment="test",
+        supabase_url="",
+        supabase_service_role_key="",
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_cost_per_credit_usd=0.01,
+    )
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0", "instructorId": "male"},
+        )
+        generation_id = created.json()["job"]["id"]
+        await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/teacher_script",
+            json={},
+        )
+        audio = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/elevenlabs_audio",
+            json={"force": True},
+        )
+        summary = await authenticated_client.get("/api/v1/usage/summary")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert audio.status_code == 200
+    assert summary.status_code == 200
+    body = summary.json()
+    breakdown = body["userBreakdown"][0]
+    expected_cost = breakdown["quantity"] * 0.01
+
+    assert body["userTotalCostUsd"] == expected_cost
+    assert body["globalAverageCostPerVideoUsd"] == expected_cost
+    assert body["globalVideoCount"] == 1
+    assert body["userBreakdown"] == [
+        {
+            "provider": "elevenlabs",
+            "stage": "elevenlabs_audio",
+            "unitType": "credits",
+            "quantity": breakdown["quantity"],
+            "costUsd": expected_cost,
+        }
+    ]

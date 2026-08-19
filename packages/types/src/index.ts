@@ -1,6 +1,7 @@
 export * from "./api";
 export * from "./animation";
 export * from "./artifact";
+export * from "./costs";
 export * from "./generation";
 export * from "./instructor";
 export * from "./lesson";

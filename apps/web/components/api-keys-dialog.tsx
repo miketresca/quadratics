@@ -9,22 +9,39 @@ import {createClient} from "@/lib/supabase/client";
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
 export function ApiKeysDialog() {
-  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [heygenKey, setHeygenKey] = useState("");
   const [metadata, setMetadata] = useState<ProviderKeyMetadata | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const dirty = heygenKey.trim().length > 0;
 
-  function openDialog() {
-    setOpen(true);
+  function toggleExpanded() {
     setMessage(null);
     setError(null);
+    const next = !expanded;
+    setExpanded(next);
+    if (next && !loaded) {
+      loadKeys();
+    }
+  }
+
+  function closePanel() {
+    setExpanded(false);
+    setHeygenKey("");
+    setMessage(null);
+    setError(null);
+  }
+
+  function loadKeys() {
     startTransition(async () => {
       try {
         const accessToken = await getAccessToken();
         const response = await listProviderKeys(accessToken);
         setMetadata(response.keys.find((key) => key.provider === "heygen") ?? null);
+        setLoaded(true);
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Could not load API keys");
       }
@@ -44,6 +61,7 @@ export function ApiKeysDialog() {
         });
         setMetadata(saved);
         setHeygenKey("");
+        setLoaded(true);
         setMessage("HeyGen key saved.");
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : "Could not save HeyGen key");
@@ -60,6 +78,7 @@ export function ApiKeysDialog() {
         await deleteProviderKey({accessToken, provider: "heygen"});
         setMetadata(null);
         setHeygenKey("");
+        setLoaded(true);
         setMessage("HeyGen key removed.");
       } catch (deleteError) {
         setError(deleteError instanceof Error ? deleteError.message : "Could not delete HeyGen key");
@@ -68,104 +87,99 @@ export function ApiKeysDialog() {
   }
 
   return (
-    <>
+    <div className="rounded border border-zinc-800/80 bg-zinc-950/30">
       <button
-        className="w-full rounded px-2 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-900 hover:text-emerald-300"
-        onClick={openDialog}
+        aria-expanded={expanded}
+        className="flex h-12 w-full items-center justify-between px-3 text-sm text-zinc-200 transition hover:text-emerald-200"
+        onClick={toggleExpanded}
         type="button"
       >
-        API keys
+        <span className="flex min-w-0 flex-col items-start">
+          <span className="leading-none">API keys</span>
+        </span>
+        <ChevronIcon open={expanded} />
       </button>
-      {open ? (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 px-4 py-20 backdrop-blur-sm"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setOpen(false);
-            }
-          }}
-          role="presentation"
-        >
-          <section
-            aria-modal="true"
-            className="ml-auto w-full max-w-xl rounded-md border border-zinc-800 bg-[#090d13] p-4 shadow-2xl shadow-black/70"
-            role="dialog"
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-800 pb-3">
-              <div>
-                <h2 className="font-mono text-sm uppercase tracking-wide text-zinc-100">api_keys</h2>
-                <p className="mt-1 text-sm text-zinc-500">HeyGen credentials for AI avatar generation.</p>
-              </div>
-              <button
-                aria-label="Close API keys"
-                className="rounded border border-zinc-800 px-2 py-1 text-zinc-500 hover:border-emerald-400/60 hover:text-emerald-300"
-                onClick={() => setOpen(false)}
-                type="button"
-              >
-                x
-              </button>
-            </div>
+      {expanded ? (
+        <div className="grid gap-3 border-t border-zinc-800/80 p-3">
+          <label className="grid gap-1.5">
+            <span className="flex items-center justify-between gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">HeyGen</span>
+              <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-600">
+                {metadata ? `stored ${metadata.keyHint}` : "no key stored"}
+              </span>
+            </span>
+            <input
+              autoComplete="off"
+              className="h-10 rounded border border-zinc-800 bg-black/30 px-3 font-mono text-xs text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-emerald-400/70"
+              onChange={(event) => {
+                setMessage(null);
+                setError(null);
+                setHeygenKey(event.currentTarget.value);
+              }}
+              placeholder="heygen_..."
+              type="password"
+              value={heygenKey}
+            />
+          </label>
 
-            <div className="mt-4 grid gap-3">
-              <label className="grid gap-2 rounded border border-zinc-800 bg-zinc-950/45 p-3">
-                <span className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-zinc-100">HeyGen</span>
-                  <span className="font-mono text-xs text-zinc-500">HEYGEN_API_KEY</span>
-                </span>
-                <input
-                  autoComplete="off"
-                  className="rounded border border-zinc-800 bg-[#101621] px-3 py-2 font-mono text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-zinc-600"
-                  onChange={(event) => setHeygenKey(event.target.value)}
-                  placeholder={metadata ? `saved ${metadata.keyHint}` : "heygen_..."}
-                  type="password"
-                  value={heygenKey}
-                />
-                <span className="font-mono text-xs text-zinc-500">
-                  {metadata ? `stored: ${metadata.keyHint}` : "no key stored"}
-                </span>
-              </label>
-            </div>
+          {message ? (
+            <p className="font-mono text-[11px] uppercase tracking-wide text-emerald-300">{message}</p>
+          ) : null}
+          {error ? (
+            <p className="rounded border border-red-500/35 bg-red-500/10 px-2.5 py-2 text-xs text-red-100" role="alert">
+              {error}
+            </p>
+          ) : null}
 
-            {message ? (
-              <p className="mt-4 rounded border border-emerald-400/30 bg-emerald-950/20 p-3 text-sm text-emerald-100">
-                {message}
-              </p>
-            ) : null}
-            {error ? (
-              <p className="mt-4 rounded border border-red-500/40 bg-red-950/30 p-3 text-sm text-red-100" role="alert">
-                {error}
-              </p>
-            ) : null}
-
-            <div className="mt-4 flex justify-end gap-2">
+          <div className="flex justify-end gap-2">
+            {metadata ? (
               <button
-                className="rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-900"
-                onClick={() => setOpen(false)}
-                type="button"
-              >
-                Close
-              </button>
-              <button
-                className="rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:border-red-500/50 hover:text-red-200 disabled:cursor-not-allowed disabled:text-zinc-600"
-                disabled={isPending || metadata === null}
+                className="mr-auto rounded border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-200 transition hover:border-red-400/60 hover:bg-red-500/15 disabled:opacity-50"
+                disabled={isPending}
                 onClick={deleteKey}
                 type="button"
               >
                 Delete
               </button>
+            ) : null}
+            <button
+              className="rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-100"
+              onClick={closePanel}
+              type="button"
+            >
+              Close
+            </button>
+            {dirty ? (
               <button
-                className="rounded border border-emerald-400/60 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600"
-                disabled={isPending || heygenKey.trim().length === 0}
+                className="rounded border border-emerald-400/50 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-200 transition hover:bg-emerald-400/20 disabled:opacity-50"
+                disabled={isPending}
                 onClick={saveKey}
                 type="button"
               >
-                {isPending ? "Saving..." : "Save key"}
+                {isPending ? "Saving" : "Save"}
               </button>
-            </div>
-          </section>
+            ) : null}
+          </div>
         </div>
       ) : null}
-    </>
+    </div>
+  );
+}
+
+function ChevronIcon({open}: {open: boolean}) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`h-4 w-4 text-zinc-500 transition ${open ? "rotate-180 text-emerald-300" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   );
 }
 

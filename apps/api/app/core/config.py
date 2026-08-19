@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     provider_keys_encryption_key: str = ""
     elevenlabs_api_key: str = ""
     elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_cost_per_credit_usd: float = 99 / 600_000
+    openai_gpt5_mini_input_cost_per_million_tokens_usd: float = 0.25
+    openai_gpt5_mini_output_cost_per_million_tokens_usd: float = 2.00
+    heygen_avatar_cost_per_second_usd: float = 0.0667
     generated_media_bucket: str = "generated-media"
     motion_canvas_render_command: str = ""
     motion_canvas_render_cwd: str = ""

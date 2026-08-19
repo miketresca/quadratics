@@ -6,12 +6,13 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.dependencies.auth import get_current_user
-from app.api.routes import instructors
+from app.api.routes import instructors, usage_costs
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
 from app.main import create_app
 from app.schemas.instructor import Instructor
 from app.services.instructors.repository import InMemoryInstructorRepository
+from app.services.usage.costs import InMemoryUsageCostRepository
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +29,7 @@ def app() -> FastAPI:
             Instructor(id="female", display_name="Female Instructor", voice_id="female-voice"),
         ]
     )
+    usage_costs._usage_costs = InMemoryUsageCostRepository()
     test_app = create_app()
     test_app.dependency_overrides[get_settings] = lambda: Settings(
         supabase_url="",

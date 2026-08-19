@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies.auth import get_current_user
 from app.api.routes.instructors import _instructor_repository
+from app.api.routes.usage_costs import _usage_repository
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
 from app.providers.elevenlabs.narration_provider import ElevenLabsNarrationProvider
@@ -95,6 +96,9 @@ async def run_generation_stage(
             instructor_id=snapshot.job.instructor_id,
             output_mode="audio",
             word_budget=settings.script_word_budget,
+            usage_costs=_usage_repository(settings),
+            input_token_cost_per_million_usd=settings.openai_gpt5_mini_input_cost_per_million_tokens_usd,
+            output_token_cost_per_million_usd=settings.openai_gpt5_mini_output_cost_per_million_tokens_usd,
             force=request.force,
         )
     if stage == "elevenlabs_audio":
@@ -113,6 +117,8 @@ async def run_generation_stage(
             instructor_id=snapshot.job.instructor_id,
             voice_id=await _voice_id_for_instructor(settings, snapshot.job.instructor_id),
             model_id=settings.elevenlabs_model_id,
+            usage_costs=_usage_repository(settings),
+            elevenlabs_cost_per_credit_usd=settings.elevenlabs_cost_per_credit_usd,
             force=request.force,
             script_segment_id=request.script_segment_id,
         )
@@ -131,6 +137,9 @@ async def run_generation_stage(
             generation_job_id=generation_id,
             user_id=current_user.id,
             provider=provider,
+            usage_costs=_usage_repository(settings),
+            input_token_cost_per_million_usd=settings.openai_gpt5_mini_input_cost_per_million_tokens_usd,
+            output_token_cost_per_million_usd=settings.openai_gpt5_mini_output_cost_per_million_tokens_usd,
             force=request.force,
         )
     if stage == "resolved_timeline":
@@ -171,6 +180,9 @@ async def run_all_generation_stages(
         instructor_id=snapshot.job.instructor_id,
         output_mode="audio",
         word_budget=settings.script_word_budget,
+        usage_costs=_usage_repository(settings),
+        input_token_cost_per_million_usd=settings.openai_gpt5_mini_input_cost_per_million_tokens_usd,
+        output_token_cost_per_million_usd=settings.openai_gpt5_mini_output_cost_per_million_tokens_usd,
         force=request.force,
     )
     await service.run_narration(
@@ -182,6 +194,8 @@ async def run_all_generation_stages(
         instructor_id=snapshot.job.instructor_id,
         voice_id=await _voice_id_for_instructor(settings, snapshot.job.instructor_id),
         model_id=settings.elevenlabs_model_id,
+        usage_costs=_usage_repository(settings),
+        elevenlabs_cost_per_credit_usd=settings.elevenlabs_cost_per_credit_usd,
         force=request.force,
         script_segment_id=request.script_segment_id,
     )
@@ -189,6 +203,9 @@ async def run_all_generation_stages(
         generation_job_id=generation_id,
         user_id=current_user.id,
         provider=_animation_plan_provider(settings),
+        usage_costs=_usage_repository(settings),
+        input_token_cost_per_million_usd=settings.openai_gpt5_mini_input_cost_per_million_tokens_usd,
+        output_token_cost_per_million_usd=settings.openai_gpt5_mini_output_cost_per_million_tokens_usd,
         force=request.force,
     )
     service.run_resolved_timeline(

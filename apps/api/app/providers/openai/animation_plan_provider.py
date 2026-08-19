@@ -191,7 +191,7 @@ class OpenAIAnimationPlanProvider(AnimationPlanProvider):
             },
         )
         plan = AnimationPlan.model_validate_json(_response_text(response))
-        plan.metadata = {**plan.metadata, "model": self.model}
+        plan.metadata = {**plan.metadata, "model": self.model, **_response_usage(response)}
         return plan
 
 
@@ -209,3 +209,22 @@ def _response_text(response: Any) -> str:
                     return text
 
     raise ValueError("OpenAI response did not contain animation plan JSON text")
+
+
+def _response_usage(response: Any) -> dict[str, int]:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return {}
+    input_tokens = _usage_value(usage, "input_tokens")
+    output_tokens = _usage_value(usage, "output_tokens")
+    result: dict[str, int] = {}
+    if input_tokens is not None:
+        result["inputTokens"] = input_tokens
+    if output_tokens is not None:
+        result["outputTokens"] = output_tokens
+    return result
+
+
+def _usage_value(usage: Any, key: str) -> int | None:
+    value = usage.get(key) if isinstance(usage, dict) else getattr(usage, key, None)
+    return value if isinstance(value, int) else None
