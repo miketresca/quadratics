@@ -101,7 +101,7 @@ export function LessonResult({
 
           {speechMarkup?.speechText ? (
             <SpeechMarkupLog artifact={artifactForStage(generation, "elevenlabs_request")} narration={speechMarkup} />
-          ) : speechMarkupLoading ? (
+          ) : speechMarkupLoading || loadingStage === "run_all" ? (
             <PendingLog accent="amber" className="mt-6" title="elevenlabs_request" />
           ) : effectiveScript?.status === "completed" ? (
             <RunnableLog accent="amber" className="mt-6" disabled={actionDisabled || !onGenerateNarration} onRun={onGenerateNarration} title="elevenlabs_request" />
@@ -115,7 +115,7 @@ export function LessonResult({
               onRetry={onRetryNarration}
               onRetrySegment={onRetryNarrationSegment}
             />
-          ) : narrationLoading ? (
+          ) : narrationLoading || loadingStage === "run_all" ? (
             <PendingLog accent="fuchsia" className="mt-6" title="elevenlabs_audio" />
           ) : null}
 

@@ -108,6 +108,25 @@ describe("LessonResult", () => {
     });
   });
 
+  it("renders the request loading block during full pipeline execution", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<LessonResult lesson={scriptResponse.lesson as never} loadingStage="run_all" scriptLoading />);
+    });
+
+    const text = container.textContent ?? "";
+    expect(text.indexOf("teacher_script")).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("elevenlabs_request")).toBeGreaterThan(text.indexOf("teacher_script"));
+    expect(text.indexOf("elevenlabs_audio")).toBeGreaterThan(text.indexOf("elevenlabs_request"));
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("renders manual run controls for script and narration steps", async () => {
     container = document.createElement("div");
     document.body.append(container);

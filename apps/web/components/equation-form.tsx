@@ -213,7 +213,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     (viewState.scriptLoading === true || loadingStage === "teacher_script" || loadingStage === "run_all");
   const speechMarkupLoading =
     viewState.kind === "submitting" &&
-    (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_audio");
+    (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_audio" || loadingStage === "run_all");
   const narrationLoading =
     viewState.kind === "submitting" &&
     (viewState.narrationLoading === true ||
