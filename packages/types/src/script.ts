@@ -40,6 +40,7 @@ export interface NarrationEquationRequest {
   script: LessonScript;
   instructorId?: string | null;
   outputMode?: OutputMode;
+  scriptSegmentId?: string | null;
 }
 
 export interface NarrationEquationResponse {

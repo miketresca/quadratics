@@ -92,6 +92,7 @@ async def narrate_equation(
             voice_id=_voice_id_for_instructor(settings, request.instructor_id),
             model_id=settings.elevenlabs_model_id,
             speech_markup_provider=_speech_markup_provider(settings),
+            script_segment_id=request.script_segment_id,
         )
     except (
         NarrationProviderConfigurationError,

@@ -51,10 +51,18 @@ class OpenAISpeechMarkupProvider(SpeechMarkupProvider):
                     "role": "system",
                     "content": (
                         "Prepare a math teacher narration script for ElevenLabs text-to-speech. "
-                        "Return one speechText string only. Preserve the existing meaning and "
-                        "all math references. Use SSML break tags sparingly for natural pacing, "
-                        "preferring 0.5s, 0.7s, or 1.0s. "
-                        "Use 2.0s only for a major transition. Never use a break longer than 2.0s."
+                        "Return one speechText string only. The text will be read literally by "
+                        "a voice model, so write conversational speech rather than screen text. "
+                        "Preserve the existing mathematical meaning, roots, factors, and step "
+                        "order, but convert symbolic math into spoken algebra. For example, say "
+                        "'x squared minus x equals zero' instead of 'x^2 - x = 0', 'x minus one "
+                        "times x equals zero' instead of '(x - 1)*(x) = 0', and 'x equals one "
+                        "half' instead of 'x = 1/2'. Do not include raw symbols such as ^, *, /, "
+                        "=, or parentheses when a spoken phrase can say the same thing. Never say "
+                        "'open parenthesis', 'close parenthesis', 'asterisk', 'caret', or 'slash'. "
+                        "Use SSML break tags sparingly for natural pacing, preferring 0.5s, 0.7s, "
+                        "or 1.0s. Use 2.0s only for a major transition. Never use a break longer "
+                        "than 2.0s."
                     ),
                 },
                 {"role": "user", "content": json.dumps(_script_payload(request.script))},

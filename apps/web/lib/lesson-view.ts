@@ -8,6 +8,7 @@ export type SolveViewState =
       script?: LessonScript;
       narration?: LessonNarration;
       scriptLoading?: boolean;
+      speechMarkupLoading?: boolean;
       narrationLoading?: boolean;
     }
   | {kind: "success"; lesson: Lesson; script?: LessonScript; narration?: LessonNarration}

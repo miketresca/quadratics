@@ -61,6 +61,7 @@ class NarrationEquationRequest(ApiModel):
     script: LessonScript
     instructor_id: str | None = None
     output_mode: OutputMode = "audio"
+    script_segment_id: str | None = None
 
 
 class NarrationEquationResponse(ApiModel):

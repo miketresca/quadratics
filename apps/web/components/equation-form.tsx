@@ -8,6 +8,7 @@ import {LessonResult} from "@/components/lesson-result";
 import {MathEquationInput} from "@/components/math-equation-input";
 import {generateEquationNarration, generateEquationScript, solveEquation} from "@/lib/api";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
+import {mergeNarrationSegmentRetry} from "@/lib/narration";
 import {createClient} from "@/lib/supabase/client";
 
 const sampleEquations = ["x^2 + 5x + 6", "2x^2 - 7x + 3", "x^2 - x"];
@@ -16,14 +17,21 @@ const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && proce
 export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentUser | null}) {
   const [viewState, setViewState] = useState<SolveViewState>({kind: "idle"});
   const [equationValue, setEquationValue] = useState("");
+  const [lastEquation, setLastEquation] = useState("");
+  const [lastInstructorId, setLastInstructorId] = useState("male");
+  const [lastOutputMode, setLastOutputMode] = useState<OutputMode>("audio");
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const pipelineInFlightRef = useRef(false);
 
   function onSubmit(formData: FormData) {
     startTransition(async () => {
       const equation = String(formData.get("equation") ?? "");
       const instructorId = String(formData.get("instructorId") ?? "male");
       const outputMode = String(formData.get("outputMode") ?? "audio") as OutputMode;
+      setLastEquation(equation);
+      setLastInstructorId(instructorId);
+      setLastOutputMode(outputMode);
       setViewState({kind: "submitting"});
       if (process.env.NODE_ENV === "development") {
         console.info("[quadratics] submitting equation", {equation, instructorId, outputMode});
@@ -51,39 +59,162 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             lineCount
           });
         }
-        setViewState({kind: "submitting", lesson, scriptLoading: true});
-        try {
-          const response = await generateEquationScript({accessToken, equation, instructorId, outputMode});
-          const {lesson: scriptedLesson, script} = response;
-          if (process.env.NODE_ENV === "development") {
-            console.info("[quadratics] received script", script);
-          }
-          if (outputMode !== "audio" || script.status !== "completed") {
-            setViewState(stateForLesson(scriptedLesson as Lesson, script));
-            return;
-          }
-          setViewState({kind: "submitting", lesson: scriptedLesson as Lesson, script, narrationLoading: true});
-          try {
-            const narrationResponse = await generateEquationNarration({accessToken, script, instructorId, outputMode});
-            if (process.env.NODE_ENV === "development") {
-              console.info("[quadratics] received narration", narrationResponse.narration);
-            }
-            setViewState(stateForLesson(scriptedLesson as Lesson, script, narrationResponse.narration));
-          } catch (narrationError) {
-            if (process.env.NODE_ENV === "development") {
-              console.error("[quadratics] narration generation failed", narrationError);
-            }
-            setViewState(stateForLesson(scriptedLesson as Lesson, script));
-          }
-        } catch (scriptError) {
-          if (process.env.NODE_ENV === "development") {
-            console.error("[quadratics] script generation failed", scriptError);
-          }
-          setViewState(stateForLesson(lesson));
-        }
+        setViewState(stateForLesson(lesson));
       } catch (error) {
         setViewState({kind: "error", message: error instanceof Error ? error.message : "Could not solve the equation"});
         setTimeout(() => errorRef.current?.focus(), 0);
+      }
+    });
+  }
+
+  function startPipelineOperation() {
+    if (pipelineInFlightRef.current || viewState.kind === "submitting") {
+      return false;
+    }
+    pipelineInFlightRef.current = true;
+    return true;
+  }
+
+  function finishPipelineOperation() {
+    pipelineInFlightRef.current = false;
+  }
+
+  function runFullPipeline() {
+    if (!lesson || !startPipelineOperation()) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        if (!supabaseConfigured) {
+          throw new Error("Sign in to run the pipeline.");
+        }
+        const accessToken = await getAccessToken();
+        let nextLesson = lesson;
+        let nextScript = script;
+
+        if (!nextScript || nextScript.status !== "completed") {
+          setViewState({kind: "submitting", lesson: nextLesson, scriptLoading: true});
+          const scriptResponse = await generateEquationScript({
+            accessToken,
+            equation: lastEquation || lesson.originalEquation,
+            instructorId: lastInstructorId,
+            outputMode: lastOutputMode
+          });
+          nextLesson = scriptResponse.lesson as Lesson;
+          nextScript = scriptResponse.script;
+        }
+
+        if (lastOutputMode !== "audio" || nextScript.status !== "completed") {
+          setViewState(stateForLesson(nextLesson, nextScript));
+          return;
+        }
+
+        setViewState({
+          kind: "submitting",
+          lesson: nextLesson,
+          script: nextScript,
+          speechMarkupLoading: true,
+          narrationLoading: true
+        });
+        const narrationResponse = await generateEquationNarration({
+          accessToken,
+          script: nextScript,
+          instructorId: lastInstructorId,
+          outputMode: lastOutputMode
+        });
+        setViewState(stateForLesson(nextLesson, nextScript, narrationResponse.narration));
+      } catch (pipelineError) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("[quadratics] full pipeline failed", pipelineError);
+        }
+        setViewState(stateForLesson(lesson, script, narration));
+      } finally {
+        finishPipelineOperation();
+      }
+    });
+  }
+
+  function runScript() {
+    if (!lesson || !startPipelineOperation()) {
+      return;
+    }
+
+    startTransition(async () => {
+      setViewState({kind: "submitting", lesson, scriptLoading: true});
+      try {
+        if (!supabaseConfigured) {
+          throw new Error("Sign in to generate the teacher script.");
+        }
+        const accessToken = await getAccessToken();
+        const response = await generateEquationScript({
+          accessToken,
+          equation: lastEquation || lesson.originalEquation,
+          instructorId: lastInstructorId,
+          outputMode: lastOutputMode
+        });
+        setViewState(stateForLesson(response.lesson as Lesson, response.script));
+      } catch (scriptError) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("[quadratics] script generation failed", scriptError);
+        }
+        setViewState(stateForLesson(lesson));
+      } finally {
+        finishPipelineOperation();
+      }
+    });
+  }
+
+  function retryNarration() {
+    retryNarrationSegment(null);
+  }
+
+  function retryNarrationSegment(scriptSegmentId: string | null) {
+    if (
+      !lesson ||
+      !script ||
+      script.status !== "completed" ||
+      !startPipelineOperation()
+    ) {
+      return;
+    }
+
+    startTransition(async () => {
+      setViewState({
+        kind: "submitting",
+        lesson,
+        script,
+        narration,
+        speechMarkupLoading: true,
+        narrationLoading: true
+      });
+      try {
+        if (!supabaseConfigured) {
+          throw new Error("Sign in to regenerate audio.");
+        }
+        const accessToken = await getAccessToken();
+        const narrationResponse = await generateEquationNarration({
+          accessToken,
+          script,
+          instructorId: lastInstructorId,
+          outputMode: "audio",
+          scriptSegmentId
+        });
+        const nextNarration =
+          scriptSegmentId && narration
+            ? mergeNarrationSegmentRetry(narration, narrationResponse.narration)
+            : narrationResponse.narration;
+        if (process.env.NODE_ENV === "development") {
+          console.info("[quadratics] regenerated narration", nextNarration);
+        }
+        setViewState(stateForLesson(lesson, script, nextNarration));
+      } catch (narrationError) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("[quadratics] narration regeneration failed", narrationError);
+        }
+        setViewState(stateForLesson(lesson, script, narration));
+      } finally {
+        finishPipelineOperation();
       }
     });
   }
@@ -102,6 +233,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       ? viewState.narration
       : undefined;
   const scriptLoading = viewState.kind === "submitting" && viewState.scriptLoading === true;
+  const speechMarkupLoading = viewState.kind === "submitting" && viewState.speechMarkupLoading === true;
   const narrationLoading = viewState.kind === "submitting" && viewState.narrationLoading === true;
 
   return (
@@ -182,6 +314,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                 </label>
               </span>
             </fieldset>
+
           </div>
         </form>
       </div>
@@ -201,13 +334,31 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
         <LessonResult
           lesson={lesson}
           narration={narration}
+          actionDisabled={disabled}
           narrationLoading={narrationLoading}
+          onGenerateNarration={script?.status === "completed" ? retryNarration : undefined}
+          onGenerateScript={runScript}
+          onRunFullPipeline={runFullPipeline}
+          onRetryNarration={script?.status === "completed" ? retryNarration : undefined}
+          onRetryNarrationSegment={script?.status === "completed" ? retryNarrationSegment : undefined}
+          speechMarkupLoading={speechMarkupLoading}
           script={script}
           scriptLoading={scriptLoading}
         />
       ) : null}
     </div>
   );
+}
+
+async function getAccessToken() {
+  const supabase = createClient();
+  const {
+    data: {session}
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Sign in to run an equation.");
+  }
+  return session.access_token;
 }
 
 function EnterIcon() {

@@ -73,6 +73,7 @@ export async function generateEquationNarration(params: {
   script: LessonScript;
   instructorId: string;
   outputMode: OutputMode;
+  scriptSegmentId?: string | null;
 }): Promise<NarrationEquationResponse> {
   const response = await fetch(`${apiUrl}/api/v1/equations/narration`, {
     method: "POST",
@@ -83,7 +84,8 @@ export async function generateEquationNarration(params: {
     body: JSON.stringify({
       script: params.script,
       instructorId: params.instructorId,
-      outputMode: params.outputMode
+      outputMode: params.outputMode,
+      scriptSegmentId: params.scriptSegmentId
     })
   });
   if (!response.ok) {

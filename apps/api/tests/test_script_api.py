@@ -77,6 +77,21 @@ class RecordingNarrationProvider(NarrationProvider):
         )
 
 
+class PaymentRequiredNarrationProvider(NarrationProvider):
+    async def generate(self, request: NarrationRequest) -> NarrationResult:
+        raise RuntimeError(
+            "ElevenLabs payment is required or the account has insufficient credits."
+        )
+
+
+class FailsAfterFirstNarrationProvider(RecordingNarrationProvider):
+    async def generate(self, request: NarrationRequest) -> NarrationResult:
+        if self.requests:
+            self.requests.append(request)
+            raise RuntimeError("ElevenLabs audio generation failed on the second segment.")
+        return await super().generate(request)
+
+
 @pytest.mark.asyncio
 async def test_script_endpoint_returns_factoring_lesson_and_script(app, authenticated_client):
     app.dependency_overrides[get_settings] = lambda: Settings(script_generation_enabled=False)
@@ -152,6 +167,7 @@ async def test_narration_endpoint_generates_audio_for_completed_audio_script(
 ):
     provider = RecordingNarrationProvider()
     app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
         elevenlabs_api_key="test-key",
         elevenlabs_male_voice_id="male-voice",
     )
@@ -183,9 +199,166 @@ async def test_narration_endpoint_generates_audio_for_completed_audio_script(
     assert response.status_code == 200
     body = response.json()
     assert body["narration"]["status"] == "completed"
-    assert body["narration"]["audioBase64"] == "ZmFrZS1tcDM="
+    assert body["narration"]["segments"] == [
+        {
+            "scriptSegmentId": "script_factor",
+            "stepId": "factor",
+            "title": "Factor the quadratic",
+            "provider": "elevenlabs",
+            "voiceId": "male-voice",
+            "modelId": "eleven_multilingual_v2",
+            "audioMimeType": "audio/mpeg",
+            "audioBase64": "ZmFrZS1tcDM=",
+            "durationSeconds": 3.2,
+            "speechText": "First factor the quadratic into the two factors shown.",
+            "alignment": None,
+            "normalizedAlignment": {
+                "characters": ["H", "i"],
+                "characterStartTimesSeconds": [0.0, 0.2],
+                "characterEndTimesSeconds": [0.2, 0.4],
+            },
+            "providerMetadata": {"model": "eleven_multilingual_v2"},
+        },
+        {
+            "scriptSegmentId": "script_solve_factors",
+            "stepId": "solve_factors",
+            "title": "Solve each factor",
+            "provider": "elevenlabs",
+            "voiceId": "male-voice",
+            "modelId": "eleven_multilingual_v2",
+            "audioMimeType": "audio/mpeg",
+            "audioBase64": "ZmFrZS1tcDM=",
+            "durationSeconds": 3.2,
+            "speechText": "Next use the zero product property and solve each factor.",
+            "alignment": None,
+            "normalizedAlignment": {
+                "characters": ["H", "i"],
+                "characterStartTimesSeconds": [0.0, 0.2],
+                "characterEndTimesSeconds": [0.2, 0.4],
+            },
+            "providerMetadata": {"model": "eleven_multilingual_v2"},
+        },
+        {
+            "scriptSegmentId": "script_final_answer",
+            "stepId": "final_answer",
+            "title": "State the final answer",
+            "provider": "elevenlabs",
+            "voiceId": "male-voice",
+            "modelId": "eleven_multilingual_v2",
+            "audioMimeType": "audio/mpeg",
+            "audioBase64": "ZmFrZS1tcDM=",
+            "durationSeconds": 3.2,
+            "speechText": "The solutions are one half and three.",
+            "alignment": None,
+            "normalizedAlignment": {
+                "characters": ["H", "i"],
+                "characterStartTimesSeconds": [0.0, 0.2],
+                "characterEndTimesSeconds": [0.2, 0.4],
+            },
+            "providerMetadata": {"model": "eleven_multilingual_v2"},
+        },
+    ]
     assert body["narration"]["voiceId"] == "male-voice"
-    assert 'break time="0.7s"' in provider.requests[0].text
+    assert body["narration"]["providerMetadata"] == {
+        "model": "eleven_multilingual_v2",
+        "segmentCount": 3,
+    }
+    assert [request.step_id for request in provider.requests] == [
+        "factor",
+        "solve_factors",
+        "final_answer",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_narration_endpoint_can_generate_one_script_segment(
+    app,
+    authenticated_client,
+    monkeypatch,
+):
+    provider = RecordingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
+
+    script = RecordingScriptProvider()
+    completed_script = await script.generate_lesson_script(
+        ScriptGenerationRequest(
+            lesson={},
+            instructor_id="male",
+            output_mode="audio",
+            prompt="",
+            word_budget=150,
+        )
+    )
+
+    try:
+        response = await authenticated_client.post(
+            "/api/v1/equations/narration",
+            json={
+                "script": completed_script.model_dump(mode="json", by_alias=True),
+                "scriptSegmentId": "script_solve_factors",
+                "instructorId": "male",
+                "outputMode": "audio",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["narration"]["status"] == "completed"
+    assert body["narration"]["segments"][0]["scriptSegmentId"] == "script_solve_factors"
+    assert body["narration"]["audioBase64"] == "ZmFrZS1tcDM="
+    assert [request.step_id for request in provider.requests] == ["solve_factors"]
+
+
+@pytest.mark.asyncio
+async def test_narration_endpoint_returns_unsupported_for_unknown_script_segment(
+    app,
+    authenticated_client,
+    monkeypatch,
+):
+    provider = RecordingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
+
+    script = RecordingScriptProvider()
+    completed_script = await script.generate_lesson_script(
+        ScriptGenerationRequest(
+            lesson={},
+            instructor_id="male",
+            output_mode="audio",
+            prompt="",
+            word_budget=150,
+        )
+    )
+
+    try:
+        response = await authenticated_client.post(
+            "/api/v1/equations/narration",
+            json={
+                "script": completed_script.model_dump(mode="json", by_alias=True),
+                "scriptSegmentId": "missing_segment",
+                "instructorId": "male",
+                "outputMode": "audio",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["narration"]["status"] == "unsupported"
+    assert "missing_segment" in body["narration"]["unsupportedReason"]
+    assert provider.requests == []
 
 
 @pytest.mark.asyncio
@@ -201,7 +374,12 @@ async def test_narration_endpoint_returns_unsupported_without_voice_id(app, auth
         )
     )
 
-    app.dependency_overrides[get_settings] = lambda: Settings(elevenlabs_api_key="test-key")
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="",
+        elevenlabs_female_voice_id="",
+    )
     try:
         response = await authenticated_client.post(
             "/api/v1/equations/narration",
@@ -218,6 +396,104 @@ async def test_narration_endpoint_returns_unsupported_without_voice_id(app, auth
     body = response.json()
     assert body["narration"]["status"] == "unsupported"
     assert "voice is not configured" in body["narration"]["unsupportedReason"]
+
+
+@pytest.mark.asyncio
+async def test_narration_endpoint_keeps_speech_text_when_provider_fails(
+    app,
+    authenticated_client,
+    monkeypatch,
+):
+    script = RecordingScriptProvider()
+    completed_script = await script.generate_lesson_script(
+        ScriptGenerationRequest(
+            lesson={},
+            instructor_id="male",
+            output_mode="audio",
+            prompt="",
+            word_budget=150,
+        )
+    )
+
+    provider = PaymentRequiredNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
+
+    try:
+        response = await authenticated_client.post(
+            "/api/v1/equations/narration",
+            json={
+                "script": completed_script.model_dump(mode="json", by_alias=True),
+                "instructorId": "male",
+                "outputMode": "audio",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["narration"]["status"] == "failed"
+    assert "insufficient credits" in body["narration"]["unsupportedReason"]
+    assert body["narration"]["speechText"] == (
+        "First factor the quadratic into the two factors shown."
+    )
+
+
+@pytest.mark.asyncio
+async def test_narration_endpoint_keeps_attempted_speech_text_when_later_segment_fails(
+    app,
+    authenticated_client,
+    monkeypatch,
+):
+    script = RecordingScriptProvider()
+    completed_script = await script.generate_lesson_script(
+        ScriptGenerationRequest(
+            lesson={},
+            instructor_id="male",
+            output_mode="audio",
+            prompt="",
+            word_budget=150,
+        )
+    )
+
+    provider = FailsAfterFirstNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
+
+    try:
+        response = await authenticated_client.post(
+            "/api/v1/equations/narration",
+            json={
+                "script": completed_script.model_dump(mode="json", by_alias=True),
+                "instructorId": "male",
+                "outputMode": "audio",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["narration"]["status"] == "failed"
+    assert "second segment" in body["narration"]["unsupportedReason"]
+    assert [segment["scriptSegmentId"] for segment in body["narration"]["segments"]] == [
+        "script_factor"
+    ]
+    assert body["narration"]["segments"][0]["audioBase64"] == "ZmFrZS1tcDM="
+    assert body["narration"]["speechText"] == (
+        "First factor the quadratic into the two factors shown. "
+        "Next use the zero product property and solve each factor."
+    )
+    assert [request.step_id for request in provider.requests] == ["factor", "solve_factors"]
 
 
 @pytest.mark.asyncio

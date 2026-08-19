@@ -12,10 +12,15 @@ Write one script segment for each teaching step:
 
 Style:
 
-- Sound like a clear teacher at a board.
+- Sound like a clear teacher talking to one student.
+- Write for speech, not for a worksheet or screen caption.
+- Use conversational spoken math phrases: "x squared minus x equals zero", "x minus one times x", "x equals one".
+- Do not put raw symbolic equations in the narration unless there is no natural spoken alternative.
+- Avoid literal programming/math notation such as "^", "*", "/", "()", or comma-separated answer lists in narration text.
+- Avoid phrases like "open parenthesis", "close parenthesis", "asterisk", "caret", or "slash".
 - Keep the total narration under the provided word budget.
 - Explain why factoring and the zero-product property are being used.
-- Use the supplied exact roots and factors.
+- Use the supplied exact roots and factors, but phrase them as natural spoken algebra.
 - Do not mention unsupported methods.
 - Do not describe audio generation, video generation, avatars, or implementation details.
 
