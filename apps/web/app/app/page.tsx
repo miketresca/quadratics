@@ -1,8 +1,8 @@
 import type {CurrentUser} from "@quadratics/types";
 
 import {signIn, signOut} from "@/app/auth/actions";
+import {AppModeShell} from "@/components/app-mode-shell";
 import {ApiKeysDialog} from "@/components/api-keys-dialog";
-import {EquationForm} from "@/components/equation-form";
 import {OutsideCloseDetails} from "@/components/outside-close-details";
 import {getMe} from "@/lib/api";
 import {createClient} from "@/lib/supabase/server";
@@ -58,9 +58,7 @@ export default async function AppPage({
           <AccountMenu loginError={loginError} user={user} />
         </div>
       </header>
-      <div className="mx-auto flex min-h-screen w-full max-w-5xl items-start justify-center px-4 pb-24 pt-32 sm:px-6 sm:pt-36">
-        <EquationForm initialUser={user} />
-      </div>
+      <AppModeShell initialUser={user} />
     </main>
   );
 }
