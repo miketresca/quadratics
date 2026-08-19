@@ -8,9 +8,16 @@
 - Math line: deterministic rendered transformation inside a teaching step.
 - Script: LLM-assisted narration plan generated from a completed deterministic lesson.
 - Script segment: narration text for one teaching step, with references to the math-line IDs it explains.
+- Speech markup: provider-ready conversational text, including SSML break tags, generated from the teacher script before narration.
 - Narration segment: audio, speech text, and timing metadata generated for one script segment.
+- Generation artifact: versioned output of one pipeline stage with lifecycle status, input hash, upstream artifact IDs, provider metadata, cache metadata, and optional storage references.
+- Animation plan: constrained semantic visual plan generated from lesson/script/narration artifacts. It names supported primitives and narration trigger phrases, but does not contain exact render timing.
+- Resolved animation timeline: deterministic timestamped animation and SFX windows derived from an animation plan and ElevenLabs alignment.
+- Base video: rendered educational blackboard video artifact. In the current product mode, this is still produced when the UI says `Audio only`; that label means only the optional avatar is omitted.
 - Instructor: placeholder data record such as `male` or `female`.
 - Generation job: owned audit record for a generation attempt.
 - Credit transaction: ledger entry that grants or consumes generation credits.
 
 Exact math values are preserved as strings and LaTeX. Display strings are not the only mathematical representation. Script text may explain the deterministic math, but it is not a source of mathematical truth.
+
+Artifacts are the pipeline source of truth. A downstream stage should load persisted upstream artifacts and write a new downstream artifact. Reruns should reuse matching completed artifacts unless the user explicitly forces regeneration.

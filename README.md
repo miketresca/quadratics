@@ -1,12 +1,12 @@
 # Quadratics
 
-Quadratics is a scaffold for generating short educational videos that explain how to solve quadratic equations. The first slice supports authenticated users, deterministic SymPy solving, factoring lesson steps, and a Motion Canvas proof-of-concept scene.
+Quadratics generates short educational videos that explain how to solve quadratic equations. The current system supports authenticated users, deterministic SymPy solving, factoring lesson steps, teacher scripts, ElevenLabs narration, artifact-backed stage reruns, semantic animation planning, resolved timing, and a data-driven Motion Canvas blackboard renderer.
 
 ## Structure
 
 - `apps/web` - Next.js App Router web app
 - `apps/api` - FastAPI API and deterministic math engine
-- `apps/video` - Motion Canvas proof-of-concept renderer
+- `apps/video` - Motion Canvas blackboard renderer
 - `packages/types` - Shared lesson/API TypeScript contracts
 - `packages/config` - Shared app configuration such as instructor placeholders
 - `infra/supabase` - Supabase migrations and setup notes
@@ -35,7 +35,9 @@ SCRIPT_GENERATION_ENABLED=true
 SCRIPT_WORD_BUDGET=150
 ```
 
-Script generation is narration text only. Audio-only output then prepares that script for ElevenLabs and requests MP3 audio with character timing metadata.
+Script generation is narration text only. The pipeline then prepares that script for ElevenLabs as conversational speech markup and requests MP3 audio with character timing metadata.
+
+The current `Audio only` UI label means no optional AI instructor avatar. It still produces the core blackboard video pipeline: lesson, script, narration, animation plan, resolved timeline, Motion Canvas render, and base video artifact.
 
 ElevenLabs uses the platform API key and per-instructor voice IDs from the API service environment:
 
@@ -66,6 +68,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - `pnpm web:dev` - Run Next.js
 - `pnpm api:dev` - Run FastAPI
 - `pnpm video:dev` - Run Motion Canvas
+- `pnpm video:fixture` - Validate and load the golden local video fixture without OpenAI or ElevenLabs calls
 - `pnpm sb:login` - Authenticate the local Supabase CLI
 - `pnpm sb:link` - Link `infra/supabase` to the configured Supabase project
 - `pnpm sb:push:dry` - Preview Supabase migration changes
@@ -76,6 +79,18 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - `uv run --project apps/api pytest` - Run API tests
 
 Use `http://localhost:3000` for the web app. `http://localhost:9000` is the Motion Canvas editor.
+
+## Pipeline
+
+Generation is artifact-backed. The API can create a generation, run one stage, run the full pipeline, and return a snapshot of versioned artifacts. Current stages are:
+
+```text
+solution -> lesson -> teacher_script -> elevenlabs_request -> elevenlabs_audio -> animation_plan -> resolved_timeline -> motion_canvas_render -> base_video
+```
+
+Normal stage reruns reuse matching completed artifacts. Force reruns create a new artifact version and mark affected downstream artifacts stale. This lets you regenerate an animation plan or render repeatedly without spending ElevenLabs credits when narration has not changed.
+
+The golden fixture uses `x^2 + 5x + 6 = 0` and is the preferred workflow for iterating on Motion Canvas/chalk behavior without provider credentials.
 
 ## Deployment
 

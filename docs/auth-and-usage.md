@@ -8,6 +8,10 @@ Generation credits are ledger-based. `credit_ledger` is the auditable source of 
 
 Solving an equation, generating a teacher script, formatting speech markup, and generating expensive media are separate cost concepts. The deterministic solve endpoint does not consume generation credits in v0.
 
-Expensive provider calls should be independently runnable and independently auditable. A script generation, speech-markup request, narration segment, avatar clip, or video render should attach to a user-owned generation job and a ledger entry with an idempotency key before it becomes a production billing event. Manual retries must not mutate balances directly or double-charge the same provider attempt.
+Expensive provider calls should be independently runnable and independently auditable. A script generation, speech-markup request, narration segment, animation-plan request, avatar clip, or video render should attach to a user-owned generation job and a ledger entry with an idempotency key before it becomes a production billing event. Manual retries must not mutate balances directly or double-charge the same provider attempt.
+
+Artifact cache hits are not new provider attempts. A normal rerun should reuse a completed matching artifact without consuming provider credits. A force regenerate action should be explicit because it may call a paid provider and stale downstream artifacts.
+
+Regenerating a downstream stage must not charge for upstream stages that already have valid artifacts. For example, rerendering Motion Canvas from an existing resolved timeline must not call ElevenLabs, and rerunning animation planning must not regenerate narration.
 
 Email addresses and stored equation history are user data. Do not log bearer tokens, service-role keys, or raw request bodies by default. Account/data deletion and retention policy need a follow-up decision before production launch.

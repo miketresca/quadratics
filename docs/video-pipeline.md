@@ -1,29 +1,66 @@
 # Video Pipeline
 
-The future pipeline is:
+Quadratics is moving toward a build-system style pipeline. Each stage consumes persisted upstream artifacts and produces a persisted downstream artifact. Downstream stages can be rerun without rerunning expensive upstream stages when the input hash still matches.
+
+Current stage order:
 
 ```text
-Lesson step
-  -> script segment
-  -> ElevenLabs-ready speech markup
-  -> narration audio and timestamps
-  -> Motion Canvas board animation
-  -> optional avatar clip
-  -> final composition
+equation input
+  -> solution
+  -> lesson
+  -> teacher_script
+  -> elevenlabs_request
+  -> elevenlabs_audio
+  -> animation_plan
+  -> resolved_timeline
+  -> motion_canvas_render
+  -> base_video
 ```
 
-Motion Canvas remains deterministic for board and math animation. Script generation may use an LLM after deterministic lesson construction, but provider-specific LLM, narration, and avatar logic must stay behind adapters.
+The user-facing `Audio only` option means no optional avatar. It does not mean no board animation or no video. The standard non-avatar pipeline still produces the base educational blackboard video. Future avatar stages should be modeled as skipped only when avatar output is disabled.
 
-Script segments are the bridge between lesson steps and future media. Each segment should reference the teaching step and math-line IDs that will be visible while that narration is spoken.
+## Artifacts
 
-The teacher script is not sent directly to ElevenLabs. It first passes through a speech-markup step that converts the higher-level teaching narration into conversational spoken math with SSML break tags. The app logs this as `elevenlabs_request`, between `teacher_script` and `elevenlabs_audio`, because that is the exact text sent to the narration provider.
+Artifacts use the shared stage lifecycle:
 
-Narration audio is generated per script segment, not as one long lesson-level file. For a three-step factoring lesson, the API calls the narration provider once per script segment and returns narration segments keyed by script segment ID and teaching step ID. This preserves the lesson timeline boundary that Motion Canvas needs: each audio file already maps to the board state and math lines for that step.
+```text
+pending | running | completed | failed | stale | skipped
+```
 
-Per-segment audio also makes regeneration cheaper and safer. If the teacher script is good but one narration generation fails or sounds wrong, the app can retry only that segment without spending credits on a new teacher script or re-generating the other audio segments. Future caching should use the segment ID plus the segment speech text, instructor ID, voice ID, model ID, and speech settings so retries can be scoped precisely.
+Each artifact records its generation job, user, stage, version, input hash, upstream artifact IDs, provider/model/config metadata, cache-hit state, storage references, timestamps, and error/stale details when relevant.
 
-The UI should default to manual progression while this pipeline is still being tuned. Submitting an equation should run the deterministic solve only. A user can then run `teacher_script`, run `elevenlabs_request` plus `elevenlabs_audio`, retry individual narration segments, or choose `Run A to Z` after the solve result appears. This protects provider credits during iteration and makes each pipeline boundary visible.
+Stale artifacts remain inspectable. They should not be shown as the current final output, but they are useful for debugging older plans, timelines, and render attempts.
 
-Provider calls must remain auditable. Every expensive script, speech-markup, narration, avatar, or video generation attempt should eventually attach to a user-owned generation job and credit-ledger transaction with an idempotency key. This is especially important for segment retries, where one visible click may map to only one provider call.
+Normal reruns reuse a completed artifact when the input hash is unchanged. Force reruns ignore the cache, create a new artifact version, and stale affected downstream artifacts.
 
-Future cache keys should use normalized equation, method, instructor ID, voice configuration, render configuration version, and lesson template version. Raw user input is not sufficient because equivalent equations should normalize toward the same cache identity.
+## Narration
+
+`teacher_script` is the high-level teaching narration. It must reference existing teaching-step and math-line IDs.
+
+`elevenlabs_request` is the provider-ready speech text, including conversational math phrasing and SSML break tags. This log exists between script and audio so the exact request text can be inspected before credits are spent.
+
+`elevenlabs_audio` stores narration metadata, per-segment timing, raw and normalized ElevenLabs alignment, and private media references. The primary persisted contract should use storage object metadata rather than embedding MP3 base64.
+
+ElevenLabs character alignment is the timestamp source of truth. Do not send rendered audio to another model to rediscover timings.
+
+## Animation
+
+`animation_plan` is semantic. The OpenAI planner decides what should happen visually and which narration phrase triggers it. It must use the constrained primitive vocabulary, not arbitrary Motion Canvas code.
+
+`resolved_timeline` is deterministic. It maps planner trigger phrases to ElevenLabs character timestamps and derives exact animation and chalk-SFX windows.
+
+Motion Canvas consumes lesson display data plus the resolved timeline. The renderer should remain generic and data-driven: math accumulates vertically on a chalkboard, and temporary highlights or annotations direct attention without erasing prior work.
+
+## Development Fixture
+
+Use the golden fixture workflow when iterating on Motion Canvas or timing behavior:
+
+```sh
+pnpm video:fixture
+```
+
+The fixture covers `x^2 + 5x + 6 = 0` and includes lesson, script, narration-shaped metadata, animation plan, and resolved timeline data. It is designed to run without OpenAI or ElevenLabs credentials.
+
+## Current Limits
+
+The current API render adapter is a development renderer that persists render-shaped media artifacts. The Motion Canvas app is data-driven and buildable, but production render invocation, Supabase-backed artifact repositories, Supabase Storage adapters, and signed video playback URLs remain follow-up work before the full acceptance workflow is production complete.
