@@ -1029,6 +1029,112 @@ describe("LessonResult", () => {
     });
   });
 
+  it("shows artifact last-run timestamps in 24-hour time", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={
+            {
+              job: {
+                id: "generation-timestamp",
+                userId: "user-1",
+                equationInput: "x^2 + 5x + 6",
+                status: "processing",
+                creditsUsed: 0
+              },
+              lesson: scriptResponse.lesson,
+              artifacts: [
+                {
+                  id: "script-artifact",
+                  generationJobId: "generation-timestamp",
+                  userId: "user-1",
+                  stage: "teacher_script",
+                  version: 1,
+                  status: "completed",
+                  inputHash: "sha256:script",
+                  payload: scriptResponse.script,
+                  isCurrent: true,
+                  createdAt: "2026-08-18T15:04:00",
+                  completedAt: "2026-08-18T15:05:06"
+                }
+              ]
+            } as never
+          }
+          lesson={scriptResponse.lesson as never}
+          script={scriptResponse.script as never}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain("last ran 2026-08-18");
+    expect(container.textContent).toMatch(/15:05/);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("shows a loading spinner for persisted running artifacts", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={
+            {
+              job: {
+                id: "generation-running-artifact",
+                userId: "user-1",
+                equationInput: "x^2 + 5x + 6",
+                status: "processing",
+                creditsUsed: 0
+              },
+              lesson: scriptResponse.lesson,
+              artifacts: [
+                {
+                  id: "request-artifact",
+                  generationJobId: "generation-running-artifact",
+                  userId: "user-1",
+                  stage: "elevenlabs_request",
+                  version: 2,
+                  status: "running",
+                  inputHash: "sha256:request",
+                  payload: {
+                    status: "completed",
+                    provider: "openai",
+                    voiceId: "male-voice",
+                    modelId: "speech-markup",
+                    durationSeconds: 4,
+                    speechText: "First, factor the quadratic."
+                  },
+                  isCurrent: true,
+                  createdAt: "2026-08-18T15:04:00Z"
+                }
+              ]
+            } as never
+          }
+          lesson={scriptResponse.lesson as never}
+          onRunStage={vi.fn()}
+        />
+      );
+    });
+
+    const regenerateRequest = container.querySelector<HTMLButtonElement>('button[aria-label="Regenerate elevenlabs_request"]');
+    expect(regenerateRequest).not.toBeNull();
+    expect(regenerateRequest?.disabled).toBe(true);
+    expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("keeps stale animation artifacts visible", async () => {
     container = document.createElement("div");
     document.body.append(container);

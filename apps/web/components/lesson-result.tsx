@@ -342,12 +342,13 @@ function ScriptLog({
   onRun?: () => void;
   script: LessonScript;
 }) {
+  const stageLoading = loading || artifact?.status === "running";
   return (
     <StageCard
       accent="sky"
-      action={onRun ? <IconButton disabled={disabled} label="Regenerate teacher_script" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      action={onRun ? <IconButton disabled={disabled || stageLoading} label="Regenerate teacher_script" onClick={onRun}><RegenerateIcon /></IconButton> : null}
       artifact={artifact}
-      loading={loading}
+      loading={stageLoading}
       title="teacher_script"
     >
       {script.status === "completed" ? (
@@ -386,12 +387,13 @@ function SpeechMarkupLog({
   onRun?: () => void;
 }) {
   const segments = narration.segments ?? [];
+  const stageLoading = loading || artifact?.status === "running";
   return (
     <StageCard
       accent="amber"
-      action={onRun ? <IconButton disabled={actionDisabled || loading} label="Regenerate elevenlabs_request" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      action={onRun ? <IconButton disabled={actionDisabled || stageLoading} label="Regenerate elevenlabs_request" onClick={onRun}><RegenerateIcon /></IconButton> : null}
       artifact={artifact}
-      loading={loading}
+      loading={stageLoading}
       title="elevenlabs_request"
     >
       {segments.length > 0 ? (
@@ -433,12 +435,13 @@ function NarrationLog({
   onRun?: () => void;
 }) {
   const segments = narration.segments ?? [];
+  const stageLoading = loading || artifact?.status === "running";
   return (
     <StageCard
       accent="fuchsia"
-      action={onRun ? <IconButton disabled={actionDisabled || loading} label="Regenerate elevenlabs_audio" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      action={onRun ? <IconButton disabled={actionDisabled || stageLoading} label="Regenerate elevenlabs_audio" onClick={onRun}><RegenerateIcon /></IconButton> : null}
       artifact={artifact}
-      loading={loading}
+      loading={stageLoading}
       title="elevenlabs_audio"
     >
       {segments.length > 0 ? (
@@ -521,12 +524,13 @@ function AnimationPlanLog({
 }) {
   const resolvedByCue = new Map((timeline?.cues ?? []).map((cue) => [cue.cueId, cue]));
   const cues = cuesForAnimationPlanLog(plan, timeline);
+  const stageLoading = loading || artifact?.status === "running";
   return (
     <StageCard
       accent="violet"
-      action={onRun ? <IconButton disabled={actionDisabled || loading} label="Regenerate animation plan" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      action={onRun ? <IconButton disabled={actionDisabled || stageLoading} label="Regenerate animation plan" onClick={onRun}><RegenerateIcon /></IconButton> : null}
       artifact={artifact}
-      loading={loading}
+      loading={stageLoading}
       title="animation_plan"
     >
       <div className="mt-4 overflow-x-auto">
@@ -581,12 +585,13 @@ function TimelineLog({
   onRun?: () => void;
   timeline: ResolvedAnimationTimeline;
 }) {
+  const stageLoading = loading || artifact?.status === "running";
   return (
     <StageCard
       accent="cyan"
-      action={onRun ? <IconButton disabled={actionDisabled || loading} label="Regenerate resolved timeline" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      action={onRun ? <IconButton disabled={actionDisabled || stageLoading} label="Regenerate resolved timeline" onClick={onRun}><RegenerateIcon /></IconButton> : null}
       artifact={artifact}
-      loading={loading}
+      loading={stageLoading}
       title="resolved_timeline"
     >
       <div className="mt-4 grid gap-2">
@@ -625,12 +630,13 @@ function RenderLog({
   loading?: boolean;
   onRun?: () => void;
 }) {
+  const stageLoading = loading || artifact.status === "running";
   return (
     <StageCard
       accent="lime"
-      action={onRun ? <IconButton disabled={actionDisabled || loading} label="Regenerate Motion Canvas render" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      action={onRun ? <IconButton disabled={actionDisabled || stageLoading} label="Regenerate Motion Canvas render" onClick={onRun}><RegenerateIcon /></IconButton> : null}
       artifact={artifact}
-      loading={loading}
+      loading={stageLoading}
       title="motion_canvas_render"
     >
       <p className="mt-3 text-sm text-zinc-300">
@@ -656,6 +662,7 @@ function StageCard({
   loading?: boolean;
   title: string;
 }) {
+  const isLoading = loading || artifact?.status === "running";
   return (
     <div className={`mt-6 rounded border ${accentBorderClass(accent)} p-4`}>
       <div className="flex items-start justify-between gap-4">
@@ -666,7 +673,7 @@ function StageCard({
         <div className="flex items-center gap-2">
           {artifact?.status === "stale" ? <StageBadge tone="amber">STALE</StageBadge> : null}
           {artifact?.status === "failed" ? <StageBadge tone="red">FAILED</StageBadge> : null}
-          {loading ? <Spinner /> : null}
+          {isLoading ? <Spinner /> : null}
           {action}
         </div>
       </div>
@@ -680,9 +687,11 @@ function StageCard({
 
 function ArtifactMeta({artifact}: {artifact: GenerationArtifact}) {
   const provider = [artifact.provider, artifact.model].filter(Boolean).join(" / ");
+  const lastRanAt = formatArtifactTimestamp(artifact.completedAt ?? artifact.createdAt);
   return (
     <p className="mt-2 break-words font-mono text-xs text-zinc-500">
       {artifact.status} / v{artifact.version}
+      {lastRanAt ? ` / last ran ${lastRanAt}` : ""}
       {artifact.cacheHit ? " / cache hit" : ""}
       {provider ? ` / ${provider}` : ""}
     </p>
@@ -785,12 +794,13 @@ function FailedStageLog({
   onRun?: () => void;
   title: string;
 }) {
+  const stageLoading = loading || artifact.status === "running";
   return (
     <StageCard
       accent={accent}
-      action={onRun ? <IconButton disabled={disabled} label={`Run ${title}`} onClick={onRun}><RunIcon /></IconButton> : null}
+      action={onRun ? <IconButton disabled={disabled || stageLoading} label={`Run ${title}`} onClick={onRun}><RunIcon /></IconButton> : null}
       artifact={artifact}
-      loading={loading}
+      loading={stageLoading}
       title={title}
     >
       <p className="mt-3 rounded border border-red-400/30 bg-red-950/20 p-3 text-sm text-red-100">
@@ -888,8 +898,35 @@ function RunIcon() {
   );
 }
 
-function Spinner() {
-  return <span aria-label="Loading" className="h-4 w-4 animate-spin rounded-full border border-zinc-700 border-t-emerald-300" role="status" />;
+function Spinner({className = ""}: {className?: string}) {
+  return (
+    <svg
+      aria-label="Loading"
+      className={`h-4 w-4 animate-spin text-emerald-300 ${className}`}
+      fill="none"
+      role="status"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-90" d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function formatArtifactTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
 function viewButtonClass(active: boolean) {
