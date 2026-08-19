@@ -4,14 +4,10 @@ Supabase Auth owns password authentication. The product UI asks for a username a
 
 The `/app` UI shell is public so visitors can see the tool. Equation submission still requires an authenticated session, and API endpoints under `/api/v1` require API authorization. `/login` is not a standalone product surface; it redirects to `/app`, where the account menu contains the login form.
 
-Generation credits are ledger-based. `credit_ledger` is the auditable source of truth, and balances are derived by summing entries for one user. Default demo credits use an idempotency key so first-login provisioning cannot double-grant credits.
+Generation ownership belongs to the authenticated user. API routes must verify the bearer token and load only that user's generation jobs, artifacts, and media references. Browser clients must never receive Supabase service-role credentials.
 
-Solving an equation, generating a teacher script, formatting speech markup, and generating expensive media are separate cost concepts. The deterministic solve endpoint does not consume generation credits in v0.
+The product is currently an internal tool, so there is no user-facing credit system. The early `credit_ledger` schema and `/me` balance field still exist for compatibility with previous migrations/tests, but new pipeline work should optimize for provider-call reuse through artifacts instead of adding billing behavior.
 
-Expensive provider calls should be independently runnable and independently auditable. A script generation, speech-markup request, narration segment, animation-plan request, avatar clip, or video render should attach to a user-owned generation job and a ledger entry with an idempotency key before it becomes a production billing event. Manual retries must not mutate balances directly or double-charge the same provider attempt.
+Provider calls should be independently runnable and independently auditable. A script generation, speech-markup request, narration segment, animation-plan request, or video render should attach to a user-owned generation job and artifact attempt. Normal reruns should reuse matching completed artifacts. Force reruns should be explicit because they may call OpenAI, ElevenLabs, or the render stack again and stale downstream artifacts.
 
-Artifact cache hits are not new provider attempts. A normal rerun should reuse a completed matching artifact without consuming provider credits. A force regenerate action should be explicit because it may call a paid provider and stale downstream artifacts.
-
-Regenerating a downstream stage must not charge for upstream stages that already have valid artifacts. For example, rerendering Motion Canvas from an existing resolved timeline must not call ElevenLabs, and rerunning animation planning must not regenerate narration.
-
-Email addresses and stored equation history are user data. Do not log bearer tokens, service-role keys, or raw request bodies by default. Account/data deletion and retention policy need a follow-up decision before production launch.
+Email addresses and stored equation history are user data. Do not log bearer tokens, service-role keys, raw provider keys, or raw request bodies by default. Account/data deletion and retention policy need a follow-up decision before production launch.

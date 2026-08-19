@@ -106,58 +106,6 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     });
   }
 
-  function retryNarration() {
-    retryNarrationSegment(null);
-  }
-
-  function retryNarrationSegment(scriptSegmentId: string | null) {
-    if (
-      !lesson ||
-      !generation ||
-      !startPipelineOperation()
-    ) {
-      return;
-    }
-
-    startTransition(async () => {
-      setViewState({
-        kind: "submitting",
-        lesson,
-        script,
-        narration,
-        generation,
-        speechMarkupLoading: true,
-        narrationLoading: true
-      });
-      try {
-        if (!supabaseConfigured) {
-          throw new Error("Sign in to regenerate audio.");
-        }
-        const accessToken = await getAccessToken();
-        if (!generation) {
-          throw new Error("Solve the equation before regenerating audio.");
-        }
-        const nextGeneration = await runGenerationStage({
-          accessToken,
-          generationId: generation.job.id,
-          stage: "elevenlabs_audio",
-          scriptSegmentId
-        });
-        if (process.env.NODE_ENV === "development") {
-          console.info("[quadratics] regenerated narration", nextGeneration);
-        }
-        setViewState(stateForLesson(nextGeneration.lesson as Lesson, undefined, undefined, nextGeneration));
-      } catch (narrationError) {
-        if (process.env.NODE_ENV === "development") {
-          console.error("[quadratics] narration regeneration failed", narrationError);
-        }
-        setViewState(stateForLesson(lesson, script, narration, generation));
-      } finally {
-        finishPipelineOperation();
-      }
-    });
-  }
-
   const disabled = isPending || viewState.kind === "submitting";
   const lesson =
     viewState.kind === "success" || viewState.kind === "unsupported" || viewState.kind === "submitting"
@@ -184,7 +132,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     (viewState.speechMarkupLoading === true || loadingStage === "elevenlabs_audio");
   const narrationLoading =
     viewState.kind === "submitting" &&
-    (viewState.narrationLoading === true || loadingStage === "elevenlabs_audio");
+    viewState.narrationLoading === true;
 
   return (
     <div className="w-full">
@@ -288,7 +236,6 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           actionDisabled={disabled}
           narrationLoading={narrationLoading}
           loadingStage={loadingStage}
-          onGenerateNarration={generation ? retryNarration : undefined}
           onGenerateScript={runScript}
           onRunStage={(stage, options) => runStage(stage, options)}
           speechMarkupLoading={speechMarkupLoading}

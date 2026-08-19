@@ -27,6 +27,7 @@ ArtifactStage = Literal[
 class ArtifactStorageObject(ApiModel):
     bucket: str = Field(min_length=1)
     path: str = Field(min_length=1)
+    signed_url: str | None = None
     content_type: str | None = None
     size_bytes: int | None = Field(default=None, ge=0)
     checksum_sha256: str | None = Field(default=None, min_length=1)

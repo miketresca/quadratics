@@ -146,13 +146,14 @@ describe("LessonResult", () => {
     document.body.append(container);
     const root = createRoot(container);
     const onGenerateScript = vi.fn();
-    const onGenerateNarration = vi.fn();
+    const onRunStage = vi.fn();
 
     await act(async () => {
       root.render(
         <LessonResult
           lesson={scriptResponse.lesson as never}
           onGenerateScript={onGenerateScript}
+          onRunStage={onRunStage}
         />
       );
     });
@@ -171,7 +172,7 @@ describe("LessonResult", () => {
       root.render(
         <LessonResult
           lesson={scriptResponse.lesson as never}
-          onGenerateNarration={onGenerateNarration}
+          onRunStage={onRunStage}
           script={scriptResponse.script as never}
         />
       );
@@ -184,7 +185,7 @@ describe("LessonResult", () => {
       narrationButton?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
 
-    expect(onGenerateNarration).toHaveBeenCalledOnce();
+    expect(onRunStage).toHaveBeenCalledWith("elevenlabs_audio");
 
     await act(async () => {
       root.unmount();
@@ -201,8 +202,8 @@ describe("LessonResult", () => {
         <LessonResult
           actionDisabled
           lesson={scriptResponse.lesson as never}
-          onGenerateNarration={vi.fn()}
           onGenerateScript={vi.fn()}
+          onRunStage={vi.fn()}
           narration={
             {
               status: "completed",
@@ -424,7 +425,9 @@ describe("LessonResult", () => {
             {
               bucket: "generated-media",
               path: "user-1/generation-1/narration/audio-artifact.mp3",
-              contentType: "audio/mpeg"
+              signedUrl: "https://media.example/audio-artifact.mp3",
+              contentType: "audio/mpeg",
+              metadata: {scriptSegmentId: "script_factor"}
             }
           ],
           isCurrent: true,
@@ -504,6 +507,7 @@ describe("LessonResult", () => {
             {
               bucket: "generated-media",
               path: "user-1/generation-1/renders/video-artifact.mp4",
+              signedUrl: "https://media.example/video-artifact.mp4",
               contentType: "video/mp4"
             }
           ],
@@ -523,6 +527,7 @@ describe("LessonResult", () => {
     expect(container.textContent).toContain("Now factor the quadratic");
     expect(container.textContent).toContain("write_math -> factor_line");
     expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/narration/audio-artifact.mp3");
+    expect(container.querySelector('audio[src="https://media.example/audio-artifact.mp3"]')).not.toBeNull();
 
     const regeneratePlan = container.querySelector('button[aria-label="Regenerate animation plan"]');
     await act(async () => {
@@ -538,6 +543,7 @@ describe("LessonResult", () => {
 
     expect(container.textContent).toContain("base video ready");
     expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/renders/video-artifact.mp4");
+    expect(container.querySelector('video[src="https://media.example/video-artifact.mp4"]')).not.toBeNull();
 
     await act(async () => {
       root.unmount();

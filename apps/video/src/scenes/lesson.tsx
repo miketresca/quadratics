@@ -7,13 +7,14 @@ import {writeMath} from "../actions/writeMath";
 import {chalkSfxTracksForTimeline} from "../audio/chalkEffects";
 import {Blackboard} from "../components/Blackboard";
 import {goldenRenderInput} from "../data/golden";
+import generatedRenderInput from "../data/render-input.generated.json";
 import {board} from "../styles/board";
 import {cuesInTimelineOrder, flattenLessonLines, lineById} from "../timeline/input";
 
 export default makeScene2D(function* (view) {
   view.fill(board.background);
 
-  const input = goldenRenderInput;
+  const input = generatedRenderInput ?? goldenRenderInput;
   const lines = flattenLessonLines(input.lesson);
   const linesById = lineById(lines);
   const lineRefs = lines.map(() => createRef<Txt>());

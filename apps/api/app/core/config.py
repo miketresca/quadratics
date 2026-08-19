@@ -16,7 +16,18 @@ class Settings(BaseSettings):
     supabase_jwks_url: str = ""
     default_generation_credits: int = 20
     allowed_origins: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["http://localhost:3000"]
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:3010",
+            "http://localhost:3011",
+            "http://localhost:3012",
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:3001",
+            "http://127.0.0.1:3010",
+            "http://127.0.0.1:3011",
+            "http://127.0.0.1:3012",
+        ]
     )
     app_environment: str = "production"
     openai_api_key: str = ""
@@ -28,6 +39,9 @@ class Settings(BaseSettings):
     elevenlabs_model_id: str = "eleven_multilingual_v2"
     elevenlabs_male_voice_id: str = ""
     elevenlabs_female_voice_id: str = ""
+    generated_media_bucket: str = "generated-media"
+    motion_canvas_render_command: str = ""
+    motion_canvas_render_timeout_seconds: int = 120
 
     @field_validator("allowed_origins", mode="before")
     @classmethod

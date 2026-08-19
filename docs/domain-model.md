@@ -16,7 +16,7 @@
 - Base video: rendered educational blackboard video artifact. In the current product mode, this is still produced when the UI says `Audio only`; that label means only the optional avatar is omitted.
 - Instructor: placeholder data record such as `male` or `female`.
 - Generation job: owned audit record for a generation attempt.
-- Credit transaction: ledger entry that grants or consumes generation credits.
+- Credit transaction: legacy ledger entry from the initial scaffold. It is not part of the current user-facing internal pipeline.
 
 Exact math values are preserved as strings and LaTeX. Display strings are not the only mathematical representation. Script text may explain the deterministic math, but it is not a source of mathematical truth.
 

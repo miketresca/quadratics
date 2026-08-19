@@ -6,13 +6,28 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.dependencies.auth import get_current_user
+from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENVIRONMENT", "test")
+
+
 @pytest.fixture
 def app() -> FastAPI:
-    return create_app()
+    get_settings.cache_clear()
+    test_app = create_app()
+    test_app.dependency_overrides[get_settings] = lambda: Settings(
+        supabase_url="",
+        supabase_service_role_key="",
+        supabase_anon_key="",
+        supabase_jwt_secret="test-secret",
+        supabase_jwks_url="",
+    )
+    return test_app
 
 
 @pytest_asyncio.fixture

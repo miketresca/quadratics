@@ -18,7 +18,11 @@ from app.services.animation.base import AnimationPlanProvider
 from app.services.animation.builder import build_animation_plan
 from app.services.animation.resolver import TimelineResolutionError, resolve_animation_timeline
 from app.services.artifacts import ArtifactLifecycleService, InMemoryArtifactRepository
-from app.services.artifacts.repository import ArtifactDependencyRecord, ArtifactRecord
+from app.services.artifacts.repository import (
+    ArtifactDependencyRecord,
+    ArtifactRecord,
+    ArtifactStorageReference,
+)
 from app.services.jobs.generation_jobs import (
     GenerationJobRecord,
     InMemoryGenerationJobRepository,
@@ -366,15 +370,17 @@ class SolveGenerationService:
             user_id=user_id,
         )
         timeline_artifact = self._current_required(generation_job_id, "resolved_timeline")
+        narration_artifact = self._current_required(generation_job_id, "elevenlabs_audio")
         stage_run = self._lifecycle.start_stage(
             generation_job_id=generation_job_id,
             user_id=user_id,
             stage="motion_canvas_render",
             input_payload={
                 "timelineArtifactId": timeline_artifact.id,
+                "narrationArtifactId": narration_artifact.id,
                 "rendererVersion": renderer.__class__.__name__,
             },
-            upstream_artifact_ids=[timeline_artifact.id],
+            upstream_artifact_ids=[timeline_artifact.id, narration_artifact.id],
             provider="motion_canvas",
             model=renderer.__class__.__name__,
             force=force,
@@ -382,13 +388,30 @@ class SolveGenerationService:
         if stage_run.cache_hit:
             return self.snapshot_for_job(job=job, lesson=lesson)
         duration_seconds = float(timeline_artifact.payload.get("durationSeconds") or 0)
-        result = renderer.render(
-            RenderRequest(
-                generation_job_id=generation_job_id,
-                timeline_artifact_id=timeline_artifact.id,
-                duration_seconds=duration_seconds,
+        try:
+            result = renderer.render(
+                RenderRequest(
+                    generation_job_id=generation_job_id,
+                    timeline_artifact_id=timeline_artifact.id,
+                    duration_seconds=duration_seconds,
+                    render_input={
+                        "lesson": lesson.model_dump(mode="json", by_alias=True),
+                        "timeline": timeline_artifact.payload,
+                        "narration": narration_artifact.payload,
+                        "narrationStorageObjects": [
+                            _storage_reference_payload(storage_reference)
+                            for storage_reference in narration_artifact.storage_objects
+                        ],
+                    },
+                )
             )
-        )
+        except RuntimeError as exc:
+            self._artifacts.fail_attempt(
+                stage_run.artifact.id,
+                error_code="motion_canvas_render_failed",
+                error_message=str(exc),
+            )
+            return self.snapshot_for_job(job=job, lesson=lesson)
         video_ref = media_store.put(
             path=f"{user_id}/{generation_job_id}/renders/{stage_run.artifact.id}.mp4",
             content=result.content,
@@ -405,6 +428,7 @@ class SolveGenerationService:
                 ArtifactStorageObject(
                     bucket=video_ref.bucket,
                     path=video_ref.path,
+                    signed_url=video_ref.signed_url,
                     content_type=video_ref.content_type,
                     size_bytes=video_ref.size_bytes,
                     checksum_sha256=video_ref.checksum_sha256,
@@ -511,6 +535,7 @@ def _artifact_schema(artifact: ArtifactRecord) -> GenerationArtifact:
             ArtifactStorageObject(
                 bucket=storage_reference.bucket,
                 path=storage_reference.path,
+                signed_url=storage_reference.signed_url,
                 content_type=storage_reference.content_type,
                 size_bytes=storage_reference.size_bytes,
                 checksum_sha256=storage_reference.checksum_sha256,
@@ -538,3 +563,18 @@ def _dependency_schema(dependency: ArtifactDependencyRecord) -> GenerationArtifa
         metadata=dependency.metadata,
         created_at=dependency.created_at,
     )
+
+
+def _storage_reference_payload(
+    storage_reference: ArtifactStorageReference,
+) -> dict[str, object | None]:
+    return {
+        "bucket": storage_reference.bucket,
+        "path": storage_reference.path,
+        "signedUrl": storage_reference.signed_url,
+        "contentType": storage_reference.content_type,
+        "sizeBytes": storage_reference.size_bytes,
+        "checksumSha256": storage_reference.checksum_sha256,
+        "durationSeconds": storage_reference.duration_seconds,
+        "metadata": storage_reference.metadata,
+    }

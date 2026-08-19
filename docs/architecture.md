@@ -50,4 +50,4 @@ ElevenLabs alignment is the timestamp source of truth. The resolver maps planner
 
 ## Current Implementation Note
 
-The repository now has in-memory artifact/media repositories and a development render adapter for local iteration and tests. The Supabase migration defines the durable artifact shape, but production persistence, private object storage, signed playback URLs, and real Motion Canvas render invocation still need to replace the development adapters.
+The repository has both in-memory adapters for tests/unconfigured local runs and Supabase-backed adapters for generation jobs, artifacts, private media upload, and signed playback URLs. Rendering is behind a command adapter; when `MOTION_CANVAS_RENDER_COMMAND` is set, the API passes render input/output paths to the configured Motion Canvas command. Without that setting, tests and local development use the development renderer.

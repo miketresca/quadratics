@@ -1,3 +1,3 @@
-from app.services.storage.media_store import InMemoryMediaStore, MediaStore
+from app.services.storage.media_store import InMemoryMediaStore, MediaStore, SupabaseMediaStore
 
-__all__ = ["InMemoryMediaStore", "MediaStore"]
+__all__ = ["InMemoryMediaStore", "MediaStore", "SupabaseMediaStore"]

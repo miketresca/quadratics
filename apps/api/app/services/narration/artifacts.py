@@ -162,6 +162,7 @@ class NarrationArtifactService:
         return ArtifactStorageReference(
             bucket=reference.bucket,
             path=reference.path,
+            signed_url=reference.signed_url,
             content_type=reference.content_type,
             size_bytes=reference.size_bytes,
             checksum_sha256=reference.checksum_sha256,

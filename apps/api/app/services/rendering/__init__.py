@@ -1,3 +1,11 @@
-from app.services.rendering.motion_canvas import DevelopmentMotionCanvasRenderer
+from app.services.rendering.motion_canvas import (
+    CommandMotionCanvasRenderer,
+    DevelopmentMotionCanvasRenderer,
+    MotionCanvasRenderError,
+)
 
-__all__ = ["DevelopmentMotionCanvasRenderer"]
+__all__ = [
+    "CommandMotionCanvasRenderer",
+    "DevelopmentMotionCanvasRenderer",
+    "MotionCanvasRenderError",
+]

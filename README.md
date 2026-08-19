@@ -48,6 +48,21 @@ ELEVENLABS_MALE_VOICE_ID=
 ELEVENLABS_FEMALE_VOICE_ID=
 ```
 
+Generated media uses the private Supabase Storage bucket configured by:
+
+```env
+GENERATED_MEDIA_BUCKET=generated-media
+```
+
+The API render stage calls a command-backed Motion Canvas renderer when configured:
+
+```env
+MOTION_CANVAS_RENDER_COMMAND=pnpm --filter @quadratics/video render
+MOTION_CANVAS_RENDER_TIMEOUT_SECONDS=120
+```
+
+The render command receives `QUADRATICS_RENDER_INPUT_PATH` and `QUADRATICS_RENDER_OUTPUT_PATH` from the API, renders Motion Canvas frames headlessly, downloads signed narration segment URLs when present, and assembles an MP4 with `ffmpeg`.
+
 HeyGen keys are user-provided through the account menu API key modal. They are encrypted server-side and stored in Supabase. Set this Railway API environment variable before enabling saves:
 
 ```env
@@ -69,6 +84,7 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 - `pnpm api:dev` - Run FastAPI
 - `pnpm video:dev` - Run Motion Canvas
 - `pnpm video:fixture` - Validate and load the golden local video fixture without OpenAI or ElevenLabs calls
+- `pnpm --filter @quadratics/video render` - Render Motion Canvas from `QUADRATICS_RENDER_INPUT_PATH` to `QUADRATICS_RENDER_OUTPUT_PATH`
 - `pnpm sb:login` - Authenticate the local Supabase CLI
 - `pnpm sb:link` - Link `infra/supabase` to the configured Supabase project
 - `pnpm sb:push:dry` - Preview Supabase migration changes
@@ -82,13 +98,13 @@ Use `http://localhost:3000` for the web app. `http://localhost:9000` is the Moti
 
 ## Pipeline
 
-Generation is artifact-backed. The API can create a generation, run one stage, run the full pipeline, and return a snapshot of versioned artifacts. Current stages are:
+Generation is artifact-backed. The API can create a generation, run one stage, and return a snapshot of versioned artifacts. The UI is intentionally step-by-step so each boundary can be inspected before the next provider/render stage runs. Current stages are:
 
 ```text
 solution -> lesson -> teacher_script -> elevenlabs_request -> elevenlabs_audio -> animation_plan -> resolved_timeline -> motion_canvas_render -> base_video
 ```
 
-Normal stage reruns reuse matching completed artifacts. Force reruns create a new artifact version and mark affected downstream artifacts stale. This lets you regenerate an animation plan or render repeatedly without spending ElevenLabs credits when narration has not changed.
+Normal stage reruns reuse matching completed artifacts. Force reruns create a new artifact version and mark affected downstream artifacts stale. The UI currently keeps progression manual and does not expose the old A-to-Z control or ElevenLabs audio regeneration controls, so animation plans and renders can be regenerated repeatedly without calling ElevenLabs again.
 
 The golden fixture uses `x^2 + 5x + 6 = 0` and is the preferred workflow for iterating on Motion Canvas/chalk behavior without provider credentials.
 

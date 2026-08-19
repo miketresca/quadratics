@@ -23,7 +23,6 @@ export function LessonResult({
   loadingStage,
   narration,
   narrationLoading = false,
-  onGenerateNarration,
   onGenerateScript,
   onRunStage,
   speechMarkupLoading = false,
@@ -36,7 +35,6 @@ export function LessonResult({
   loadingStage?: string;
   narration?: LessonNarration;
   narrationLoading?: boolean;
-  onGenerateNarration?: () => void;
   onGenerateScript?: () => void;
   onRunStage?: (stage: string, options?: StageRunOptions) => void;
   speechMarkupLoading?: boolean;
@@ -86,7 +84,13 @@ export function LessonResult({
           ) : speechMarkupLoading ? (
             <PendingLog accent="amber" className="mt-6" title="elevenlabs_request" />
           ) : effectiveScript?.status === "completed" ? (
-            <RunnableLog accent="amber" className="mt-6" disabled={actionDisabled || !onGenerateNarration} onRun={onGenerateNarration} title="elevenlabs_request" />
+            <RunnableLog
+              accent="amber"
+              className="mt-6"
+              disabled={actionDisabled || !onRunStage}
+              onRun={onRunStage ? () => onRunStage("elevenlabs_audio") : undefined}
+              title="elevenlabs_request"
+            />
           ) : null}
 
           {effectiveNarration ? (
@@ -175,7 +179,15 @@ function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; load
       ) : artifact?.status === "completed" ? (
         <div className="grid min-h-56 content-center gap-3">
           <p className="font-mono text-sm uppercase tracking-wide text-lime-300">base video ready</p>
-          <p className="text-sm text-zinc-300">The render artifact is complete. Playback URLs will be served from private storage.</p>
+          {storageObject?.signedUrl ? (
+            <video className="aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
+              <track kind="captions" />
+            </video>
+          ) : (
+            <>
+              <p className="text-sm text-zinc-300">The render artifact is complete. Waiting for a private playback URL.</p>
+            </>
+          )}
           {storageObject ? <ArtifactStorage object={storageObject} /> : null}
         </div>
       ) : (
@@ -307,6 +319,7 @@ function NarrationLog({
               index={index}
               key={segment.scriptSegmentId}
               segment={segment}
+              storageObject={storageObjectForSegment(artifact, segment.scriptSegmentId)}
             />
           ))}
         </ol>
@@ -318,7 +331,7 @@ function NarrationLog({
           <NarrationMeta narration={narration} />
         </div>
       ) : (
-        <p className="mt-3 text-sm text-zinc-300">{narration.unsupportedReason ?? "Narration is stored as a private media artifact."}</p>
+        <p className="mt-3 text-sm text-zinc-300">{narration.unsupportedReason ?? "Waiting for a playback URL."}</p>
       )}
       {artifact?.storageObjects?.[0] ? <ArtifactStorage object={artifact.storageObjects[0]} /> : null}
       {segments.length > 0 && narration.unsupportedReason ? (
@@ -330,12 +343,15 @@ function NarrationLog({
 
 function NarrationSegmentLog({
   index,
-  segment
+  segment,
+  storageObject
 }: {
   index: number;
   segment: NarrationSegment;
+  storageObject?: NonNullable<GenerationArtifact["storageObjects"]>[number];
 }) {
   const hasInlineAudio = Boolean(segment.audioBase64);
+  const audioSrc = storageObject?.signedUrl ?? (hasInlineAudio ? `data:${segment.audioMimeType ?? "audio/mpeg"};base64,${segment.audioBase64}` : null);
   return (
     <li className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
       <div className="flex items-start justify-between gap-4">
@@ -348,12 +364,12 @@ function NarrationSegmentLog({
           </p>
         </div>
       </div>
-      {hasInlineAudio ? (
-        <audio className="mt-3 w-full" controls src={`data:${segment.audioMimeType ?? "audio/mpeg"};base64,${segment.audioBase64}`}>
+      {audioSrc ? (
+        <audio className="mt-3 w-full" controls src={audioSrc}>
           <track kind="captions" />
         </audio>
       ) : (
-        <p className="mt-3 rounded border border-zinc-800 bg-zinc-950/50 p-3 text-sm text-zinc-400">Audio stored in private media storage.</p>
+        <p className="mt-3 rounded border border-zinc-800 bg-zinc-950/50 p-3 text-sm text-zinc-400">Waiting for a private playback URL.</p>
       )}
     </li>
   );
@@ -488,7 +504,7 @@ function RenderLog({
       title="motion_canvas_render"
     >
       <p className="mt-3 text-sm text-zinc-300">
-        {artifact.status === "completed" ? "Blackboard video render completed with narration and chalk SFX metadata." : artifact.errorMessage ?? "Render artifact is not current."}
+        {artifact.status === "completed" ? "Blackboard video render completed. Stored narration is included when playback URLs are available to the renderer." : artifact.errorMessage ?? "Render artifact is not current."}
       </p>
       {artifact.storageObjects?.[0] ? <ArtifactStorage object={artifact.storageObjects[0]} /> : null}
     </StageCard>
@@ -520,8 +536,7 @@ function StageCard({
         <div className="flex items-center gap-2">
           {artifact?.status === "stale" ? <StageBadge tone="amber">STALE</StageBadge> : null}
           {artifact?.status === "failed" ? <StageBadge tone="red">FAILED</StageBadge> : null}
-          {loading ? <Spinner /> : null}
-          {action}
+          {loading ? <Spinner /> : action}
         </div>
       </div>
       {artifact?.status === "stale" && artifact.staleReason ? (
@@ -557,6 +572,10 @@ function ArtifactStorage({object}: {object: NonNullable<GenerationArtifact["stor
       storage: {object.bucket}/{object.path}
     </p>
   );
+}
+
+function storageObjectForSegment(artifact: GenerationArtifact | undefined, scriptSegmentId: string) {
+  return artifact?.storageObjects?.find((object) => object.metadata?.scriptSegmentId === scriptSegmentId);
 }
 
 function StageBadge({children, tone}: {children: React.ReactNode; tone: "amber" | "red"}) {

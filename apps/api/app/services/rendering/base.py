@@ -7,6 +7,7 @@ class RenderRequest:
     generation_job_id: str
     timeline_artifact_id: str
     duration_seconds: float
+    render_input: dict[str, object]
 
 
 @dataclass(frozen=True)

@@ -9,16 +9,16 @@ severity: medium
 applies_when:
   - "A user needs to inspect or retry one expensive provider step without regenerating the whole lesson."
   - "A generation pipeline has deterministic setup followed by paid or rate-limited provider calls."
-tags: [manual-pipeline, narration, credits, provider-boundary]
+tags: [manual-pipeline, narration, provider-boundary]
 ---
 
 # Manual Artifact Pipeline Controls
 
 ## Context
 
-The lesson pipeline mixes cheap deterministic work with expensive provider calls. Solving a quadratic and building deterministic lesson steps should not burn provider credits. Teacher-script generation, speech-markup formatting, ElevenLabs narration, animation planning, and rendering all need separate artifact boundaries.
+The lesson pipeline mixes cheap deterministic work with provider calls and render work. Solving a quadratic and building deterministic lesson steps should not rerun OpenAI, ElevenLabs, or Motion Canvas. Teacher-script generation, speech-markup formatting, ElevenLabs narration, animation planning, and rendering all need separate artifact boundaries.
 
-During development, users need to inspect the result of each step and retry only the failing or poor-quality provider step.
+During development, users need to inspect the result of each step and retry only the failing or poor-quality downstream step. ElevenLabs audio regeneration is intentionally not exposed in the current UI because narration can be expensive and should remain stable while animation work iterates.
 
 ## Guidance
 
@@ -29,17 +29,17 @@ Expose expensive provider calls as independently runnable pipeline steps. The de
 - running `animation_plan`
 - running `resolved_timeline`
 - running `motion_canvas_render`
-- running the full pipeline with a deliberate `Run A to Z` action
+- continuing one visible stage at a time through the pipeline
 
 Keep the logs aligned with the real provider boundary. `teacher_script` is the high-level narration plan. `elevenlabs_request` is the speech-markup text sent to the narration provider, including SSML break tags. `elevenlabs_audio` is the provider response, alignment, and media reference. `animation_plan` is semantic planner output. `resolved_timeline` is deterministic timing. `motion_canvas_render` is the render attempt.
 
-For retries, preserve successful prior work when the replacement attempt fails. A failed stage attempt should attach the new error message to that stage without discarding useful upstream artifacts.
+For retries, preserve successful prior work when the replacement attempt fails. A failed stage attempt should attach the new error message to that stage without discarding useful upstream artifacts. Prefer exposing retry controls first on animation planning, timeline resolution, and Motion Canvas rendering; keep narration regeneration behind deliberate developer/API workflows until the product needs it again.
 
 When a stage is regenerated, mark affected downstream artifacts stale rather than deleting them. Stale plans, timelines, and renders are debugging material, but they should not be presented as the current final video.
 
 ## Why This Matters
 
-Manual pipeline controls reduce accidental spend. They also make provider failures easier to debug because each boundary has a visible input and output.
+Manual pipeline controls reduce accidental provider calls. They also make provider failures easier to debug because each boundary has a visible input and output.
 
 The segment boundary is also the Motion Canvas boundary. When each narration segment is tied to one script segment and teaching step, the animation timeline can map audio, board state, and math-line visibility without splitting a single long audio file later.
 
@@ -64,25 +64,23 @@ solve
   -> run motion_canvas_render
 ```
 
-Full flow:
+Step-by-step flow:
 
 ```text
 solve
-  -> Run A to Z
-  -> teacher_script
-  -> elevenlabs_request
-  -> elevenlabs_audio
-  -> animation_plan
-  -> resolved_timeline
-  -> motion_canvas_render
-  -> base_video
+  -> run teacher_script
+  -> run elevenlabs_request + elevenlabs_audio
+  -> run animation_plan
+  -> run resolved_timeline
+  -> run motion_canvas_render
+  -> inspect base_video in Lesson view
 ```
 
 Stale behavior:
 
 ```text
-regenerate elevenlabs_audio
-  -> keep previous animation_plan/timeline/render inspectable
+regenerate animation_plan
+  -> keep previous timeline/render inspectable
   -> mark affected downstream artifacts stale
   -> require explicit rerun before showing a new current video
 ```
@@ -91,4 +89,3 @@ regenerate elevenlabs_audio
 
 - [Video Pipeline](../../video-pipeline.md)
 - [Auth and Usage](../../auth-and-usage.md)
-- [Credit Ledger Decision](../../decisions/005-credit-ledger.md)

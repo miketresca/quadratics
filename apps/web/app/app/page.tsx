@@ -89,12 +89,7 @@ function AccountMenu({
           </div>
         </div>
         {user !== null ? (
-          <>
-            <ApiKeysDialog />
-            <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-400" disabled type="button">
-              Usage
-            </button>
-          </>
+          <ApiKeysDialog />
         ) : null}
         {canSignOut ? (
           <form action={signOut} className="mt-2 border-t border-zinc-800 pt-2">

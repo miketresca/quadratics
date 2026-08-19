@@ -17,6 +17,7 @@ export type ArtifactStage =
 export interface ArtifactStorageObject {
   bucket: string;
   path: string;
+  signedUrl?: string | null;
   contentType?: string | null;
   sizeBytes?: number | null;
   checksumSha256?: string | null;

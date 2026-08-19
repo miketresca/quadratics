@@ -3,6 +3,7 @@ from app.services.artifacts.repository import (
     ArtifactDependencyRecord,
     ArtifactRecord,
     InMemoryArtifactRepository,
+    SupabaseArtifactRepository,
 )
 
 __all__ = [
@@ -11,4 +12,5 @@ __all__ = [
     "ArtifactRecord",
     "InMemoryArtifactRepository",
     "StageRun",
+    "SupabaseArtifactRepository",
 ]
