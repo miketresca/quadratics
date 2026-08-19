@@ -37,10 +37,15 @@ LLMs may write instructional language or choose semantic animation cues after th
 The pipeline is a build system:
 
 ```text
-solution -> lesson -> teacher_script -> elevenlabs_request -> elevenlabs_audio -> heygen_avatar (optional) -> animation_plan -> resolved_timeline -> motion_canvas_render -> base_video
+solution -> lesson -> real_world_context (optional)
+                 -> teacher_script -> elevenlabs_request -> elevenlabs_audio
+                 -> heygen_avatar (optional)
+                 -> animation_plan -> resolved_timeline -> motion_canvas_render -> base_video
 ```
 
 Every stage should consume persisted upstream artifacts and produce a persisted downstream artifact. Reruns should reuse matching completed artifacts unless force regeneration is explicit. Replacing an upstream artifact should mark affected downstream artifacts stale rather than deleting them.
+
+`real_world_context` is an optional paid lesson-enrichment stage. It may explain deterministic backend-provided facts, but it must not introduce new math or block the core video pipeline.
 
 `heygen_avatar` is an optional paid stage after ElevenLabs audio exists. The standard pipeline still produces the Motion Canvas base video; optional avatar work should only stale downstream render artifacts.
 

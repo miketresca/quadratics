@@ -53,6 +53,8 @@ describe("LessonResult", () => {
     expect(container.textContent).toContain("IRL Example");
     expect(container.textContent).toContain("Vertex");
     expect(container.textContent).toContain("Graph");
+    expect(container.textContent).toContain("0.5, 3");
+    expect(container.querySelectorAll("circle.fill-cyan-200").length).toBe(2);
     expect(container.textContent).toContain("Run real_world_context from the Logs tab");
     expect(container.querySelector('button[aria-label="Generate real-world context"]')).toBeNull();
 

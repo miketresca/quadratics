@@ -16,6 +16,11 @@ The instructional solving strategy attached to a lesson, such as factoring or an
 ### Lesson
 The deterministic teaching structure produced after an equation is parsed, validated, solved, and matched to an instructional method.
 
+### Unsupported Instructional Method
+A valid quadratic whose solution method is outside the current walkthrough-video scope.
+
+The v0 demo intentionally supports clean rational factoring first so short generated videos can use reliable method-specific templates, prompts, animation plans, and QA. Square-root, completing-the-square, and quadratic-formula lessons should be added as explicit new method templates rather than forced through factoring.
+
 ### Teaching Step
 A meaningful unit of instruction inside a lesson that coordinates narration, math lines, animation cues, and video timing.
 
@@ -65,6 +70,11 @@ The generated audio and timing unit corresponding to one script segment.
 
 Narration segments are the bridge between instructional text and timed animation because they carry the speech and alignment data used by later stages.
 
+### Real-World Context
+An optional paid lesson-enrichment artifact that turns deterministic lesson and graph facts into a compact Algebra 1 scenario.
+
+Real-world context contributes to average lesson/video cost because it is part of the generated learning experience. It does not block or stale the video pipeline.
+
 ### Provider Boundary
 The adapter layer that keeps external services separate from core math, lesson, artifact, and rendering logic.
 
@@ -107,4 +117,4 @@ A legacy scaffold ledger entry from the initial app shape.
 
 ## Relationships
 
-A Generation Job owns the artifacts for one lesson build. A Lesson contains Teaching Steps, and Teaching Steps contain Math Lines. Scripts and Narration Segments follow the Teaching Step structure, while Animation Plans and Resolved Animation Timelines reference the same lesson material to keep visuals aligned with deterministic math. Provider Usage Events describe paid calls made while producing artifacts, but they do not replace artifacts as the pipeline source of truth.
+A Generation Job owns the artifacts for one lesson build. A Lesson contains Teaching Steps, and Teaching Steps contain Math Lines. Scripts and Narration Segments follow the Teaching Step structure, while Animation Plans and Resolved Animation Timelines reference the same lesson material to keep visuals aligned with deterministic math. Provider Usage Events describe paid calls made while producing artifacts, but they do not replace artifacts as the pipeline source of truth. Real-World Context attaches to a Lesson; HeyGen Avatar attaches to Narration Segments; both are optional paid branches around the standard Base Video path.

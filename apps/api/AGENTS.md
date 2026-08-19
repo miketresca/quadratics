@@ -33,6 +33,8 @@ The credit ledger is legacy infrastructure. Do not expand it for new product beh
 
 `teacher_script` is high-level narration. `elevenlabs_request` is the conversation-ready speech text and SSML break-tag artifact. `elevenlabs_audio` is generated audio plus ElevenLabs alignment and storage references.
 
+`real_world_context` is optional lesson enrichment for the Lesson tab. It may call OpenAI, records usage costs like other paid LLM stages, and must only explain deterministic lesson facts.
+
 The speech-markup provider should keep narration concise enough for short videos. The current golden-case target should stay comfortably under 60 seconds.
 
 The animation planner creates semantic cues only. The resolver maps narration trigger phrases to ElevenLabs alignment and creates exact animation, caption, and SFX windows.

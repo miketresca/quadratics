@@ -6,6 +6,7 @@ from app.providers.heygen.avatar_provider import HeyGenAvatarVideoProvider
 from app.schemas.narration import AudioAlignment
 from app.services.animation.base import AnimationPlanningRequest, AnimationPlanProvider
 from app.services.avatars.development import DevelopmentAvatarVideoProvider
+from app.services.context.base import RealWorldContextProvider, RealWorldContextRequest
 from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
 from app.services.storage.media_store import MediaStore
 
@@ -13,6 +14,11 @@ from app.services.storage.media_store import MediaStore
 class FailingAnimationPlanProvider(AnimationPlanProvider):
     async def generate_animation_plan(self, request: AnimationPlanningRequest):
         raise RuntimeError("planner exploded")
+
+
+class FailingRealWorldContextProvider(RealWorldContextProvider):
+    async def generate(self, request: RealWorldContextRequest):
+        raise RuntimeError("context exploded")
 
 
 class CountingNarrationProvider(NarrationProvider):
@@ -227,6 +233,54 @@ async def test_real_world_context_stage_persists_optional_lesson_context(
     assert context_artifact["payload"]["status"] == "completed"
     assert context_artifact["payload"]["title"]
     assert context_artifact["configMetadata"] == {"optionalLessonEnrichment": True}
+
+
+@pytest.mark.asyncio
+async def test_real_world_context_stage_persists_failed_context_payload(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_environment="test",
+        script_generation_enabled=True,
+        openai_api_key="test-key",
+    )
+    monkeypatch.setattr(
+        generations,
+        "_real_world_context_provider",
+        lambda _settings: FailingRealWorldContextProvider(),
+    )
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+
+        response = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/real_world_context",
+            json={},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    context_artifact = next(
+        artifact
+        for artifact in response.json()["artifacts"]
+        if artifact["stage"] == "real_world_context"
+    )
+    assert context_artifact["status"] == "failed"
+    assert context_artifact["errorCode"] == "real_world_context_failed"
+    assert context_artifact["payload"] == {
+        "status": "failed",
+        "title": "",
+        "scenario": "",
+        "takeaway": "",
+        "unsupportedReason": "context exploded",
+        "providerMetadata": {},
+    }
 
 
 @pytest.mark.asyncio

@@ -140,7 +140,7 @@ async def test_usage_summary_averages_heygen_runs_instead_of_summing_per_generat
 
 
 @pytest.mark.asyncio
-async def test_usage_summary_excludes_optional_context_from_video_average():
+async def test_usage_summary_includes_real_world_context_in_video_average():
     repository = InMemoryUsageCostRepository()
     user_id = "9f09c87d-1111-4222-8333-111111111111"
     generation_id = "9f09c87d-2222-4333-8444-222222222222"
@@ -169,5 +169,5 @@ async def test_usage_summary_excludes_optional_context_from_video_average():
     summary = await repository.summary(user_id)
 
     assert summary.user_total_cost_usd == pytest.approx(0.46)
-    assert summary.global_average_cost_per_video_without_avatar_usd == pytest.approx(0.06)
-    assert summary.global_average_cost_per_video_with_avatar_usd == pytest.approx(0.06)
+    assert summary.global_average_cost_per_video_without_avatar_usd == pytest.approx(0.46)
+    assert summary.global_average_cost_per_video_with_avatar_usd == pytest.approx(0.46)

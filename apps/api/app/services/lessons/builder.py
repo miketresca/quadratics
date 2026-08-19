@@ -28,8 +28,10 @@ def build_lesson(solution: QuadraticSolution) -> LessonResponse:
             solutions=roots,
             steps=[],
             unsupported_reason=(
-                "This quadratic is valid, but v0 only builds lessons for clean "
-                "rational factoring."
+                "This quadratic is valid, but this demo only builds walkthrough videos "
+                "for clean rational factoring. Supporting square-root, completing-the-square, "
+                "and quadratic-formula lessons requires separate step templates, prompts, "
+                "animation plans, and QA for each method."
             ),
         )
 

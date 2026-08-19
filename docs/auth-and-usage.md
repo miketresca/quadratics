@@ -10,4 +10,6 @@ The product is currently an internal tool, so there is no user-facing credit sys
 
 Provider calls should be independently runnable and independently auditable. A script generation, speech-markup request, narration segment, optional HeyGen avatar clip, animation-plan request, or video render should attach to a user-owned generation job and artifact attempt. Normal reruns should reuse matching completed artifacts. Force reruns should be explicit because they may call OpenAI, ElevenLabs, HeyGen, or the render stack again and stale downstream artifacts.
 
+`real_world_context` is also a paid OpenAI-backed artifact. It enriches the Lesson tab rather than the video render, but its token usage should still count toward user spend and the base/with-avatar average lesson cost because it is part of the generated learning experience.
+
 Email addresses and stored equation history are user data. Do not log bearer tokens, service-role keys, raw provider keys, or raw request bodies by default. Account/data deletion and retention policy need a follow-up decision before production launch.

@@ -620,9 +620,9 @@ function parabolaModel(lesson: Lesson) {
     .filter((value): value is number => value !== null);
   const importantXs = [vertexX, ...realRootValues, 0].filter(Number.isFinite);
   const maxDistance = Math.max(3, ...importantXs.map((value) => Math.abs(value - vertexX)));
-  const branchEnd = vertexX + maxDistance + 1;
-  const xMin = Math.min(vertexX, 0);
-  const xMax = Math.max(branchEnd, 0);
+  const xPadding = Math.max(1, maxDistance * 0.2);
+  const xMin = Math.min(...importantXs, vertexX) - xPadding;
+  const xMax = Math.max(...importantXs, vertexX + maxDistance) + xPadding;
   const rawPoints = Array.from({length: 121}, (_, index) => {
     const ratio = index / 120;
     const x = xMin + (xMax - xMin) * ratio;
@@ -727,7 +727,13 @@ function AnswerLog({lesson}: {lesson: Lesson}) {
         </div>
       </dl>
       {lesson.unsupportedReason ? (
-        <p className="mt-4 rounded border border-amber-500/50 bg-amber-950/40 p-3 text-sm text-amber-100">{lesson.unsupportedReason}</p>
+        <div className="mt-4 rounded border border-amber-500/40 bg-amber-950/25 p-4 text-sm text-amber-50">
+          <p className="font-mono text-[11px] uppercase tracking-wide text-amber-300">Valid equation / unsupported lesson method</p>
+          <p className="mt-2 leading-6">{lesson.unsupportedReason}</p>
+          <p className="mt-3 text-amber-100/75">
+            The short-term scope keeps the generation pipeline reliable for 30-90 second homework walkthroughs. Future support can add method-specific templates for square-root, completing-the-square, and quadratic-formula lessons without changing the artifact pipeline.
+          </p>
+        </div>
       ) : null}
     </div>
   );

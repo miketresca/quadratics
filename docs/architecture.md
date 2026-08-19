@@ -11,6 +11,7 @@ User
   -> SymPy Solver
   -> Instructional Strategy
   -> Lesson Model
+  -> Optional Real-World Context Provider Boundary
   -> Script Provider Boundary
   -> Speech Markup Provider Boundary
   -> Narration Provider Boundary
@@ -32,6 +33,7 @@ Generation orchestration is artifact-backed. Each stage reads persisted upstream
 Provider-specific code belongs behind adapters:
 
 - script and speech markup providers live under API provider/service boundaries
+- real-world context lives behind a provider boundary and may only explain deterministic lesson facts
 - ElevenLabs narration lives behind the narration provider boundary
 - animation planning lives behind an animation-plan provider boundary
 - rendering lives behind a render adapter so the API does not depend on Motion Canvas CLI details

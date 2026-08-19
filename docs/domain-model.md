@@ -10,6 +10,7 @@
 - Script segment: narration text for one teaching step, with references to the math-line IDs it explains.
 - Speech markup: provider-ready conversational text, including SSML break tags, generated from the teacher script before narration.
 - Narration segment: audio, speech text, and timing metadata generated for one script segment.
+- Real-world context: optional LLM-assisted Lesson tab enrichment that explains deterministic lesson and graph facts in a short Algebra 1 scenario.
 - Generation artifact: versioned output of one pipeline stage with lifecycle status, input hash, upstream artifact IDs, provider metadata, cache metadata, and optional storage references.
 - Animation plan: constrained semantic visual plan generated from lesson/script/narration artifacts. It names supported primitives and narration trigger phrases, but does not contain exact render timing.
 - Resolved animation timeline: deterministic timestamped animation and SFX windows derived from an animation plan and ElevenLabs alignment.
@@ -22,3 +23,5 @@
 Exact math values are preserved as strings and LaTeX. Display strings are not the only mathematical representation. Script text may explain the deterministic math, but it is not a source of mathematical truth.
 
 Artifacts are the pipeline source of truth. A downstream stage should load persisted upstream artifacts and write a new downstream artifact. Reruns should reuse matching completed artifacts unless the user explicitly forces regeneration.
+
+Real-world context is an artifact, not mathematical truth. It can make the completed lesson easier to understand, but it must be generated from deterministic lesson data and can be rerun without changing video artifacts.

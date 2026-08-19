@@ -18,12 +18,13 @@ The main workflow is manual and stage-by-stage. Submit an equation to get the de
 The visible stage order should match the backend artifact pipeline:
 
 ```text
+real_world_context (optional lesson enrichment)
 teacher_script -> elevenlabs_request -> elevenlabs_audio -> heygen_avatar -> animation_plan -> resolved_timeline -> motion_canvas_render
 ```
 
-`elevenlabs_request` should show the exact speech-markup text that will be sent to ElevenLabs, including break tags. `elevenlabs_audio` should show generated narration playback and segment metadata. `heygen_avatar` is optional, paid, and should clearly show estimates before running. Animation logs should make the relationship clear: narration phrase, timestamp, visual action, and resolved timing.
+`real_world_context` should be runnable from Logs and displayed in the Lesson tab IRL Example block; it should not be runnable from Lesson. `elevenlabs_request` should show the exact speech-markup text that will be sent to ElevenLabs, including break tags. `elevenlabs_audio` should show generated narration playback and segment metadata. `heygen_avatar` is optional, paid, and should clearly show estimates before running. Animation logs should make the relationship clear: narration phrase, timestamp, visual action, and resolved timing.
 
-The final rendered video belongs in the Lesson view. Logs may mention render success and metadata, but they are not the primary video playback surface.
+The final rendered video belongs in the Lesson view. Logs may mention render success and metadata, but they are not the primary video playback surface. The App/Demo toggle should preserve App state after switching tabs; avoid remounting the equation workflow just to show README/demo content.
 
 Do not add marketing/landing-page patterns inside the authenticated app. This is an operator tool, not a public homepage.
 

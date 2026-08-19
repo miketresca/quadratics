@@ -12,6 +12,7 @@ The project exists to make educational video generation inspectable and repeatab
 - Conversation-ready ElevenLabs request generation with SSML break tags
 - ElevenLabs narration with per-segment audio, character alignment, and signed playback URLs
 - Optional HeyGen avatar clip generation from completed ElevenLabs narration segments
+- Optional real-world lesson context for the Lesson tab, generated from deterministic lesson data
 - Artifact-backed pipeline stages with versions, input hashes, stale propagation, cache reuse, and manual reruns
 - Semantic animation planning with constrained visual primitives
 - Deterministic narration-phrase to timestamp resolution from ElevenLabs alignment
@@ -39,6 +40,7 @@ The current pipeline is:
 ```text
 solution
   -> lesson
+  -> real_world_context (optional lesson enrichment)
   -> teacher_script
   -> elevenlabs_request
   -> elevenlabs_audio
@@ -51,7 +53,7 @@ solution
 
 Each stage consumes persisted upstream artifacts and produces a persisted downstream artifact. Normal reruns reuse matching completed artifacts when the input hash is unchanged. Force reruns create a new version and mark affected downstream artifacts stale without deleting them.
 
-The standard path still runs the blackboard video through Motion Canvas and produces a base video. HeyGen avatar generation is an optional paid stage that can be run from the logs after ElevenLabs audio exists; it should only make downstream render artifacts stale.
+The standard path still runs the blackboard video through Motion Canvas and produces a base video. `real_world_context` is an optional Lesson-tab enrichment that can be run from the logs after the deterministic lesson exists; it does not block or stale the video pipeline. HeyGen avatar generation is an optional paid stage that can be run from the logs after ElevenLabs audio exists; it should only make downstream render artifacts stale.
 
 SymPy and deterministic Python code are the source of mathematical truth. LLMs can explain a completed lesson and choose semantic animation cues, but they must never invent roots, transformations, teaching-step IDs, or math-line IDs.
 
@@ -182,6 +184,7 @@ uv run --project apps/api pytest
 
 The product intentionally favors step-by-step execution. Submit an equation to create or reopen the deterministic solution and lesson. Then use the small stage controls in the logs to run or rerun:
 
+- `real_world_context`
 - `teacher_script`
 - `elevenlabs_request`
 - `elevenlabs_audio`
@@ -190,9 +193,9 @@ The product intentionally favors step-by-step execution. Submit an equation to c
 - `resolved_timeline`
 - `motion_canvas_render`
 
-The `elevenlabs_request` log shows the exact conversation-ready text and break tags used to request audio. The `elevenlabs_audio` log shows the generated narration segments and playback controls. The final video belongs in the Lesson view; logs show the production process.
+The `real_world_context` log generates the IRL Example copy shown under the Lesson tab graph. The `elevenlabs_request` log shows the exact conversation-ready text and break tags used to request audio. The `elevenlabs_audio` log shows the generated narration segments and playback controls. The final video belongs in the Lesson view; logs show the production process.
 
-The `heygen_avatar` stage is optional and paid. The UI estimates its cost from completed narration duration before running it.
+The `real_world_context` and `heygen_avatar` stages are optional and paid. Context generation contributes to the base and avatar average video cost because it is part of the lesson experience. The UI estimates HeyGen cost from completed narration duration before running it.
 
 For the golden equation `x^2 + 5x + 6 = 0`, the app can reopen the existing checkpoint for the same user and instructor so refreshes do not throw away completed stages.
 

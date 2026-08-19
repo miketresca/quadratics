@@ -9,8 +9,6 @@ import httpx
 from app.core.config import Settings
 from app.schemas.usage_costs import UsageBreakdownItem, UsageEventItem, UsageSummary
 
-OPTIONAL_NON_VIDEO_STAGES = {"real_world_context"}
-
 
 class UsageCostStorageError(RuntimeError):
     pass
@@ -174,7 +172,7 @@ def _summary_from_events(events: list[UsageCostEvent], *, user_id: str) -> Usage
     average_without_avatar = sum(
         cost
         for stage, cost in average_by_paid_stage.items()
-        if stage not in OPTIONAL_NON_VIDEO_STAGES and stage != "heygen_avatar"
+        if stage != "heygen_avatar"
     )
     average_with_avatar = average_without_avatar + average_by_paid_stage.get("heygen_avatar", 0)
     return UsageSummary(

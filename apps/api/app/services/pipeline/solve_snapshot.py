@@ -242,10 +242,19 @@ class SolveGenerationService:
                 word_budget=word_budget,
             )
         except Exception as exc:
+            failed_context = {
+                "status": "failed",
+                "title": "",
+                "scenario": "",
+                "takeaway": "",
+                "unsupportedReason": str(exc),
+                "providerMetadata": {},
+            }
             self._artifacts.fail_attempt(
                 stage_run.artifact.id,
                 error_code="real_world_context_failed",
                 error_message=str(exc),
+                payload=failed_context,
             )
             return self.snapshot_for_job(job=job, lesson=lesson)
         self._artifacts.complete_attempt(

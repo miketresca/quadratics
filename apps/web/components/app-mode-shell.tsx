@@ -15,6 +15,12 @@ export function AppModeShell({
   readmeMarkdown: string;
 }) {
   const [mode, setMode] = useState<AppMode>("app");
+  const [demoMounted, setDemoMounted] = useState(false);
+
+  function showDemo() {
+    setDemoMounted(true);
+    setMode("notes");
+  }
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-6xl px-4 pb-24 pt-28 sm:px-6 sm:pt-32">
@@ -31,7 +37,7 @@ export function AppModeShell({
           <button
             aria-pressed={mode === "notes"}
             className={modeButtonClass(mode === "notes")}
-            onClick={() => setMode("notes")}
+            onClick={showDemo}
             type="button"
           >
             Demo
@@ -42,9 +48,11 @@ export function AppModeShell({
       <div className={mode === "app" ? "block" : "hidden"} aria-hidden={mode !== "app"}>
         <EquationForm initialUser={initialUser} />
       </div>
-      <div className={mode === "notes" ? "block" : "hidden"} aria-hidden={mode !== "notes"}>
-        <NotesMode readmeMarkdown={readmeMarkdown} />
-      </div>
+      {demoMounted ? (
+        <div className={mode === "notes" ? "block" : "hidden"} aria-hidden={mode !== "notes"}>
+          <NotesMode readmeMarkdown={readmeMarkdown} />
+        </div>
+      ) : null}
     </div>
   );
 }

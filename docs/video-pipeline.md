@@ -8,6 +8,7 @@ Current stage order:
 equation input
   -> solution
   -> lesson
+  -> real_world_context (optional lesson enrichment)
   -> teacher_script
   -> elevenlabs_request
   -> elevenlabs_audio
@@ -18,7 +19,7 @@ equation input
   -> base_video
 ```
 
-The standard pipeline produces the base educational blackboard video. HeyGen avatar generation is optional and paid; it can run after ElevenLabs audio exists and should only make downstream render artifacts stale.
+The standard pipeline produces the base educational blackboard video. `real_world_context` is optional and paid; it can run after the deterministic lesson exists, feeds the Lesson tab IRL Example, and does not stale video artifacts. HeyGen avatar generation is optional and paid; it can run after ElevenLabs audio exists and should only make downstream render artifacts stale.
 
 ## Artifacts
 
@@ -45,6 +46,12 @@ Normal reruns reuse a completed artifact when the input hash is unchanged. Force
 ElevenLabs character alignment is the timestamp source of truth. Do not send rendered audio to another model to rediscover timings.
 
 `heygen_avatar` stores optional avatar clips generated from completed narration segments. It should be explicitly triggered because it spends provider credits.
+
+## Lesson Enrichment
+
+`real_world_context` stores a compact Algebra 1 example for the Lesson tab. It consumes the deterministic lesson artifact only. The LLM may explain backend-provided coefficients, roots, method, graph direction, and vertex facts, but it must not invent new math or change the solution.
+
+The stage is independent from the video pipeline. Rerunning it should update the Lesson tab explanation and usage-cost events without forcing script, audio, animation, timeline, or render work to rerun.
 
 ## Animation
 

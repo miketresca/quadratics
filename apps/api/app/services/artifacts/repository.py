@@ -147,6 +147,7 @@ class InMemoryArtifactRepository:
         *,
         error_code: str,
         error_message: str,
+        payload: dict[str, object] | None = None,
     ) -> ArtifactRecord:
         with self._lock:
             artifact = self._require_artifact(artifact_id)
@@ -154,6 +155,7 @@ class InMemoryArtifactRepository:
                 artifact,
                 status="failed",
                 is_current=False,
+                payload=payload if payload is not None else artifact.payload,
                 error_code=error_code,
                 error_message=error_message,
             )
@@ -390,17 +392,17 @@ class SupabaseArtifactRepository:
         *,
         error_code: str,
         error_message: str,
+        payload: dict[str, object] | None = None,
     ) -> ArtifactRecord:
-        return self._patch_artifact(
-            artifact_id,
-            {
-                "status": "failed",
-                "is_current": False,
-                "error_code": error_code,
-                "error_message": error_message,
-            },
-            return_representation=True,
-        )
+        patch: dict[str, object] = {
+            "status": "failed",
+            "is_current": False,
+            "error_code": error_code,
+            "error_message": error_message,
+        }
+        if payload is not None:
+            patch["payload_json"] = payload
+        return self._patch_artifact(artifact_id, patch, return_representation=True)
 
     def find_reusable(
         self,
