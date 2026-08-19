@@ -9,22 +9,22 @@ export async function signIn(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const email = usernameToAuthEmail(username);
   if (!email) {
-    redirect("/app?auth_error=invalid_credentials");
+    redirect("/?auth_error=invalid_credentials");
   }
 
   const supabase = await createClient();
   const {error} = await supabase.auth.signInWithPassword({email, password});
 
   if (error) {
-    redirect("/app?auth_error=invalid_credentials");
+    redirect("/?auth_error=invalid_credentials");
   }
-  redirect("/app");
+  redirect("/");
 }
 
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect("/app");
+  redirect("/");
 }
 
 function usernameToAuthEmail(username: string) {

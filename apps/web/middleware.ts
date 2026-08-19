@@ -34,7 +34,7 @@ export async function middleware(request: NextRequest) {
 
   if (user && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/app";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
@@ -42,5 +42,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/login", "/app/:path*"]
+  matcher: ["/login"]
 };

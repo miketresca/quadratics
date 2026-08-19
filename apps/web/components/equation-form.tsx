@@ -225,7 +225,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       }
       setInstructorProfiles(nextProfiles);
       setSelectedInstructorId((current) =>
-        nextProfiles.some((profile) => profile.id === current) ? current : nextProfiles[0].id
+        nextProfiles.some((profile) => profile.id === current)
+          ? current
+          : nextProfiles.find((profile) => profile.id === "male")?.id ?? nextProfiles[0].id
       );
     } catch (error) {
       if (process.env.NODE_ENV === "development") {
