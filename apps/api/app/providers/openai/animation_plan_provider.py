@@ -9,6 +9,14 @@ class AnimationPlanProviderConfigurationError(RuntimeError):
     pass
 
 
+EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [],
+    "properties": {},
+}
+
+
 ANIMATION_PLAN_JSON_SCHEMA: dict[str, Any] = {
     "name": "animation_plan",
     "schema": {
@@ -103,7 +111,7 @@ ANIMATION_PLAN_JSON_SCHEMA: dict[str, Any] = {
                                     },
                                 },
                                 "text": {"type": ["string", "null"]},
-                                "metadata": {"type": "object", "additionalProperties": True},
+                                "metadata": EMPTY_OBJECT_SCHEMA,
                             },
                         },
                         "sync": {
@@ -122,12 +130,16 @@ ANIMATION_PLAN_JSON_SCHEMA: dict[str, Any] = {
                                 }
                             },
                         },
-                        "metadata": {"type": "object", "additionalProperties": True},
+                        "metadata": EMPTY_OBJECT_SCHEMA,
                     },
                 },
             },
-            "soundCues": {"type": "array", "items": {"type": "object"}},
-            "metadata": {"type": "object", "additionalProperties": True},
+            "soundCues": {
+                "type": "array",
+                "maxItems": 0,
+                "items": EMPTY_OBJECT_SCHEMA,
+            },
+            "metadata": EMPTY_OBJECT_SCHEMA,
         },
     },
     "strict": True,
