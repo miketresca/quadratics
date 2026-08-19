@@ -14,3 +14,20 @@ export interface UsageSummary {
   globalVideoCount: number;
   globalBreakdown: UsageBreakdownItem[];
 }
+
+export interface UsageEventItem {
+  id: string;
+  createdAt: string;
+  generationJobId?: string | null;
+  provider: string;
+  stage: string;
+  model?: string | null;
+  unitType: string;
+  quantity: number;
+  unitCostUsd: number;
+  costUsd: number;
+}
+
+export interface UsageEventsResponse {
+  events: UsageEventItem[];
+}

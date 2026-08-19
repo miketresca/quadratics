@@ -194,6 +194,74 @@ async def test_animation_plan_stage_does_not_regenerate_elevenlabs_audio(
 
 
 @pytest.mark.asyncio
+async def test_heygen_avatar_stage_persists_development_avatar_video(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_environment="development",
+        script_generation_enabled=False,
+        supabase_url="",
+        supabase_service_role_key="",
+        supabase_anon_key="",
+        supabase_jwt_secret="test-secret",
+        supabase_jwks_url="",
+        elevenlabs_api_key="test-key",
+        heygen_avatar_cost_per_second_usd=0.02,
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    try:
+        instructor = await authenticated_client.post(
+            "/api/v1/instructors",
+            json={
+                "displayName": "Avatar Instructor",
+                "voiceId": "voice-avatar",
+                "avatarId": "heygen-avatar",
+                "imageZoom": 1,
+                "imageX": 50,
+                "imageY": 50,
+            },
+        )
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={
+                "equation": "x^2 + 5*x + 6 = 0",
+                "instructorId": instructor.json()["id"],
+            },
+        )
+        generation_id = created.json()["job"]["id"]
+        await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/teacher_script",
+            json={},
+        )
+        await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/elevenlabs_audio",
+            json={},
+        )
+
+        response = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/heygen_avatar",
+            json={},
+        )
+        usage = await authenticated_client.get("/api/v1/usage/events")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    avatar_artifact = next(
+        artifact
+        for artifact in response.json()["artifacts"]
+        if artifact["stage"] == "heygen_avatar"
+    )
+    assert avatar_artifact["status"] == "completed"
+    assert avatar_artifact["payload"]["outputFormat"] == "webm"
+    assert avatar_artifact["storageObjects"][0]["contentType"] == "video/webm"
+    assert any(event["provider"] == "heygen" for event in usage.json()["events"])
+
+
+@pytest.mark.asyncio
 async def test_animation_plan_stage_records_provider_failure(
     authenticated_client,
     app,

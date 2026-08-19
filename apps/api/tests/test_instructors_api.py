@@ -8,6 +8,7 @@ async def test_instructors_can_be_created_updated_and_deleted(authenticated_clie
         json={
             "displayName": "Demo Instructor",
             "voiceId": "voice-demo",
+            "avatarId": "avatar-demo",
             "referenceImageUrl": "data:image/png;base64,abc",
             "imageZoom": 1.2,
             "imageX": 44,
@@ -19,6 +20,7 @@ async def test_instructors_can_be_created_updated_and_deleted(authenticated_clie
     body = created.json()
     assert body["displayName"] == "Demo Instructor"
     assert body["voiceId"] == "voice-demo"
+    assert body["avatarId"] == "avatar-demo"
     assert body["referenceImageUrl"] == "data:image/png;base64,abc"
 
     updated = await authenticated_client.put(
@@ -26,6 +28,7 @@ async def test_instructors_can_be_created_updated_and_deleted(authenticated_clie
         json={
             "displayName": "Updated Instructor",
             "voiceId": "voice-updated",
+            "avatarId": "avatar-updated",
             "referenceImageUrl": None,
             "imageZoom": 1,
             "imageX": 50,
@@ -36,6 +39,7 @@ async def test_instructors_can_be_created_updated_and_deleted(authenticated_clie
     assert updated.status_code == 200
     assert updated.json()["displayName"] == "Updated Instructor"
     assert updated.json()["voiceId"] == "voice-updated"
+    assert updated.json()["avatarId"] == "avatar-updated"
 
     listed = await authenticated_client.get("/api/v1/instructors")
     assert listed.status_code == 200

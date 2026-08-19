@@ -73,13 +73,6 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
             README.md
           </div>
           <div className="flex items-center gap-2">
-            <button
-              aria-label="Edit README"
-              className="flex h-9 w-9 items-center justify-center rounded border border-transparent text-zinc-500 transition hover:border-zinc-800 hover:text-zinc-200"
-              type="button"
-            >
-              <EditIcon />
-            </button>
             <div className="group/toc relative">
               <button
                 aria-label="Filter README headings"
@@ -88,28 +81,30 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
               >
                 <TocIcon />
               </button>
-              <div className="absolute right-0 top-11 z-20 hidden w-72 rounded-md border border-zinc-700 bg-[#080c12]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.68)] backdrop-blur group-focus-within/toc:block group-hover/toc:block">
-                <label className="flex h-10 items-center gap-2 rounded border border-emerald-400/45 bg-black/30 px-3 text-sm text-zinc-300">
-                  <FilterIcon />
-                  <input
-                    className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-600"
-                    onChange={(event) => setHeadingFilter(event.currentTarget.value)}
-                    placeholder="Filter headings"
-                    value={headingFilter}
-                  />
-                </label>
-                <nav className="mt-3 grid max-h-72 gap-1 overflow-auto text-sm" aria-label="README headings">
-                  {filteredHeadings.map((heading) => (
-                    <a
-                      className="rounded px-2 py-1.5 text-zinc-300 transition hover:bg-emerald-400/10 hover:text-emerald-200"
-                      href={`#${heading.id}`}
-                      key={heading.id}
-                      style={{paddingLeft: `${(heading.depth - 1) * 14 + 8}px`}}
-                    >
-                      {heading.text}
-                    </a>
-                  ))}
-                </nav>
+              <div className="absolute right-0 top-9 z-20 hidden w-72 pt-2 group-focus-within/toc:block group-hover/toc:block">
+                <div className="rounded-md border border-zinc-700 bg-[#080c12]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.68)] backdrop-blur">
+                  <label className="flex h-10 items-center gap-2 rounded border border-emerald-400/45 bg-black/30 px-3 text-sm text-zinc-300">
+                    <FilterIcon />
+                    <input
+                      className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-600"
+                      onChange={(event) => setHeadingFilter(event.currentTarget.value)}
+                      placeholder="Filter headings"
+                      value={headingFilter}
+                    />
+                  </label>
+                  <nav className="mt-3 grid max-h-72 gap-1 overflow-auto text-sm" aria-label="README headings">
+                    {filteredHeadings.map((heading) => (
+                      <a
+                        className="rounded px-2 py-1.5 text-zinc-300 transition hover:bg-emerald-400/10 hover:text-emerald-200"
+                        href={`#${heading.id}`}
+                        key={heading.id}
+                        style={{paddingLeft: `${(heading.depth - 1) * 14 + 8}px`}}
+                      >
+                        {heading.text}
+                      </a>
+                    ))}
+                  </nav>
+                </div>
               </div>
             </div>
           </div>
@@ -283,15 +278,6 @@ function slugify(value: string) {
     .replace(/`/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "") || "section";
-}
-
-function EditIcon() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
 }
 
 function TocIcon() {

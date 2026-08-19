@@ -46,6 +46,7 @@ export function LessonResult({
   const teacherScriptArtifact = artifactForStage(generation, "teacher_script");
   const speechMarkupArtifact = artifactForStage(generation, "elevenlabs_request");
   const narrationArtifact = artifactForStage(generation, "elevenlabs_audio");
+  const avatarArtifact = artifactForStage(generation, "heygen_avatar");
   const effectiveScript = script ?? payloadForStage<LessonScript>(generation, "teacher_script");
   const effectiveNarration = narration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_audio");
   const speechMarkupArtifactPayload = payloadForStage<LessonNarration>(generation, "elevenlabs_request");
@@ -63,6 +64,7 @@ export function LessonResult({
   const visibleRenderArtifact = baseVideo ?? renderArtifact;
   const elevenLabsRequestLoading = loadingStage === "elevenlabs_request" || loadingStage === "elevenlabs_audio";
   const elevenLabsAudioLoading = loadingStage === "elevenlabs_audio";
+  const avatarLoading = loadingStage === "heygen_avatar";
 
   return (
     <section className="mx-auto mt-6 max-w-3xl" aria-live="polite">
@@ -163,6 +165,26 @@ export function LessonResult({
               loading={elevenLabsAudioLoading}
               onRun={onRunStage ? () => onRunStage("elevenlabs_audio", {force: true}) : undefined}
               title="elevenlabs_audio"
+            />
+          ) : null}
+
+          {avatarArtifact ? (
+            <AvatarLog
+              actionDisabled={actionDisabled}
+              artifact={avatarArtifact}
+              loading={avatarLoading}
+              onRun={onRunStage ? () => onRunStage("heygen_avatar", {force: true}) : undefined}
+            />
+          ) : avatarLoading ? (
+            <PendingLog accent="pink" className="mt-6" title="heygen_avatar" />
+          ) : effectiveNarration?.status === "completed" ? (
+            <RunnableLog
+              accent="pink"
+              className="mt-6"
+              disabled={actionDisabled || !onRunStage || avatarLoading}
+              loading={avatarLoading}
+              onRun={onRunStage ? () => onRunStage("heygen_avatar") : undefined}
+              title="heygen_avatar"
             />
           ) : null}
 
@@ -626,6 +648,59 @@ function TimelineLog({
   );
 }
 
+function AvatarLog({
+  actionDisabled = false,
+  artifact,
+  loading = false,
+  onRun
+}: {
+  actionDisabled?: boolean;
+  artifact: GenerationArtifact;
+  loading?: boolean;
+  onRun?: () => void;
+}) {
+  const stageLoading = loading || artifact.status === "running";
+  const storageObject = artifact.storageObjects?.[0];
+  const outputFormat = typeof artifact.payload?.outputFormat === "string" ? artifact.payload.outputFormat : "webm";
+  const durationSeconds = typeof artifact.payload?.durationSeconds === "number" ? artifact.payload.durationSeconds : storageObject?.durationSeconds;
+  return (
+    <StageCard
+      accent="pink"
+      action={onRun ? <IconButton disabled={actionDisabled || stageLoading} label="Regenerate HeyGen avatar" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      artifact={artifact}
+      loading={stageLoading}
+      title="heygen_avatar"
+    >
+      {artifact.status === "completed" ? (
+        <div className="mt-4 grid gap-3">
+          <div className="grid gap-3 rounded border border-pink-400/20 bg-pink-950/10 p-3 text-sm sm:grid-cols-3">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-wide text-zinc-500">Format</p>
+              <p className="mt-1 text-zinc-100">{outputFormat}</p>
+            </div>
+            <div>
+              <p className="font-mono text-xs uppercase tracking-wide text-zinc-500">Duration</p>
+              <p className="mt-1 text-zinc-100">{durationSeconds ? formatSeconds(durationSeconds) : "pending"}</p>
+            </div>
+            <div>
+              <p className="font-mono text-xs uppercase tracking-wide text-zinc-500">Composite</p>
+              <p className="mt-1 text-zinc-100">transparent overlay</p>
+            </div>
+          </div>
+          {storageObject?.signedUrl ? (
+            <video className="aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
+              <track kind="captions" />
+            </video>
+          ) : null}
+          {storageObject ? <ArtifactStorage object={storageObject} /> : null}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-300">{artifact.errorMessage ?? "Avatar video is not current."}</p>
+      )}
+    </StageCard>
+  );
+}
+
 function RenderLog({
   actionDisabled = false,
   artifact,
@@ -685,6 +760,12 @@ function RenderInputSummary({
 }) {
   const narrationSegments = narration?.segments?.length ?? 0;
   const renderProvider = [renderArtifact?.provider, renderArtifact?.model].filter(Boolean).join(" / ");
+  const avatarArtifactId =
+    typeof renderArtifact?.payload?.avatarArtifactId === "string"
+      ? renderArtifact.payload.avatarArtifactId
+      : typeof renderArtifact?.configMetadata?.avatarArtifactId === "string"
+        ? renderArtifact.configMetadata.avatarArtifactId
+        : null;
   return (
     <div className="mt-4 rounded border border-lime-400/20 bg-lime-950/5 p-3">
       <p className="font-mono text-xs uppercase tracking-wide text-lime-200">render input</p>
@@ -692,7 +773,7 @@ function RenderInputSummary({
         Motion Canvas receives the lesson, resolved timeline, and signed narration segment URLs. The renderer uses those inputs to
         draw the blackboard scene, place captions, and mux narration into the final MP4.
       </p>
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
         <div className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
           <dt className="font-mono text-xs uppercase tracking-wide text-zinc-500">Timeline</dt>
           <dd className="mt-1 text-zinc-100">{timeline.cues.length} cues / {formatSeconds(timeline.durationSeconds)}</dd>
@@ -704,6 +785,10 @@ function RenderInputSummary({
         <div className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
           <dt className="font-mono text-xs uppercase tracking-wide text-zinc-500">Renderer</dt>
           <dd className="mt-1 break-words text-zinc-100">{renderProvider || "motion_canvas command adapter"}</dd>
+        </div>
+        <div className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
+          <dt className="font-mono text-xs uppercase tracking-wide text-zinc-500">Avatar</dt>
+          <dd className="mt-1 break-words text-zinc-100">{avatarArtifactId ? "included" : "none"}</dd>
         </div>
       </dl>
     </div>
@@ -801,7 +886,7 @@ function IconButton({children, disabled, label, onClick}: {children: React.React
   );
 }
 
-type Accent = "amber" | "cyan" | "fuchsia" | "lime" | "sky" | "violet" | "zinc";
+type Accent = "amber" | "cyan" | "fuchsia" | "lime" | "pink" | "sky" | "violet" | "zinc";
 
 function PendingLog({accent = "zinc", className = "", title}: {accent?: Accent; className?: string; title: string}) {
   return (
@@ -969,6 +1054,7 @@ function accentTextClass(accent: Accent) {
     cyan: "text-cyan-300",
     fuchsia: "text-fuchsia-300",
     lime: "text-lime-300",
+    pink: "text-pink-300",
     sky: "text-sky-300",
     violet: "text-violet-300",
     zinc: "text-zinc-100"
@@ -981,6 +1067,7 @@ function accentBorderClass(accent: Accent) {
     cyan: "border-cyan-400/35 bg-cyan-950/10",
     fuchsia: "border-fuchsia-400/35 bg-fuchsia-950/10",
     lime: "border-lime-400/35 bg-lime-950/10",
+    pink: "border-pink-400/35 bg-pink-950/10",
     sky: "border-sky-400/35 bg-sky-950/10",
     violet: "border-violet-400/35 bg-violet-950/10",
     zinc: "border-zinc-700/80 bg-zinc-950/55"

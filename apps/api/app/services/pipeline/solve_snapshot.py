@@ -23,6 +23,7 @@ from app.services.artifacts.repository import (
     ArtifactRecord,
     ArtifactStorageReference,
 )
+from app.services.avatars.base import AvatarVideoProvider, AvatarVideoRequest
 from app.services.jobs.generation_jobs import (
     GenerationJobRecord,
     InMemoryGenerationJobRepository,
@@ -411,6 +412,102 @@ class SolveGenerationService:
         )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
+    async def run_heygen_avatar(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+        avatar_id: str,
+        provider: AvatarVideoProvider,
+        media_store: MediaStore,
+        usage_costs: UsageCostRepository | None = None,
+        output_format: str = "webm",
+        cost_per_second_usd: float = 0,
+        force: bool = False,
+    ) -> GenerationSnapshot:
+        job, lesson, _lesson_artifact = self._current_lesson_context(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+        )
+        narration_artifact = self._current_required(generation_job_id, "elevenlabs_audio")
+        audio_url = _narration_audio_url_for_avatar(narration_artifact, provider=provider)
+        stage_run = self._lifecycle.start_stage(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            stage="heygen_avatar",
+            input_payload={
+                "narrationArtifactId": narration_artifact.id,
+                "avatarId": avatar_id,
+                "outputFormat": output_format,
+            },
+            upstream_artifact_ids=[narration_artifact.id],
+            provider="heygen",
+            model="avatar_iv",
+            config_metadata={
+                "avatarId": avatar_id,
+                "outputFormat": output_format,
+            },
+            force=force,
+        )
+        if stage_run.cache_hit:
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        try:
+            result = await provider.generate(
+                AvatarVideoRequest(
+                    generation_job_id=generation_job_id,
+                    avatar_id=avatar_id,
+                    audio_url=audio_url,
+                    title=f"Quadratics {generation_job_id}",
+                    output_format=output_format,
+                )
+            )
+            extension = "webm" if result.output_format == "webm" else "mp4"
+            avatar_ref = media_store.put(
+                path=f"{user_id}/{generation_job_id}/avatars/{stage_run.artifact.id}.{extension}",
+                content=result.content,
+                content_type=result.content_type,
+                metadata={
+                    "providerVideoId": result.provider_video_id,
+                    "outputFormat": result.output_format,
+                },
+            )
+        except Exception as exc:
+            self._artifacts.fail_attempt(
+                stage_run.artifact.id,
+                error_code="heygen_avatar_failed",
+                error_message=str(exc),
+            )
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        self._artifacts.complete_attempt(
+            stage_run.artifact.id,
+            payload={
+                "providerVideoId": result.provider_video_id,
+                "durationSeconds": result.duration_seconds,
+                "outputFormat": result.output_format,
+                "metadata": result.provider_metadata,
+            },
+            storage_objects=[
+                ArtifactStorageObject(
+                    bucket=avatar_ref.bucket,
+                    path=avatar_ref.path,
+                    signed_url=avatar_ref.signed_url,
+                    content_type=avatar_ref.content_type,
+                    size_bytes=avatar_ref.size_bytes,
+                    checksum_sha256=avatar_ref.checksum_sha256,
+                    duration_seconds=result.duration_seconds,
+                    metadata=avatar_ref.metadata,
+                )
+            ],
+        )
+        await _record_heygen_usage(
+            usage_costs=usage_costs,
+            user_id=user_id,
+            generation_job_id=generation_job_id,
+            duration_seconds=result.duration_seconds,
+            cost_per_second_usd=cost_per_second_usd,
+        )
+        return self.snapshot_for_job(job=job, lesson=lesson)
+
     def run_render(
         self,
         *,
@@ -426,16 +523,29 @@ class SolveGenerationService:
         )
         timeline_artifact = self._current_required(generation_job_id, "resolved_timeline")
         narration_artifact = self._current_required(generation_job_id, "elevenlabs_audio")
+        avatar_artifact = self._artifacts.current_for_stage(
+            generation_job_id=generation_job_id,
+            stage="heygen_avatar",
+        )
+        avatar_storage_objects = [
+            _storage_reference_payload(storage_reference)
+            for storage_reference in (avatar_artifact.storage_objects if avatar_artifact else [])
+        ]
+        upstream_artifact_ids = [timeline_artifact.id, narration_artifact.id]
+        input_payload: dict[str, object] = {
+            "timelineArtifactId": timeline_artifact.id,
+            "narrationArtifactId": narration_artifact.id,
+            "rendererVersion": renderer.__class__.__name__,
+        }
+        if avatar_artifact is not None and avatar_artifact.status == "completed":
+            upstream_artifact_ids.append(avatar_artifact.id)
+            input_payload["avatarArtifactId"] = avatar_artifact.id
         stage_run = self._lifecycle.start_stage(
             generation_job_id=generation_job_id,
             user_id=user_id,
             stage="motion_canvas_render",
-            input_payload={
-                "timelineArtifactId": timeline_artifact.id,
-                "narrationArtifactId": narration_artifact.id,
-                "rendererVersion": renderer.__class__.__name__,
-            },
-            upstream_artifact_ids=[timeline_artifact.id, narration_artifact.id],
+            input_payload=input_payload,
+            upstream_artifact_ids=upstream_artifact_ids,
             provider="motion_canvas",
             model=renderer.__class__.__name__,
             force=force,
@@ -443,21 +553,25 @@ class SolveGenerationService:
         if stage_run.cache_hit:
             return self.snapshot_for_job(job=job, lesson=lesson)
         duration_seconds = float(timeline_artifact.payload.get("durationSeconds") or 0)
+        render_input: dict[str, object] = {
+            "lesson": lesson.model_dump(mode="json", by_alias=True),
+            "timeline": timeline_artifact.payload,
+            "narration": narration_artifact.payload,
+            "narrationStorageObjects": [
+                _storage_reference_payload(storage_reference)
+                for storage_reference in narration_artifact.storage_objects
+            ],
+        }
+        if avatar_artifact is not None and avatar_artifact.status == "completed":
+            render_input["avatar"] = avatar_artifact.payload
+            render_input["avatarStorageObjects"] = avatar_storage_objects
         try:
             result = renderer.render(
                 RenderRequest(
                     generation_job_id=generation_job_id,
                     timeline_artifact_id=timeline_artifact.id,
                     duration_seconds=duration_seconds,
-                    render_input={
-                        "lesson": lesson.model_dump(mode="json", by_alias=True),
-                        "timeline": timeline_artifact.payload,
-                        "narration": narration_artifact.payload,
-                        "narrationStorageObjects": [
-                            _storage_reference_payload(storage_reference)
-                            for storage_reference in narration_artifact.storage_objects
-                        ],
-                    },
+                    render_input=render_input,
                 )
             )
             video_ref = media_store.put(
@@ -478,6 +592,11 @@ class SolveGenerationService:
             payload={
                 "durationSeconds": result.duration_seconds,
                 "rendererVersion": result.renderer_version,
+                **(
+                    {"avatarArtifactId": avatar_artifact.id}
+                    if avatar_artifact is not None and avatar_artifact.status == "completed"
+                    else {}
+                ),
             },
             storage_objects=[
                 ArtifactStorageObject(
@@ -702,6 +821,49 @@ async def _record_elevenlabs_usage(
             "durationSeconds": narration.duration_seconds or 0,
         },
     )
+
+
+async def _record_heygen_usage(
+    *,
+    usage_costs: UsageCostRepository | None,
+    user_id: str,
+    generation_job_id: str,
+    duration_seconds: float,
+    cost_per_second_usd: float,
+) -> None:
+    if usage_costs is None:
+        return
+    await usage_costs.record(
+        user_id=user_id,
+        generation_job_id=generation_job_id,
+        stage="heygen_avatar",
+        provider="heygen",
+        model="avatar_iv",
+        unit_type="seconds",
+        quantity=max(duration_seconds, 0),
+        unit_cost_usd=cost_per_second_usd,
+        metadata={"source": "avatar_video_duration"},
+    )
+
+
+def _narration_audio_url_for_avatar(
+    narration_artifact: ArtifactRecord,
+    *,
+    provider: AvatarVideoProvider,
+) -> str:
+    if provider.__class__.__name__ == "DevelopmentAvatarVideoProvider":
+        return "development://narration-audio"
+    signed_urls = [
+        storage_reference.signed_url
+        for storage_reference in narration_artifact.storage_objects
+        if storage_reference.signed_url
+    ]
+    if len(signed_urls) != 1:
+        raise ValueError(
+            "HeyGen avatar generation requires one combined narration audio URL. "
+            "The current narration artifact contains segmented audio."
+        )
+    return signed_urls[0]
 
 
 def _numeric_metadata(metadata: dict[str, object], key: str) -> float | None:

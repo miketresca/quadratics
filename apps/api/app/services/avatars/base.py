@@ -3,19 +3,25 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class AvatarRequest:
-    step_id: str
-    narration_audio_uri: str
-    avatar_id: str | None = None
+class AvatarVideoRequest:
+    generation_job_id: str
+    avatar_id: str
+    audio_url: str
+    title: str
+    output_format: str = "webm"
 
 
 @dataclass(frozen=True)
-class AvatarResult:
-    video_uri: str
-    duration_seconds: float | None = None
+class AvatarVideoResult:
+    content: bytes
+    content_type: str
+    duration_seconds: float
+    provider_video_id: str | None
+    output_format: str
+    provider_metadata: dict[str, object]
 
 
-class AvatarProvider(ABC):
+class AvatarVideoProvider(ABC):
     @abstractmethod
-    async def generate(self, request: AvatarRequest) -> AvatarResult:
-        """Generate avatar media for one teaching step."""
+    async def generate(self, request: AvatarVideoRequest) -> AvatarVideoResult:
+        """Generate an avatar video from a completed narration audio URL."""

@@ -35,6 +35,7 @@ async def create_instructor(
         return await _instructor_repository(settings).create(
             display_name=request.display_name,
             voice_id=request.voice_id,
+            avatar_id=request.avatar_id,
             reference_image_url=request.reference_image_url,
             image_zoom=request.image_zoom,
             image_x=request.image_x,
@@ -56,6 +57,7 @@ async def update_instructor(
             instructor_id,
             display_name=request.display_name,
             voice_id=request.voice_id,
+            avatar_id=request.avatar_id,
             reference_image_url=request.reference_image_url,
             image_zoom=request.image_zoom,
             image_x=request.image_x,

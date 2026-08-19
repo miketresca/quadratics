@@ -58,11 +58,13 @@ async def test_usage_summary_tracks_elevenlabs_generation_cost(
             json={"force": True},
         )
         summary = await authenticated_client.get("/api/v1/usage/summary")
+        events = await authenticated_client.get("/api/v1/usage/events")
     finally:
         app.dependency_overrides.pop(get_settings, None)
 
     assert audio.status_code == 200
     assert summary.status_code == 200
+    assert events.status_code == 200
     body = summary.json()
     breakdown = body["userBreakdown"][0]
     expected_cost = breakdown["quantity"] * 0.01
@@ -79,3 +81,12 @@ async def test_usage_summary_tracks_elevenlabs_generation_cost(
             "costUsd": expected_cost,
         }
     ]
+
+    event = events.json()["events"][0]
+    assert event["provider"] == "elevenlabs"
+    assert event["stage"] == "elevenlabs_audio"
+    assert event["model"] == "eleven_multilingual_v2"
+    assert event["unitType"] == "credits"
+    assert event["quantity"] == breakdown["quantity"]
+    assert event["costUsd"] == expected_cost
+    assert event["createdAt"]

@@ -19,6 +19,7 @@ class Instructor(ApiModel):
 class InstructorCreateRequest(ApiModel):
     display_name: str
     voice_id: str | None = None
+    avatar_id: str | None = None
     reference_image_url: str | None = None
     image_zoom: float = 1
     image_x: float = 50
@@ -28,6 +29,7 @@ class InstructorCreateRequest(ApiModel):
 class InstructorUpdateRequest(ApiModel):
     display_name: str
     voice_id: str | None = None
+    avatar_id: str | None = None
     reference_image_url: str | None = None
     image_zoom: float = 1
     image_x: float = 50

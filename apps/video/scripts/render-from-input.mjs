@@ -60,6 +60,8 @@ try {
     throw new Error("Motion Canvas did not create an output frame directory");
   }
   const narrationAudioPath = await prepareNarrationAudio(renderInput, tempDir);
+  const avatarVideoPath = await prepareAvatarVideo(renderInput, tempDir);
+  const encodedVideoPath = avatarVideoPath ? resolve(tempDir, "base-video.mp4") : outputPath;
   const ffmpegArgs = [
     "-y",
     "-framerate",
@@ -81,12 +83,58 @@ try {
   if (narrationAudioPath) {
     ffmpegArgs.push("-c:a", "aac", "-b:a", "160k", "-shortest");
   }
-  ffmpegArgs.push(outputPath);
+  ffmpegArgs.push(encodedVideoPath);
   await run("ffmpeg", ffmpegArgs);
+  if (avatarVideoPath) {
+    await compositeAvatarVideo(encodedVideoPath, avatarVideoPath, outputPath);
+  }
 } finally {
   await server.close();
   await writeFile(generatedInputPath, originalGeneratedInput, "utf-8");
   await rm(tempDir, {recursive: true, force: true});
+}
+
+async function prepareAvatarVideo(renderInput, tempDir) {
+  const storageObjects = Array.isArray(renderInput?.avatarStorageObjects)
+    ? renderInput.avatarStorageObjects
+    : [];
+  const object = storageObjects.find((candidate) => candidate?.signedUrl);
+  if (!object?.signedUrl) {
+    return null;
+  }
+  const response = await fetch(object.signedUrl);
+  if (!response.ok) {
+    throw new Error(`Could not download avatar video: ${response.status}`);
+  }
+  const contentType = String(object.contentType ?? "");
+  const extension = contentType.includes("webm") ? "webm" : "mp4";
+  const avatarPath = resolve(tempDir, `avatar.${extension}`);
+  await writeFile(avatarPath, Buffer.from(await response.arrayBuffer()));
+  return avatarPath;
+}
+
+async function compositeAvatarVideo(baseVideoPath, avatarVideoPath, outputPath) {
+  await run("ffmpeg", [
+    "-y",
+    "-i",
+    baseVideoPath,
+    "-i",
+    avatarVideoPath,
+    "-filter_complex",
+    "[1:v]scale=420:-1[avatar];[0:v][avatar]overlay=80:H-h-80:format=auto[v]",
+    "-map",
+    "[v]",
+    "-map",
+    "0:a?",
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "copy",
+    "-shortest",
+    outputPath
+  ]);
 }
 
 async function prepareNarrationAudio(renderInput, tempDir) {

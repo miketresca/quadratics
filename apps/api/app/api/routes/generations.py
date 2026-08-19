@@ -8,6 +8,7 @@ from app.api.routes.usage_costs import _usage_repository
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
 from app.providers.elevenlabs.narration_provider import ElevenLabsNarrationProvider
+from app.providers.heygen.avatar_provider import HeyGenAvatarVideoProvider
 from app.providers.openai.animation_plan_provider import OpenAIAnimationPlanProvider
 from app.providers.openai.script_provider import OpenAIScriptProvider
 from app.providers.openai.speech_markup_provider import OpenAISpeechMarkupProvider
@@ -16,6 +17,7 @@ from app.schemas.generation import GenerationSnapshot, GenerationStageRunRequest
 from app.services.animation.base import AnimationPlanProvider
 from app.services.animation.development import DevelopmentAnimationPlanProvider
 from app.services.artifacts import InMemoryArtifactRepository, SupabaseArtifactRepository
+from app.services.avatars import AvatarVideoProvider, DevelopmentAvatarVideoProvider
 from app.services.jobs.generation_jobs import (
     InMemoryGenerationJobRepository,
     SupabaseGenerationJobRepository,
@@ -26,6 +28,7 @@ from app.services.narration.speech_markup import (
     SpeechMarkupProvider,
 )
 from app.services.pipeline.solve_snapshot import SolveGenerationService
+from app.services.provider_keys.storage import ProviderKeyStorageError, SupabaseProviderKeyStore
 from app.services.rendering import CommandMotionCanvasRenderer, DevelopmentMotionCanvasRenderer
 from app.services.scripts.base import ScriptProvider
 from app.services.scripts.development import DevelopmentScriptProvider
@@ -148,6 +151,24 @@ async def run_generation_stage(
             user_id=current_user.id,
             force=request.force,
         )
+    if stage == "heygen_avatar":
+        snapshot = service.get_snapshot(
+            generation_job_id=generation_id,
+            user_id=current_user.id,
+        )
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Generation not found")
+        return await service.run_heygen_avatar(
+            generation_job_id=generation_id,
+            user_id=current_user.id,
+            avatar_id=await _avatar_id_for_instructor(settings, snapshot.job.instructor_id),
+            provider=await _avatar_provider(settings, current_user.id),
+            media_store=media_store,
+            usage_costs=_usage_repository(settings),
+            output_format=settings.heygen_avatar_output_format,
+            cost_per_second_usd=settings.heygen_avatar_cost_per_second_usd,
+            force=request.force,
+        )
     if stage == "motion_canvas_render":
         return service.run_render(
             generation_job_id=generation_id,
@@ -247,6 +268,22 @@ def _narration_provider(settings: Settings) -> NarrationProvider:
     )
 
 
+async def _avatar_provider(settings: Settings, user_id: str) -> AvatarVideoProvider:
+    if settings.app_environment in {"development", "test"}:
+        return DevelopmentAvatarVideoProvider()
+    try:
+        stored_key = await SupabaseProviderKeyStore(settings).get_decrypted(user_id, "heygen")
+    except ProviderKeyStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if stored_key is None:
+        raise HTTPException(status_code=409, detail="HeyGen API key is not configured")
+    return HeyGenAvatarVideoProvider(
+        api_key=stored_key.api_key,
+        poll_interval_seconds=settings.heygen_avatar_poll_interval_seconds,
+        timeout_seconds=settings.heygen_avatar_timeout_seconds,
+    )
+
+
 def _speech_markup_provider(settings: Settings) -> SpeechMarkupProvider:
     if not settings.script_generation_enabled:
         return DeterministicSpeechMarkupProvider()
@@ -293,3 +330,13 @@ def _renderer_for_settings(
 async def _voice_id_for_instructor(settings: Settings, instructor_id: str | None) -> str:
     instructor = await _instructor_repository(settings).get(instructor_id)
     return instructor.voice_id if instructor and instructor.voice_id else ""
+
+
+async def _avatar_id_for_instructor(settings: Settings, instructor_id: str | None) -> str:
+    instructor = await _instructor_repository(settings).get(instructor_id)
+    if instructor and instructor.avatar_id:
+        return instructor.avatar_id
+    raise HTTPException(
+        status_code=409,
+        detail="HeyGen avatar ID is not configured for this instructor",
+    )

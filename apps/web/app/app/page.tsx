@@ -1,4 +1,4 @@
-import type {CurrentUser, UsageSummary} from "@quadratics/types";
+import type {CurrentUser} from "@quadratics/types";
 import {execSync} from "node:child_process";
 import {readFile} from "node:fs/promises";
 import path from "node:path";
@@ -7,20 +7,12 @@ import {signIn, signOut} from "@/app/auth/actions";
 import {AppModeShell} from "@/components/app-mode-shell";
 import {ApiKeysDialog} from "@/components/api-keys-dialog";
 import {OutsideCloseDetails} from "@/components/outside-close-details";
-import {getMe, getUsageSummary} from "@/lib/api";
+import {UsageCostChip} from "@/components/usage-cost-chip";
+import {getMe, getUsageEvents, getUsageSummary} from "@/lib/api";
 import {createClient} from "@/lib/supabase/server";
 
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 const readmePath = path.resolve(process.cwd(), "../..", "README.md");
-const emptyUsageSummary: UsageSummary = {
-  userTotalCostUsd: 0,
-  userTotalQuantity: 0,
-  userBreakdown: [],
-  globalAverageCostPerVideoUsd: 0,
-  globalVideoCount: 0,
-  globalBreakdown: []
-};
-
 export default async function AppPage({
   searchParams
 }: {
@@ -56,6 +48,10 @@ export default async function AppPage({
     sessionToken !== null
       ? await getUsageSummary(sessionToken).catch(() => null)
       : null;
+  const usageEvents =
+    sessionToken !== null
+      ? await getUsageEvents(sessionToken).then((response) => response.events).catch(() => [])
+      : [];
   const readmeMarkdown = await readFile(readmePath, "utf8");
   const buildInfo = getBuildInfo();
 
@@ -63,7 +59,7 @@ export default async function AppPage({
     <main className="quadratics-app-bg min-h-screen bg-black text-zinc-100">
       <header className="fixed left-0 top-0 z-10 flex w-full items-center justify-between px-5 py-5 sm:px-8">
         <Logo />
-        <UsageCostChip signedIn={user !== null} summary={usageSummary} />
+        <UsageCostChip events={usageEvents} signedIn={user !== null} summary={usageSummary} />
         <div className="flex items-center gap-2">
           <BuildChip buildInfo={buildInfo} />
           <a
@@ -81,77 +77,6 @@ export default async function AppPage({
       <AppModeShell initialUser={user} readmeMarkdown={readmeMarkdown} />
     </main>
   );
-}
-
-function UsageCostChip({
-  signedIn,
-  summary
-}: {
-  signedIn: boolean;
-  summary: UsageSummary | null;
-}) {
-  if (!signedIn) {
-    return null;
-  }
-
-  const usage = summary ?? emptyUsageSummary;
-  const total = usage.userTotalCostUsd;
-  const average = usage.globalAverageCostPerVideoUsd;
-  const breakdown = usage.userBreakdown;
-
-  return (
-    <div className="group/cost absolute left-1/2 hidden -translate-x-1/2 sm:block">
-      <div
-        aria-label={`Usage spend ${formatCurrency(total)}`}
-        className="flex h-10 items-center gap-2 rounded border border-zinc-800 bg-zinc-950/55 px-3 font-mono text-[11px] tracking-wide text-zinc-300 shadow-xl shadow-black/25 backdrop-blur transition group-hover/cost:border-emerald-400/40 group-hover/cost:text-emerald-200"
-      >
-        <span className="text-zinc-500">$</span>
-        <span>{formatCurrency(total)}</span>
-        <span className="text-zinc-700">/</span>
-        <span className="text-zinc-500">avg {formatCurrency(average)}</span>
-      </div>
-      <div className="pointer-events-none absolute left-1/2 top-12 z-30 hidden w-80 -translate-x-1/2 rounded border border-zinc-700/80 bg-[#090d13]/92 p-3 text-xs text-zinc-300 shadow-[0_22px_70px_rgba(0,0,0,0.62),0_0_34px_rgba(16,185,129,0.08)] backdrop-blur-md group-hover/cost:block">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-          <span className="font-mono uppercase tracking-wide text-zinc-500">Spend</span>
-          <span className="font-mono text-emerald-200">{formatCurrency(total)}</span>
-        </div>
-        <div className="mt-3 grid gap-2">
-          <div className="flex justify-between">
-            <span>Global average / video</span>
-            <span>{formatCurrency(average)}</span>
-          </div>
-          <div className="flex justify-between text-zinc-500">
-            <span>Videos sampled</span>
-            <span>{usage.globalVideoCount}</span>
-          </div>
-        </div>
-        <div className="mt-3 border-t border-zinc-800 pt-3">
-          {breakdown.length > 0 ? (
-            breakdown.slice(0, 5).map((item) => (
-              <div className="flex justify-between gap-3 py-1" key={`${item.provider}-${item.stage}-${item.unitType}`}>
-                <span className="truncate">{item.provider} / {item.stage}</span>
-                <span className="shrink-0 font-mono text-zinc-100">{formatCurrency(item.costUsd)}</span>
-              </div>
-            ))
-          ) : (
-            <p className="text-zinc-500">No provider spend recorded yet.</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function formatCurrency(value: number) {
-  if (value > 0 && value < 0.01) {
-    return `$${value.toFixed(4)}`;
-  }
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value);
 }
 
 type BuildInfo = {

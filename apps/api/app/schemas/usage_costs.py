@@ -16,3 +16,20 @@ class UsageSummary(ApiModel):
     global_average_cost_per_video_usd: float
     global_video_count: int
     global_breakdown: list[UsageBreakdownItem]
+
+
+class UsageEventItem(ApiModel):
+    id: str
+    created_at: str
+    generation_job_id: str | None
+    provider: str
+    stage: str
+    model: str | None
+    unit_type: str
+    quantity: float
+    unit_cost_usd: float
+    cost_usd: float
+
+
+class UsageEventsResponse(ApiModel):
+    events: list[UsageEventItem]

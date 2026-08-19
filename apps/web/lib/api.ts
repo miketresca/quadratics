@@ -11,6 +11,7 @@ import type {
   LessonScript,
   ScriptEquationResponse,
   SolveEquationResponse,
+  UsageEventsResponse,
   UsageSummary
 } from "@quadratics/types";
 
@@ -137,10 +138,23 @@ export async function getUsageSummary(accessToken: string): Promise<UsageSummary
   return response.json() as Promise<UsageSummary>;
 }
 
+export async function getUsageEvents(accessToken: string, limit = 50): Promise<UsageEventsResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/usage/events?limit=${limit}`, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load usage events");
+  }
+  return response.json() as Promise<UsageEventsResponse>;
+}
+
 export async function createInstructor(params: {
   accessToken: string;
   displayName: string;
   voiceId?: string | null;
+  avatarId?: string | null;
   referenceImageUrl?: string | null;
   imageZoom: number;
   imageX: number;
@@ -155,6 +169,7 @@ export async function createInstructor(params: {
     body: JSON.stringify({
       displayName: params.displayName,
       voiceId: params.voiceId,
+      avatarId: params.avatarId,
       referenceImageUrl: params.referenceImageUrl,
       imageZoom: params.imageZoom,
       imageX: params.imageX,
@@ -173,6 +188,7 @@ export async function updateInstructor(params: {
   instructorId: string;
   displayName: string;
   voiceId?: string | null;
+  avatarId?: string | null;
   referenceImageUrl?: string | null;
   imageZoom: number;
   imageX: number;
@@ -187,6 +203,7 @@ export async function updateInstructor(params: {
     body: JSON.stringify({
       displayName: params.displayName,
       voiceId: params.voiceId,
+      avatarId: params.avatarId,
       referenceImageUrl: params.referenceImageUrl,
       imageZoom: params.imageZoom,
       imageX: params.imageX,

@@ -7,7 +7,7 @@ from uuid import uuid4
 import httpx
 
 from app.core.config import Settings
-from app.schemas.usage_costs import UsageBreakdownItem, UsageSummary
+from app.schemas.usage_costs import UsageBreakdownItem, UsageEventItem, UsageSummary
 
 
 class UsageCostStorageError(RuntimeError):
@@ -66,6 +66,15 @@ class InMemoryUsageCostRepository:
 
     async def summary(self, user_id: str) -> UsageSummary:
         return _summary_from_events(self._events, user_id=user_id)
+
+    async def events(self, user_id: str, *, limit: int = 50) -> list[UsageEventItem]:
+        return _event_items(
+            [
+                event
+                for event in sorted(self._events, key=lambda item: item.created_at, reverse=True)
+                if event.user_id == user_id
+            ][:limit]
+        )
 
 
 class SupabaseUsageCostRepository:
@@ -146,6 +155,24 @@ class SupabaseUsageCostRepository:
         ]
         return _summary_from_events(events, user_id=user_id)
 
+    async def events(self, user_id: str, *, limit: int = 50) -> list[UsageEventItem]:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self._base_url}/rest/v1/usage_events",
+                headers=self._headers,
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "select": (
+                        "id,user_id,generation_job_id,created_at,stage,provider,model,"
+                        "unit_type,quantity,unit_cost_usd,cost_usd"
+                    ),
+                    "order": "created_at.desc",
+                    "limit": str(limit),
+                },
+            )
+        _raise_for_storage_error(response)
+        return _event_items([_event_from_row(row) for row in response.json()])
+
 
 def _summary_from_events(events: list[UsageCostEvent], *, user_id: str) -> UsageSummary:
     user_events = [event for event in events if event.user_id == user_id]
@@ -184,6 +211,44 @@ def _breakdown(events: list[UsageCostEvent]) -> list[UsageBreakdownItem]:
         )
         for (provider, stage, unit_type), (quantity, cost) in sorted(grouped.items())
     ]
+
+
+def _event_items(events: list[UsageCostEvent]) -> list[UsageEventItem]:
+    return [
+        UsageEventItem(
+            id=event.id,
+            created_at=event.created_at.isoformat(),
+            generation_job_id=event.generation_job_id,
+            provider=event.provider,
+            stage=event.stage,
+            model=event.model,
+            unit_type=event.unit_type,
+            quantity=event.quantity,
+            unit_cost_usd=event.unit_cost_usd,
+            cost_usd=event.cost_usd,
+        )
+        for event in events
+    ]
+
+
+def _event_from_row(row: dict[str, object]) -> UsageCostEvent:
+    created_at = datetime.now(UTC)
+    raw_created_at = row.get("created_at")
+    if isinstance(raw_created_at, str):
+        created_at = datetime.fromisoformat(raw_created_at.replace("Z", "+00:00"))
+    return UsageCostEvent(
+        id=str(row["id"]),
+        user_id=str(row["user_id"]),
+        generation_job_id=str(row["generation_job_id"]) if row.get("generation_job_id") else None,
+        stage=str(row["stage"]),
+        provider=str(row["provider"]),
+        model=str(row["model"]) if row.get("model") else None,
+        unit_type=str(row["unit_type"]),
+        quantity=float(row["quantity"] or 0),
+        unit_cost_usd=float(row["unit_cost_usd"] or 0),
+        cost_usd=float(row["cost_usd"] or 0),
+        created_at=created_at,
+    )
 
 
 def _raise_for_storage_error(response: httpx.Response) -> None:

@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies.auth import get_current_user
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
-from app.schemas.usage_costs import UsageSummary
+from app.schemas.usage_costs import UsageEventsResponse, UsageSummary
 from app.services.usage.costs import (
     InMemoryUsageCostRepository,
     SupabaseUsageCostRepository,
@@ -24,6 +24,20 @@ async def get_usage_summary(
 ) -> UsageSummary:
     try:
         return await _usage_repository(settings).summary(current_user.id)
+    except UsageCostStorageError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/events", response_model=UsageEventsResponse)
+async def get_usage_events(
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> UsageEventsResponse:
+    try:
+        return UsageEventsResponse(
+            events=await _usage_repository(settings).events(current_user.id, limit=limit)
+        )
     except UsageCostStorageError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

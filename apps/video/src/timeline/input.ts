@@ -5,6 +5,8 @@ export interface RenderInput {
   timeline: ResolvedAnimationTimeline;
   narration?: LessonNarration;
   narrationStorageObjects?: Record<string, unknown>[];
+  avatar?: Record<string, unknown> | null;
+  avatarStorageObjects?: Record<string, unknown>[];
 }
 
 export interface BlackboardLine extends MathLine {

@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     openai_gpt5_mini_input_cost_per_million_tokens_usd: float = 0.25
     openai_gpt5_mini_output_cost_per_million_tokens_usd: float = 2.00
     heygen_avatar_cost_per_second_usd: float = 0.0667
+    heygen_avatar_output_format: str = "webm"
+    heygen_avatar_poll_interval_seconds: float = 10
+    heygen_avatar_timeout_seconds: float = 300
     generated_media_bucket: str = "generated-media"
     motion_canvas_render_command: str = ""
     motion_canvas_render_cwd: str = ""

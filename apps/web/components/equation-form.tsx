@@ -24,6 +24,7 @@ type InstructorProfile = {
   id: string;
   displayName: string;
   elevenLabsId: string;
+  heygenId: string;
   referenceImage: string | null;
   imageZoom: number;
   imageX: number;
@@ -34,6 +35,7 @@ const defaultInstructorProfiles: InstructorProfile[] = instructors.map((instruct
   id: instructor.id,
   displayName: instructor.displayName,
   elevenLabsId: "voiceId" in instructor && typeof instructor.voiceId === "string" ? instructor.voiceId : "",
+  heygenId: "avatarId" in instructor && typeof instructor.avatarId === "string" ? instructor.avatarId : "",
   referenceImage: null,
   imageZoom: 1,
   imageX: 50,
@@ -61,6 +63,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   const instructorDraftDirty =
     instructorDraft.displayName !== selectedInstructor?.displayName ||
     instructorDraft.elevenLabsId !== selectedInstructor?.elevenLabsId ||
+    instructorDraft.heygenId !== selectedInstructor?.heygenId ||
     instructorDraft.referenceImage !== selectedInstructor?.referenceImage ||
     instructorDraft.imageZoom !== selectedInstructor?.imageZoom ||
     instructorDraft.imageX !== selectedInstructor?.imageX ||
@@ -239,6 +242,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
         instructorId: instructorDraft.id,
         displayName: instructorDraft.displayName,
         voiceId: instructorDraft.elevenLabsId,
+        avatarId: instructorDraft.heygenId,
         referenceImageUrl: instructorDraft.referenceImage,
         imageZoom: instructorDraft.imageZoom,
         imageX: instructorDraft.imageX,
@@ -264,6 +268,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
         accessToken,
         displayName: "New Instructor",
         voiceId: "",
+        avatarId: "",
         referenceImageUrl: null,
         imageZoom: 1,
         imageX: 50,
@@ -376,8 +381,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                   <InstructorAvatar profile={selectedInstructor} />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-zinc-100">{selectedInstructor?.displayName}</span>
-                    <span className="block truncate font-mono text-[11px] uppercase tracking-wide text-zinc-500">
-                      {selectedInstructor?.elevenLabsId ? "ElevenLabs linked" : "Voice ID unset"}
+                    <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+                      <ProviderStatus label="11L" ready={Boolean(selectedInstructor?.elevenLabsId)} />
+                      <ProviderStatus label="HGN" ready={Boolean(selectedInstructor?.heygenId)} />
                     </span>
                   </span>
                 </span>
@@ -385,7 +391,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               </button>
 
               {instructorEditorOpen ? (
-                <div className="absolute left-0 top-[4.9rem] z-30 w-full min-w-0 max-w-[calc(100vw-2rem)] rounded-md border border-emerald-400/20 bg-[#080c12]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.68),0_0_32px_rgba(16,185,129,0.12)] backdrop-blur sm:min-w-[20rem]">
+                <div className="absolute left-0 top-[4.9rem] z-50 w-full min-w-0 max-w-[calc(100vw-2rem)] rounded-md border border-emerald-400/20 bg-[#080c12]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.68),0_0_32px_rgba(16,185,129,0.12)] backdrop-blur sm:min-w-[20rem]">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">Global instructors</span>
                     <button
@@ -412,8 +418,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                         <InstructorAvatar profile={profile} small />
                         <span className="min-w-0">
                           <span className="block truncate text-sm">{profile.displayName}</span>
-                          <span className="block truncate font-mono text-[10px] uppercase tracking-wide text-zinc-500">
-                            {profile.elevenLabsId || "No ElevenLabs ID"}
+                          <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+                            <ProviderStatus label="11L" ready={Boolean(profile.elevenLabsId)} />
+                            <ProviderStatus label="HGN" ready={Boolean(profile.heygenId)} />
                           </span>
                         </span>
                       </button>
@@ -448,6 +455,15 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                         onChange={(event) => updateInstructorDraft({elevenLabsId: event.currentTarget.value})}
                         placeholder="voice id"
                         value={instructorDraft.elevenLabsId}
+                      />
+                    </label>
+                    <label className="grid gap-1.5">
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">HeyGen ID</span>
+                      <input
+                        className="h-10 rounded border border-zinc-800 bg-black/30 px-3 font-mono text-xs text-zinc-100 outline-none transition focus:border-emerald-400/70"
+                        onChange={(event) => updateInstructorDraft({heygenId: event.currentTarget.value})}
+                        placeholder="avatar id"
+                        value={instructorDraft.heygenId}
                       />
                     </label>
                     {instructorDraft.referenceImage ? (
@@ -642,6 +658,17 @@ function InstructorAvatar({
   );
 }
 
+function ProviderStatus({label, ready}: {label: string; ready: boolean}) {
+  return (
+    <span className={`inline-flex items-center gap-1 ${ready ? "text-emerald-300" : "text-red-300/80"}`}>
+      <span aria-hidden="true" className="text-[11px] leading-none">
+        {ready ? "+" : "x"}
+      </span>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 function CropControl({
   label,
   max,
@@ -714,6 +741,7 @@ function instructorToProfile(instructor: Instructor): InstructorProfile {
     id: instructor.id,
     displayName: instructor.displayName,
     elevenLabsId: instructor.voiceId ?? "",
+    heygenId: instructor.avatarId ?? "",
     referenceImage: instructor.referenceImageUrl ?? null,
     imageZoom: instructor.imageZoom ?? 1,
     imageX: instructor.imageX ?? 50,
