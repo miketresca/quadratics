@@ -187,10 +187,14 @@ def _summary_from_events(events: list[UsageCostEvent], *, user_id: str) -> Usage
 
 def _average_cost_by_paid_stage(events: list[UsageCostEvent]) -> dict[str, float]:
     by_generation_stage: dict[tuple[str, str], float] = {}
+    heygen_avatar_costs: list[float] = []
     for event in events:
         if event.generation_job_id is None:
             continue
-        if event.stage == "heygen_avatar" and event.metadata.get("completeStage") is False:
+        if event.stage == "heygen_avatar":
+            if event.metadata.get("completeStage") is False:
+                continue
+            heygen_avatar_costs.append(event.cost_usd)
             continue
         key = (event.generation_job_id, event.stage)
         by_generation_stage[key] = by_generation_stage.get(key, 0) + event.cost_usd
@@ -198,11 +202,14 @@ def _average_cost_by_paid_stage(events: list[UsageCostEvent]) -> dict[str, float
     stage_groups: dict[str, list[float]] = {}
     for (_generation_id, stage), cost in by_generation_stage.items():
         stage_groups.setdefault(stage, []).append(cost)
-    return {
+    average_by_stage = {
         stage: sum(costs) / len(costs)
         for stage, costs in stage_groups.items()
         if costs
     }
+    if heygen_avatar_costs:
+        average_by_stage["heygen_avatar"] = sum(heygen_avatar_costs) / len(heygen_avatar_costs)
+    return average_by_stage
 
 
 def _breakdown(events: list[UsageCostEvent]) -> list[UsageBreakdownItem]:

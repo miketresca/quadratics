@@ -71,25 +71,31 @@ export function LessonResult({
   const [pendingAvatarRun, setPendingAvatarRun] = useState<{force: boolean} | null>(null);
   const [pendingRenderRun, setPendingRenderRun] = useState<{force: boolean} | null>(null);
   const [selectedAvatarModel, setSelectedAvatarModel] = useState<HeyGenAvatarModel>("avatar_iii");
-  const solutionLines = lesson ? flattenLessonMathLines(lesson) : [];
-  const teacherScriptArtifact = artifactForStage(generation, "teacher_script");
-  const speechMarkupArtifact = artifactForStage(generation, "elevenlabs_request");
-  const narrationArtifact = artifactForStage(generation, "elevenlabs_audio");
-  const avatarArtifact = artifactForStage(generation, "heygen_avatar");
-  const effectiveScript = script ?? payloadForStage<LessonScript>(generation, "teacher_script");
-  const effectiveNarration = narration ?? payloadForStage<LessonNarration>(generation, "elevenlabs_audio");
-  const speechMarkupArtifactPayload = payloadForStage<LessonNarration>(generation, "elevenlabs_request");
+  const lessonSupportsPipeline = lesson?.status === "completed";
+  const pipelineGeneration = lessonSupportsPipeline ? generation : undefined;
+  const solutionLines = lessonSupportsPipeline && lesson ? flattenLessonMathLines(lesson) : [];
+  const teacherScriptArtifact = artifactForStage(pipelineGeneration, "teacher_script");
+  const speechMarkupArtifact = artifactForStage(pipelineGeneration, "elevenlabs_request");
+  const narrationArtifact = artifactForStage(pipelineGeneration, "elevenlabs_audio");
+  const avatarArtifact = artifactForStage(pipelineGeneration, "heygen_avatar");
+  const effectiveScript = lessonSupportsPipeline
+    ? script ?? payloadForStage<LessonScript>(pipelineGeneration, "teacher_script")
+    : undefined;
+  const effectiveNarration = lessonSupportsPipeline
+    ? narration ?? payloadForStage<LessonNarration>(pipelineGeneration, "elevenlabs_audio")
+    : undefined;
+  const speechMarkupArtifactPayload = payloadForStage<LessonNarration>(pipelineGeneration, "elevenlabs_request");
   const speechMarkup = speechMarkupArtifactPayload ?? effectiveNarration;
-  const animationPlanArtifact = artifactForStage(generation, "animation_plan");
-  const resolvedTimelineArtifact = artifactForStage(generation, "resolved_timeline");
-  const renderArtifact = artifactForStage(generation, "motion_canvas_render");
+  const animationPlanArtifact = artifactForStage(pipelineGeneration, "animation_plan");
+  const resolvedTimelineArtifact = artifactForStage(pipelineGeneration, "resolved_timeline");
+  const renderArtifact = artifactForStage(pipelineGeneration, "motion_canvas_render");
   const animationPlan = isAnimationPlanPayload(animationPlanArtifact?.payload)
     ? animationPlanArtifact.payload
     : undefined;
   const resolvedTimeline = isResolvedTimelinePayload(resolvedTimelineArtifact?.payload)
     ? resolvedTimelineArtifact.payload
     : undefined;
-  const baseVideo = artifactForStage(generation, "base_video");
+  const baseVideo = artifactForStage(pipelineGeneration, "base_video");
   const visibleRenderArtifact = baseVideo ?? renderArtifact;
   const elevenLabsRequestLoading = loadingStage === "elevenlabs_request" || loadingStage === "elevenlabs_audio";
   const elevenLabsAudioLoading = loadingStage === "elevenlabs_audio";
@@ -161,7 +167,7 @@ export function LessonResult({
               onRun={onRunStage ? () => onRunStage("teacher_script", {force: true}) : undefined}
               title="teacher_script"
             />
-          ) : lesson ? (
+          ) : lessonSupportsPipeline ? (
             <RunnableLog
               accent="sky"
               className="mt-6"

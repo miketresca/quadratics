@@ -4,6 +4,7 @@ from app.api.routes import generations
 from app.core.config import Settings, get_settings
 from app.schemas.narration import AudioAlignment
 from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
+from app.services.usage.costs import InMemoryUsageCostRepository
 
 
 class UsageCostNarrationProvider(NarrationProvider):
@@ -92,3 +93,47 @@ async def test_usage_summary_tracks_elevenlabs_generation_cost(
     assert event["quantity"] == breakdown["quantity"]
     assert event["costUsd"] == expected_cost
     assert event["createdAt"]
+
+
+@pytest.mark.asyncio
+async def test_usage_summary_averages_heygen_runs_instead_of_summing_per_generation():
+    repository = InMemoryUsageCostRepository()
+    user_id = "9f09c87d-1111-4222-8333-111111111111"
+    generation_id = "9f09c87d-2222-4333-8444-222222222222"
+    await repository.record(
+        user_id=user_id,
+        generation_job_id=generation_id,
+        stage="teacher_script",
+        provider="openai",
+        model="gpt-5-mini",
+        unit_type="tokens",
+        quantity=1,
+        unit_cost_usd=0.06,
+    )
+    await repository.record(
+        user_id=user_id,
+        generation_job_id=generation_id,
+        stage="heygen_avatar",
+        provider="heygen",
+        model="avatar_iv",
+        unit_type="seconds",
+        quantity=1,
+        unit_cost_usd=3.10,
+        metadata={"completeStage": True},
+    )
+    await repository.record(
+        user_id=user_id,
+        generation_job_id=generation_id,
+        stage="heygen_avatar",
+        provider="heygen",
+        model="avatar_iii",
+        unit_type="seconds",
+        quantity=1,
+        unit_cost_usd=0.78,
+        metadata={"completeStage": True},
+    )
+
+    summary = await repository.summary(user_id)
+
+    assert summary.global_average_cost_per_video_without_avatar_usd == pytest.approx(0.06)
+    assert summary.global_average_cost_per_video_with_avatar_usd == pytest.approx(2.0)

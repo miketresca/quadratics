@@ -36,7 +36,7 @@ describe("LessonResult", () => {
     });
   });
 
-  it("omits solution lines for unsupported lessons", async () => {
+  it("omits downstream pipeline logs for unsupported lessons", async () => {
     container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -44,6 +44,36 @@ describe("LessonResult", () => {
     await act(async () => {
       root.render(
         <LessonResult
+          generation={
+            {
+              job: {
+                id: "unsupported-generation",
+                userId: "user-1",
+                equationInput: "x^2 - 2x + 99",
+                status: "completed",
+                creditsUsed: 0
+              },
+              lesson: {
+                ...fixture,
+                status: "unsupported_instructional_method",
+                steps: []
+              },
+              artifacts: [
+                {
+                  id: "render-artifact",
+                  generationJobId: "unsupported-generation",
+                  userId: "user-1",
+                  stage: "motion_canvas_render",
+                  version: 1,
+                  status: "completed",
+                  inputHash: "sha256:render",
+                  payload: {durationSeconds: 1},
+                  isCurrent: true,
+                  createdAt: "2026-08-18T00:00:00Z"
+                }
+              ]
+            } as never
+          }
           lesson={
             {
               ...fixture,
@@ -56,6 +86,9 @@ describe("LessonResult", () => {
     });
 
     expect(container.textContent).not.toContain("solution_lines");
+    expect(container.textContent).not.toContain("teacher_script");
+    expect(container.textContent).not.toContain("motion_canvas_render");
+    expect(container.querySelector('button[aria-label="Run teacher_script"]')).toBeNull();
 
     await act(async () => {
       root.unmount();

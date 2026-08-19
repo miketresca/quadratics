@@ -27,6 +27,7 @@ export default makeScene2D(function* (view) {
   const captionContainerRef = createRef<Rect>();
   const captionWordRefs = Array.from({length: captionWordSlots}, () => createRef<Txt>());
   const captionGroups = captionGroupsForNarration(input.narration);
+  const chalkCursorRef = createRef<Rect>();
 
   view.add(
     <Layout layout={false} width={1920} height={1080}>
@@ -35,6 +36,16 @@ export default makeScene2D(function* (view) {
         lines={lines}
         lineRefs={lineRefs}
         highlightRefs={highlightRefs}
+      />
+      <Rect
+        ref={chalkCursorRef}
+        width={58}
+        height={13}
+        radius={3}
+        fill={board.chalk}
+        opacity={0}
+        shadowBlur={8}
+        shadowColor="#f6f1dc88"
       />
       <CaptionTrack containerRef={captionContainerRef} wordRefs={captionWordRefs} />
     </Layout>,
@@ -64,6 +75,8 @@ export default makeScene2D(function* (view) {
             linesById.get(lineId)!.expression,
             duration,
             isSolutionLine(lineId) ? board.solution : undefined,
+            chalkCursorRef(),
+            linesById.get(lineId)!.y,
           );
         } else if (
           lineId &&
