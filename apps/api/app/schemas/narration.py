@@ -31,7 +31,7 @@ class NarrationSegment(ApiModel):
     voice_id: str
     model_id: str
     audio_mime_type: str
-    audio_base64: str
+    audio_base64: str | None = None
     duration_seconds: float | None = Field(default=None, ge=0)
     speech_text: str = Field(min_length=1)
     alignment: AudioAlignment | None = None

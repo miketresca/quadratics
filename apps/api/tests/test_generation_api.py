@@ -17,13 +17,20 @@ class CountingNarrationProvider(NarrationProvider):
             audio_base64="ZmFrZS1tcDM=",
             audio_mime_type="audio/mpeg",
             duration_seconds=1.2,
-            normalized_alignment=AudioAlignment(
-                characters=["H", "i"],
-                character_start_times_seconds=[0, 0.2],
-                character_end_times_seconds=[0.2, 0.4],
-            ),
+            normalized_alignment=alignment_for(request.text),
             provider_metadata={"model": "eleven_multilingual_v2"},
         )
+
+
+def alignment_for(text: str) -> AudioAlignment:
+    characters = list(text)
+    starts = [index * 0.05 for index, _ in enumerate(characters)]
+    ends = [start + 0.05 for start in starts]
+    return AudioAlignment(
+        characters=characters,
+        character_start_times_seconds=starts,
+        character_end_times_seconds=ends,
+    )
 
 
 @pytest.mark.asyncio
@@ -100,3 +107,78 @@ async def test_generation_stage_persists_narration_and_reuses_identical_audio(
     assert audio_artifacts[0]["status"] == "completed"
     assert audio_artifacts[0]["storageObjects"]
     assert "audioBase64" not in audio_artifacts[0]["payload"]["segments"][0]
+
+
+@pytest.mark.asyncio
+async def test_generation_run_all_completes_through_base_video(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+
+        response = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/run-all",
+            json={},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    stages = [artifact["stage"] for artifact in response.json()["artifacts"]]
+    assert stages == [
+        "solution",
+        "lesson",
+        "teacher_script",
+        "elevenlabs_request",
+        "elevenlabs_audio",
+        "animation_plan",
+        "resolved_timeline",
+        "motion_canvas_render",
+        "base_video",
+    ]
+    assert len(provider.requests) == 3
+
+
+@pytest.mark.asyncio
+async def test_animation_plan_stage_does_not_regenerate_elevenlabs_audio(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+        elevenlabs_male_voice_id="male-voice",
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+        await authenticated_client.post(f"/api/v1/generations/{generation_id}/run-all", json={})
+
+        response = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/animation_plan",
+            json={"force": True},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    assert len(provider.requests) == 3

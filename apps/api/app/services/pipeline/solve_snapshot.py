@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 from fastapi import HTTPException
 
+from app.schemas.animation import AnimationPlan
 from app.schemas.artifact import (
     ArtifactStorageObject,
     GenerationArtifact,
@@ -11,7 +12,11 @@ from app.schemas.artifact import (
 )
 from app.schemas.generation import GenerationJob, GenerationSnapshot
 from app.schemas.lesson import LessonResponse
+from app.schemas.narration import LessonNarration
 from app.schemas.script import LessonScript, OutputMode
+from app.services.animation.base import AnimationPlanProvider
+from app.services.animation.builder import build_animation_plan
+from app.services.animation.resolver import TimelineResolutionError, resolve_animation_timeline
 from app.services.artifacts import ArtifactLifecycleService, InMemoryArtifactRepository
 from app.services.artifacts.repository import ArtifactDependencyRecord, ArtifactRecord
 from app.services.jobs.generation_jobs import (
@@ -26,6 +31,7 @@ from app.services.narration.artifacts import NarrationArtifactService
 from app.services.narration.base import NarrationProvider
 from app.services.narration.builder import build_lesson_narration
 from app.services.narration.speech_markup import SpeechMarkupProvider
+from app.services.rendering.base import MotionCanvasRenderer, RenderRequest
 from app.services.scripts.base import ScriptProvider
 from app.services.scripts.builder import build_lesson_script
 from app.services.storage.media_store import MediaStore
@@ -249,6 +255,183 @@ class SolveGenerationService:
         )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
+    async def run_animation_plan(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+        provider: AnimationPlanProvider,
+        force: bool = False,
+    ) -> GenerationSnapshot:
+        job, lesson, lesson_artifact = self._current_lesson_context(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+        )
+        script_artifact = self._current_required(generation_job_id, "teacher_script")
+        narration_artifact = self._current_required(generation_job_id, "elevenlabs_audio")
+        script = LessonScript.model_validate(script_artifact.payload)
+        narration = LessonNarration.model_validate(narration_artifact.payload)
+        stage_run = self._lifecycle.start_stage(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            stage="animation_plan",
+            input_payload={
+                "lessonArtifactId": lesson_artifact.id,
+                "scriptArtifactId": script_artifact.id,
+                "narrationArtifactId": narration_artifact.id,
+            },
+            upstream_artifact_ids=[lesson_artifact.id, script_artifact.id, narration_artifact.id],
+            provider=provider.__class__.__name__,
+            model=getattr(provider, "model", None),
+            force=force,
+        )
+        if stage_run.cache_hit:
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        try:
+            plan = await build_animation_plan(
+                lesson=lesson,
+                script=script,
+                narration=narration,
+                lesson_artifact_id=lesson_artifact.id,
+                narration_artifact_id=narration_artifact.id,
+                provider=provider,
+            )
+        except ValueError as exc:
+            self._artifacts.fail_attempt(
+                stage_run.artifact.id,
+                error_code="animation_plan_failed",
+                error_message=str(exc),
+            )
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        self._artifacts.complete_attempt(
+            stage_run.artifact.id,
+            payload=plan.model_dump(mode="json", by_alias=True),
+        )
+        return self.snapshot_for_job(job=job, lesson=lesson)
+
+    def run_resolved_timeline(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+        force: bool = False,
+    ) -> GenerationSnapshot:
+        job, lesson, _lesson_artifact = self._current_lesson_context(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+        )
+        plan_artifact = self._current_required(generation_job_id, "animation_plan")
+        narration_artifact = self._current_required(generation_job_id, "elevenlabs_audio")
+        plan = AnimationPlan.model_validate(plan_artifact.payload)
+        narration = LessonNarration.model_validate(narration_artifact.payload)
+        stage_run = self._lifecycle.start_stage(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            stage="resolved_timeline",
+            input_payload={
+                "animationPlanArtifactId": plan_artifact.id,
+                "narrationArtifactId": narration_artifact.id,
+            },
+            upstream_artifact_ids=[plan_artifact.id, narration_artifact.id],
+            force=force,
+        )
+        if stage_run.cache_hit:
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        try:
+            timeline = resolve_animation_timeline(plan, narration=narration)
+        except TimelineResolutionError as exc:
+            self._artifacts.fail_attempt(
+                stage_run.artifact.id,
+                error_code="timeline_resolution_failed",
+                error_message=str(exc),
+            )
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        self._artifacts.complete_attempt(
+            stage_run.artifact.id,
+            payload=timeline.model_dump(mode="json", by_alias=True),
+        )
+        return self.snapshot_for_job(job=job, lesson=lesson)
+
+    def run_render(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+        renderer: MotionCanvasRenderer,
+        media_store: MediaStore,
+        force: bool = False,
+    ) -> GenerationSnapshot:
+        job, lesson, _lesson_artifact = self._current_lesson_context(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+        )
+        timeline_artifact = self._current_required(generation_job_id, "resolved_timeline")
+        stage_run = self._lifecycle.start_stage(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            stage="motion_canvas_render",
+            input_payload={
+                "timelineArtifactId": timeline_artifact.id,
+                "rendererVersion": renderer.__class__.__name__,
+            },
+            upstream_artifact_ids=[timeline_artifact.id],
+            provider="motion_canvas",
+            model=renderer.__class__.__name__,
+            force=force,
+        )
+        if stage_run.cache_hit:
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        duration_seconds = float(timeline_artifact.payload.get("durationSeconds") or 0)
+        result = renderer.render(
+            RenderRequest(
+                generation_job_id=generation_job_id,
+                timeline_artifact_id=timeline_artifact.id,
+                duration_seconds=duration_seconds,
+            )
+        )
+        video_ref = media_store.put(
+            path=f"{user_id}/{generation_job_id}/renders/{stage_run.artifact.id}.mp4",
+            content=result.content,
+            content_type=result.content_type,
+            metadata={"timelineArtifactId": timeline_artifact.id},
+        )
+        render_artifact = self._artifacts.complete_attempt(
+            stage_run.artifact.id,
+            payload={
+                "durationSeconds": result.duration_seconds,
+                "rendererVersion": result.renderer_version,
+            },
+            storage_objects=[
+                ArtifactStorageObject(
+                    bucket=video_ref.bucket,
+                    path=video_ref.path,
+                    content_type=video_ref.content_type,
+                    size_bytes=video_ref.size_bytes,
+                    checksum_sha256=video_ref.checksum_sha256,
+                    duration_seconds=result.duration_seconds,
+                    metadata=video_ref.metadata,
+                )
+            ],
+        )
+        base_video_run = self._lifecycle.start_stage(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            stage="base_video",
+            input_payload={"renderArtifactId": render_artifact.id},
+            upstream_artifact_ids=[render_artifact.id],
+            force=force,
+        )
+        if not base_video_run.cache_hit:
+            self._artifacts.complete_attempt(
+                base_video_run.artifact.id,
+                payload={
+                    "renderArtifactId": render_artifact.id,
+                    "durationSeconds": result.duration_seconds,
+                },
+                storage_objects=render_artifact.storage_objects,
+            )
+        return self.snapshot_for_job(job=job, lesson=lesson)
+
     def snapshot_for_job(
         self,
         *,
@@ -285,6 +468,15 @@ class SolveGenerationService:
             raise HTTPException(status_code=409, detail="Lesson artifact is required")
         lesson = LessonResponse.model_validate(lesson_artifact.payload)
         return job, lesson, lesson_artifact
+
+    def _current_required(self, generation_job_id: str, stage: str) -> ArtifactRecord:
+        artifact = self._artifacts.current_for_stage(
+            generation_job_id=generation_job_id,
+            stage=stage,  # type: ignore[arg-type]
+        )
+        if artifact is None:
+            raise HTTPException(status_code=409, detail=f"{stage} artifact is required")
+        return artifact
 
 
 def lesson_from_equation(equation: str) -> LessonResponse:
