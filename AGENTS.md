@@ -6,6 +6,7 @@ This repository builds an internal, artifact-backed video generation pipeline fo
 
 - [README.md](README.md) - capabilities, setup, environment, commands, and deployment notes
 - [STRATEGY.md](STRATEGY.md) - product direction, priorities, and non-goals
+- [CONCEPTS.md](CONCEPTS.md) - shared domain vocabulary for project-specific entities, stages, and status concepts
 - [docs/architecture.md](docs/architecture.md) - system boundaries and data flow
 - [docs/domain-model.md](docs/domain-model.md) - shared vocabulary and artifact concepts
 - [docs/video-pipeline.md](docs/video-pipeline.md) - generation stages, reruns, storage, rendering, and golden checkpoint behavior
