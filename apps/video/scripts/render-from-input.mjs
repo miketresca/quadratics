@@ -117,17 +117,18 @@ async function prepareAvatarVideos(renderInput, tempDir) {
 async function compositeAvatarVideos(baseVideoPath, avatarVideoPaths, outputPath) {
   const inputs = ["-i", baseVideoPath];
   for (const avatarVideoPath of avatarVideoPaths) {
+    if (avatarVideoPath.endsWith(".webm")) {
+      // HeyGen transparent WebMs use VP9 alpha; FFmpeg's native decoder can drop it.
+      inputs.push("-c:v", "libvpx-vp9");
+    }
     inputs.push("-i", avatarVideoPath);
   }
-  const avatarInput =
-    avatarVideoPaths.length === 1
-      ? "[1:v]"
-      : `${avatarVideoPaths.map((_path, index) => `[${index + 1}:v]`).join("")}concat=n=${avatarVideoPaths.length}:v=1:a=0[avatarraw];[avatarraw]`;
+  const avatarInput = avatarInputFilter(avatarVideoPaths.length);
   await run("ffmpeg", [
     "-y",
     ...inputs,
     "-filter_complex",
-    `${avatarInput}scale=420:-1[avatar];[0:v][avatar]overlay=80:H-h-80:format=auto[v]`,
+    `${avatarInput}scale=420:-1,format=rgba[avatar];[0:v][avatar]overlay=80:H-h-80:format=auto[v]`,
     "-map",
     "[v]",
     "-map",
@@ -141,6 +142,18 @@ async function compositeAvatarVideos(baseVideoPath, avatarVideoPaths, outputPath
     "-shortest",
     outputPath
   ]);
+}
+
+function avatarInputFilter(avatarVideoCount) {
+  if (avatarVideoCount === 1) {
+    return "[1:v]format=rgba[avatarraw];[avatarraw]";
+  }
+  const formattedInputs = Array.from({length: avatarVideoCount}, (_value, index) => {
+    const inputIndex = index + 1;
+    return `[${inputIndex}:v]format=rgba[avatar${index}];`;
+  }).join("");
+  const concatInputs = Array.from({length: avatarVideoCount}, (_value, index) => `[avatar${index}]`).join("");
+  return `${formattedInputs}${concatInputs}concat=n=${avatarVideoCount}:v=1:a=0[avatarraw];[avatarraw]`;
 }
 
 async function prepareNarrationAudio(renderInput, tempDir) {
