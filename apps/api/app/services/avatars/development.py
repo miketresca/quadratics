@@ -15,5 +15,6 @@ class DevelopmentAvatarVideoProvider(AvatarVideoProvider):
             provider_metadata={
                 "provider": "development",
                 "audioUrlPresent": bool(request.audio_url),
+                "scriptSegmentId": request.script_segment_id,
             },
         )

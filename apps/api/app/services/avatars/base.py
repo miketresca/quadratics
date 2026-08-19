@@ -9,6 +9,7 @@ class AvatarVideoRequest:
     audio_url: str
     title: str
     output_format: str = "webm"
+    script_segment_id: str | None = None
 
 
 @dataclass(frozen=True)

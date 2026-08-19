@@ -14,6 +14,8 @@ class UsageSummary(ApiModel):
     user_total_quantity: float
     user_breakdown: list[UsageBreakdownItem]
     global_average_cost_per_video_usd: float
+    global_average_cost_per_video_without_avatar_usd: float
+    global_average_cost_per_video_with_avatar_usd: float
     global_video_count: int
     global_breakdown: list[UsageBreakdownItem]
 

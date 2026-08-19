@@ -71,6 +71,8 @@ async def test_usage_summary_tracks_elevenlabs_generation_cost(
 
     assert body["userTotalCostUsd"] == expected_cost
     assert body["globalAverageCostPerVideoUsd"] == expected_cost
+    assert body["globalAverageCostPerVideoWithoutAvatarUsd"] == expected_cost
+    assert body["globalAverageCostPerVideoWithAvatarUsd"] == expected_cost
     assert body["globalVideoCount"] == 1
     assert body["userBreakdown"] == [
         {

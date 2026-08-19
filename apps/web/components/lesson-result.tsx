@@ -15,6 +15,9 @@ import {useState} from "react";
 import {flattenLessonMathLines} from "@/lib/lesson-view";
 
 type StageRunOptions = {force?: boolean};
+const HEYGEN_AVATAR_COST_PER_SECOND_USD = Number(
+  process.env.NEXT_PUBLIC_HEYGEN_AVATAR_COST_PER_SECOND_USD ?? "0.0667"
+);
 
 export function LessonResult({
   actionDisabled = false,
@@ -42,6 +45,7 @@ export function LessonResult({
   scriptLoading?: boolean;
 }) {
   const [activeView, setActiveView] = useState<"lesson" | "logs">("logs");
+  const [pendingAvatarRun, setPendingAvatarRun] = useState<{force: boolean} | null>(null);
   const solutionLines = lesson ? flattenLessonMathLines(lesson) : [];
   const teacherScriptArtifact = artifactForStage(generation, "teacher_script");
   const speechMarkupArtifact = artifactForStage(generation, "elevenlabs_request");
@@ -65,6 +69,17 @@ export function LessonResult({
   const elevenLabsRequestLoading = loadingStage === "elevenlabs_request" || loadingStage === "elevenlabs_audio";
   const elevenLabsAudioLoading = loadingStage === "elevenlabs_audio";
   const avatarLoading = loadingStage === "heygen_avatar";
+  const avatarEstimate = estimateHeyGenCost(effectiveNarration);
+
+  function requestAvatarRun(force = false) {
+    setPendingAvatarRun({force});
+  }
+
+  function confirmAvatarRun() {
+    const force = pendingAvatarRun?.force;
+    setPendingAvatarRun(null);
+    onRunStage?.("heygen_avatar", {force});
+  }
 
   return (
     <section className="mx-auto mt-6 max-w-3xl" aria-live="polite">
@@ -172,8 +187,9 @@ export function LessonResult({
             <AvatarLog
               actionDisabled={actionDisabled}
               artifact={avatarArtifact}
+              estimate={avatarEstimate}
               loading={avatarLoading}
-              onRun={onRunStage ? () => onRunStage("heygen_avatar", {force: true}) : undefined}
+              onRun={onRunStage ? () => requestAvatarRun(true) : undefined}
             />
           ) : avatarLoading ? (
             <PendingLog accent="pink" className="mt-6" title="heygen_avatar" />
@@ -183,9 +199,11 @@ export function LessonResult({
               className="mt-6"
               disabled={actionDisabled || !onRunStage || avatarLoading}
               loading={avatarLoading}
-              onRun={onRunStage ? () => onRunStage("heygen_avatar") : undefined}
+              onRun={onRunStage ? () => requestAvatarRun(false) : undefined}
               title="heygen_avatar"
-            />
+            >
+              <AvatarRunSummary estimate={avatarEstimate} />
+            </RunnableLog>
           ) : null}
 
           {animationPlan ? (
@@ -275,6 +293,14 @@ export function LessonResult({
           ) : null}
         </>
       )}
+      {pendingAvatarRun ? (
+        <AvatarRunConfirm
+          estimate={avatarEstimate}
+          force={pendingAvatarRun.force}
+          onCancel={() => setPendingAvatarRun(null)}
+          onConfirm={confirmAvatarRun}
+        />
+      ) : null}
     </section>
   );
 }
@@ -651,18 +677,23 @@ function TimelineLog({
 function AvatarLog({
   actionDisabled = false,
   artifact,
+  estimate,
   loading = false,
   onRun
 }: {
   actionDisabled?: boolean;
   artifact: GenerationArtifact;
+  estimate: HeyGenCostEstimate;
   loading?: boolean;
   onRun?: () => void;
 }) {
   const stageLoading = loading || artifact.status === "running";
-  const storageObject = artifact.storageObjects?.[0];
+  const storageObjects = artifact.storageObjects ?? [];
   const outputFormat = typeof artifact.payload?.outputFormat === "string" ? artifact.payload.outputFormat : "webm";
-  const durationSeconds = typeof artifact.payload?.durationSeconds === "number" ? artifact.payload.durationSeconds : storageObject?.durationSeconds;
+  const durationSeconds =
+    typeof artifact.payload?.durationSeconds === "number"
+      ? artifact.payload.durationSeconds
+      : storageObjects.reduce((total, object) => total + (object.durationSeconds ?? 0), 0);
   return (
     <StageCard
       accent="pink"
@@ -683,21 +714,126 @@ function AvatarLog({
               <p className="mt-1 text-zinc-100">{durationSeconds ? formatSeconds(durationSeconds) : "pending"}</p>
             </div>
             <div>
-              <p className="font-mono text-xs uppercase tracking-wide text-zinc-500">Composite</p>
-              <p className="mt-1 text-zinc-100">transparent overlay</p>
+              <p className="font-mono text-xs uppercase tracking-wide text-zinc-500">Segments</p>
+              <p className="mt-1 text-zinc-100">{storageObjects.length || "pending"}</p>
             </div>
           </div>
-          {storageObject?.signedUrl ? (
-            <video className="aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
-              <track kind="captions" />
-            </video>
+          {storageObjects.length > 0 ? (
+            <ol className="grid gap-2">
+              {storageObjects.map((storageObject, index) => (
+                <li className="rounded border border-zinc-800 bg-zinc-950/45 p-3" key={storageObject.path}>
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="font-mono text-xs uppercase tracking-wide text-zinc-500">
+                      segment {index + 1}
+                    </span>
+                    <span className="font-mono text-xs text-pink-200">
+                      {formatSeconds(storageObject.durationSeconds ?? estimate.averageSegmentSeconds)}
+                    </span>
+                  </div>
+                  {storageObject.signedUrl ? (
+                    <video className="aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
+                      <track kind="captions" />
+                    </video>
+                  ) : null}
+                  <ArtifactStorage object={storageObject} />
+                </li>
+              ))}
+            </ol>
           ) : null}
-          {storageObject ? <ArtifactStorage object={storageObject} /> : null}
         </div>
       ) : (
         <p className="mt-3 text-sm text-zinc-300">{artifact.errorMessage ?? "Avatar video is not current."}</p>
       )}
     </StageCard>
+  );
+}
+
+type HeyGenCostEstimate = {
+  durationSeconds: number;
+  averageSegmentSeconds: number;
+  segmentCount: number;
+  costUsd: number;
+};
+
+function estimateHeyGenCost(narration: LessonNarration | undefined): HeyGenCostEstimate {
+  const segments = narration?.segments ?? [];
+  const segmentDurations = segments.map((segment) => Math.max(0, segment.durationSeconds ?? 0));
+  const durationSeconds =
+    segmentDurations.reduce((total, duration) => total + duration, 0) ||
+    Math.max(0, narration?.durationSeconds ?? 0);
+  const segmentCount = segments.length || (durationSeconds > 0 ? 1 : 0);
+  return {
+    durationSeconds,
+    averageSegmentSeconds: segmentCount > 0 ? durationSeconds / segmentCount : 0,
+    segmentCount,
+    costUsd: durationSeconds * HEYGEN_AVATAR_COST_PER_SECOND_USD,
+  };
+}
+
+function AvatarRunSummary({estimate}: {estimate: HeyGenCostEstimate}) {
+  return (
+    <div className="mt-4 rounded border border-pink-400/25 bg-pink-950/10 p-3 text-sm text-zinc-300">
+      <p>
+        Optional avatar pass. It will create {estimate.segmentCount || "the"} HeyGen clip
+        {estimate.segmentCount === 1 ? "" : "s"} from the completed ElevenLabs audio and only makes the render stale.
+      </p>
+      <p className="mt-2 font-mono text-xs uppercase tracking-wide text-pink-200">
+        estimate: {formatSeconds(estimate.durationSeconds)} / {formatCurrency(estimate.costUsd)}
+      </p>
+    </div>
+  );
+}
+
+function AvatarRunConfirm({
+  estimate,
+  force,
+  onCancel,
+  onConfirm
+}: {
+  estimate: HeyGenCostEstimate;
+  force: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-md border border-pink-400/30 bg-[#080c12]/95 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.75),0_0_48px_rgba(244,114,182,0.1)]">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded border border-pink-400/35 bg-pink-400/10 font-mono text-sm text-pink-200">
+            !
+          </span>
+          <div>
+            <h3 className="font-mono text-sm uppercase tracking-wide text-pink-200">Run HeyGen avatar</h3>
+            <p className="mt-2 text-sm leading-6 text-zinc-300">
+              This will submit {estimate.segmentCount || "the"} narration segment
+              {estimate.segmentCount === 1 ? "" : "s"} to HeyGen. Estimated cost is
+              {" "}{formatCurrency(estimate.costUsd)} for {formatSeconds(estimate.durationSeconds)}.
+            </p>
+            {force ? (
+              <p className="mt-2 text-sm leading-6 text-amber-100">
+                Regenerating replaces the current avatar artifact and marks the Motion Canvas render stale.
+              </p>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            className="rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-700 hover:text-zinc-100"
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded border border-pink-300/55 bg-pink-400/10 px-3 py-2 text-sm text-pink-100 transition hover:bg-pink-400/20"
+            onClick={onConfirm}
+            type="button"
+          >
+            Run HeyGen
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1009,6 +1145,18 @@ function formatSeconds(value: number) {
   return `${value.toFixed(1)}s`;
 }
 
+function formatCurrency(value: number) {
+  if (value > 0 && value < 0.01) {
+    return `$${value.toFixed(4)}`;
+  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
 function StageTitle({accent, title}: {accent: Accent; title: string}) {
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -1019,7 +1167,7 @@ function StageTitle({accent, title}: {accent: Accent; title: string}) {
 }
 
 function StageInfo({title}: {title: string}) {
-  const description = stageDescriptions[title] ?? "This log shows one artifact boundary in the generation pipeline.";
+  const details = stageDetails[title] ?? fallbackStageDetails;
   return (
     <span className="group/info relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
       <span
@@ -1029,22 +1177,102 @@ function StageInfo({title}: {title: string}) {
       >
         i
       </span>
-      <span className="pointer-events-none absolute left-0 top-7 z-30 hidden w-80 rounded border border-zinc-700 bg-[#090d14] p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/60 group-hover/info:block group-focus-within/info:block">
-        {description}
+      <span className="pointer-events-none absolute left-0 top-7 z-50 hidden w-[22rem] rounded border border-zinc-700 bg-[#090d14]/98 p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/70 backdrop-blur group-hover/info:block group-focus-within/info:block">
+        <span className="block font-mono text-[11px] uppercase tracking-wide text-emerald-300">{title}</span>
+        <span className="mt-2 block text-zinc-200">{details.summary}</span>
+        <span className="mt-3 grid gap-2">
+          <StageInfoRow label="Inputs" value={details.inputs} />
+          <StageInfoRow label="Guardrails" value={details.guardrails} />
+          <StageInfoRow label="Cost" value={details.cost} />
+          {details.prompt ? <StageInfoRow label="Prompt" value={details.prompt} /> : null}
+        </span>
       </span>
     </span>
   );
 }
 
-const stageDescriptions: Record<string, string> = {
-  answer: "The API normalizes the equation, verifies it is a quadratic in x, and uses deterministic SymPy-backed code to compute coefficients and exact roots. No LLM decides the math.",
-  solution_lines: "The lesson builder converts the solved quadratic into stable math-line IDs. These lines become the canonical board work for narration, animation planning, and Motion Canvas rendering.",
-  teacher_script: "OpenAI receives the deterministic lesson structure and writes concise teaching narration. The script must reference existing teaching steps and math-line IDs; it cannot invent math.",
-  elevenlabs_request: "The speech-markup provider turns the teacher script into ElevenLabs-ready conversational text with SSML break tags. This is the exact request-shaped text used before audio generation.",
-  elevenlabs_audio: "ElevenLabs generates per-step narration audio and character alignment. The MP3 segments are stored in private Supabase Storage and exposed through signed playback URLs.",
-  animation_plan: "The animation planner uses the lesson, script, and narration text to choose semantic visual actions like write, highlight, underline, or box. It does not create Motion Canvas code.",
-  resolved_timeline: "Deterministic resolver code maps planner trigger phrases to ElevenLabs character timestamps and creates exact animation, caption, and chalk-SFX windows.",
-  motion_canvas_render: "The API calls the configured Motion Canvas command adapter. It renders the blackboard scene from the resolved timeline, downloads signed narration segments, and muxes the MP4 with ffmpeg."
+function StageInfoRow({label, value}: {label: string; value: string}) {
+  return (
+    <span className="grid gap-0.5 border-t border-zinc-800 pt-2">
+      <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{label}</span>
+      <span className="text-zinc-300">{value}</span>
+    </span>
+  );
+}
+
+type StageDetails = {
+  summary: string;
+  inputs: string;
+  guardrails: string;
+  cost: string;
+  prompt?: string;
+};
+
+const fallbackStageDetails: StageDetails = {
+  summary: "One persisted artifact boundary in the generation pipeline.",
+  inputs: "The previous current artifact for this generation.",
+  guardrails: "Artifacts are hashed, cached, and stale-marked when upstream inputs change.",
+  cost: "No provider cost is recorded unless the stage calls an external paid API."
+};
+
+const stageDetails: Record<string, StageDetails> = {
+  answer: {
+    summary: "Normalizes the equation and solves it before any generative model is involved.",
+    inputs: "Raw equation text from the calculator input.",
+    guardrails: "SymPy-backed deterministic parsing verifies this is a quadratic in x and computes exact coefficients and roots.",
+    cost: "Free. No external provider call."
+  },
+  solution_lines: {
+    summary: "Turns the solved quadratic into stable board-work lines.",
+    inputs: "The completed solution artifact.",
+    guardrails: "Line IDs are deterministic and become the references used by script, animation, and render stages.",
+    cost: "Free. Local lesson builder only."
+  },
+  teacher_script: {
+    summary: "Writes concise teacher narration from the deterministic lesson.",
+    inputs: "Lesson steps, math-line IDs, instructor ID, word budget, and output mode.",
+    guardrails: "The model must reference existing teaching steps and math-line IDs; it cannot introduce new math.",
+    cost: "OpenAI token usage is logged as input and output token events.",
+    prompt: "Prompt source: apps/api/app/services/scripts/prompts/factoring_teacher_script.md"
+  },
+  elevenlabs_request: {
+    summary: "Shapes script text into the exact per-step speech payload used for narration.",
+    inputs: "Completed teacher script segments.",
+    guardrails: "Speech text stays tied to script segment IDs so audio, captions, and avatar clips can be matched later.",
+    cost: "Usually free unless the configured speech-markup provider uses an LLM.",
+    prompt: "LLM provider path: apps/api/app/providers/openai/speech_markup_provider.py"
+  },
+  elevenlabs_audio: {
+    summary: "Generates private per-step narration audio and alignment.",
+    inputs: "ElevenLabs-ready speech text, selected instructor voice ID, and model ID.",
+    guardrails: "Each MP3 is persisted with its scriptSegmentId and exposed to the app through signed URLs only.",
+    cost: "ElevenLabs credits are logged from generated speech character count."
+  },
+  heygen_avatar: {
+    summary: "Optional paid avatar pass. It creates one transparent avatar clip per narration segment.",
+    inputs: "Completed ElevenLabs segment audio URLs and the selected instructor HeyGen avatar ID.",
+    guardrails: "The stage is explicit and confirmed before running. Regenerating it only makes downstream render artifacts stale.",
+    cost: `HeyGen estimate uses ${formatCurrency(HEYGEN_AVATAR_COST_PER_SECOND_USD)} per generated second.`
+  },
+  animation_plan: {
+    summary: "Chooses semantic blackboard actions for the lesson.",
+    inputs: "Lesson structure, teacher script, and narration text.",
+    guardrails: "The validator rejects actions that target unknown math-line IDs; the LLM does not emit Motion Canvas code.",
+    cost: "OpenAI token usage is logged when the OpenAI planner is enabled.",
+    prompt: "Prompt source: apps/api/app/services/animation/prompts/blackboard_animation_plan.md"
+  },
+  resolved_timeline: {
+    summary: "Maps planned actions to concrete timestamps.",
+    inputs: "Animation plan plus ElevenLabs character alignment.",
+    guardrails: "Deterministic resolver code maps trigger phrases to timing windows for captions, chalk SFX, and board actions.",
+    cost: "Free. Local resolver only."
+  },
+  motion_canvas_render: {
+    summary: "Renders the final lesson video.",
+    inputs: "Resolved timeline, signed narration audio, and optional HeyGen avatar clips.",
+    guardrails: "The command adapter downloads media, renders frames headlessly, muxes audio, and overlays avatar clips with ffmpeg.",
+    cost: "Free locally, aside from infrastructure runtime."
+  }
 };
 
 

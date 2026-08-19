@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict
 
 from fastapi import HTTPException
@@ -430,13 +431,21 @@ class SolveGenerationService:
             user_id=user_id,
         )
         narration_artifact = self._current_required(generation_job_id, "elevenlabs_audio")
-        audio_url = _narration_audio_url_for_avatar(narration_artifact, provider=provider)
+        narration = LessonNarration.model_validate(narration_artifact.payload)
+        avatar_inputs = _narration_audio_urls_for_avatar(
+            narration_artifact,
+            narration=narration,
+            provider=provider,
+        )
         stage_run = self._lifecycle.start_stage(
             generation_job_id=generation_job_id,
             user_id=user_id,
             stage="heygen_avatar",
             input_payload={
                 "narrationArtifactId": narration_artifact.id,
+                "scriptSegmentIds": [
+                    avatar_input["script_segment_id"] for avatar_input in avatar_inputs
+                ],
                 "avatarId": avatar_id,
                 "outputFormat": output_format,
             },
@@ -452,25 +461,47 @@ class SolveGenerationService:
         if stage_run.cache_hit:
             return self.snapshot_for_job(job=job, lesson=lesson)
         try:
-            result = await provider.generate(
-                AvatarVideoRequest(
-                    generation_job_id=generation_job_id,
-                    avatar_id=avatar_id,
-                    audio_url=audio_url,
-                    title=f"Quadratics {generation_job_id}",
-                    output_format=output_format,
+            results = await asyncio.gather(
+                *[
+                    provider.generate(
+                        AvatarVideoRequest(
+                            generation_job_id=generation_job_id,
+                            avatar_id=avatar_id,
+                            audio_url=str(avatar_input["audio_url"]),
+                            title=(
+                                f"Quadratics {generation_job_id} "
+                                f"{avatar_input['script_segment_id']}"
+                            ),
+                            output_format=output_format,
+                            script_segment_id=str(avatar_input["script_segment_id"]),
+                        )
+                    )
+                    for avatar_input in avatar_inputs
+                ]
+            )
+            avatar_refs = []
+            for index, (avatar_input, result) in enumerate(
+                zip(avatar_inputs, results, strict=True)
+            ):
+                extension = "webm" if result.output_format == "webm" else "mp4"
+                script_segment_id = str(avatar_input["script_segment_id"])
+                avatar_refs.append(
+                    media_store.put(
+                        path=(
+                            f"{user_id}/{generation_job_id}/avatars/"
+                            f"{stage_run.artifact.id}-{index:03d}-{script_segment_id}.{extension}"
+                        ),
+                        content=result.content,
+                        content_type=result.content_type,
+                        metadata={
+                            "providerVideoId": result.provider_video_id,
+                            "outputFormat": result.output_format,
+                            "scriptSegmentId": script_segment_id,
+                            "title": avatar_input["title"],
+                            "durationSeconds": result.duration_seconds,
+                        },
+                    )
                 )
-            )
-            extension = "webm" if result.output_format == "webm" else "mp4"
-            avatar_ref = media_store.put(
-                path=f"{user_id}/{generation_job_id}/avatars/{stage_run.artifact.id}.{extension}",
-                content=result.content,
-                content_type=result.content_type,
-                metadata={
-                    "providerVideoId": result.provider_video_id,
-                    "outputFormat": result.output_format,
-                },
-            )
         except Exception as exc:
             self._artifacts.fail_attempt(
                 stage_run.artifact.id,
@@ -478,13 +509,23 @@ class SolveGenerationService:
                 error_message=str(exc),
             )
             return self.snapshot_for_job(job=job, lesson=lesson)
+        total_duration_seconds = sum(result.duration_seconds for result in results)
         self._artifacts.complete_attempt(
             stage_run.artifact.id,
             payload={
-                "providerVideoId": result.provider_video_id,
-                "durationSeconds": result.duration_seconds,
-                "outputFormat": result.output_format,
-                "metadata": result.provider_metadata,
+                "durationSeconds": total_duration_seconds,
+                "outputFormat": output_format,
+                "segmentCount": len(results),
+                "segments": [
+                    {
+                        "scriptSegmentId": str(avatar_input["script_segment_id"]),
+                        "title": str(avatar_input["title"]),
+                        "durationSeconds": result.duration_seconds,
+                        "providerVideoId": result.provider_video_id,
+                        "metadata": result.provider_metadata,
+                    }
+                    for avatar_input, result in zip(avatar_inputs, results, strict=True)
+                ],
             },
             storage_objects=[
                 ArtifactStorageObject(
@@ -497,14 +538,16 @@ class SolveGenerationService:
                     duration_seconds=result.duration_seconds,
                     metadata=avatar_ref.metadata,
                 )
+                for avatar_ref, result in zip(avatar_refs, results, strict=True)
             ],
         )
         await _record_heygen_usage(
             usage_costs=usage_costs,
             user_id=user_id,
             generation_job_id=generation_job_id,
-            duration_seconds=result.duration_seconds,
+            duration_seconds=total_duration_seconds,
             cost_per_second_usd=cost_per_second_usd,
+            segment_count=len(results),
         )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
@@ -830,6 +873,7 @@ async def _record_heygen_usage(
     generation_job_id: str,
     duration_seconds: float,
     cost_per_second_usd: float,
+    segment_count: int,
 ) -> None:
     if usage_costs is None:
         return
@@ -842,28 +886,69 @@ async def _record_heygen_usage(
         unit_type="seconds",
         quantity=max(duration_seconds, 0),
         unit_cost_usd=cost_per_second_usd,
-        metadata={"source": "avatar_video_duration"},
+        metadata={
+            "source": "avatar_video_duration",
+            "segmentCount": segment_count,
+            "completeStage": True,
+        },
     )
 
 
-def _narration_audio_url_for_avatar(
+def _narration_audio_urls_for_avatar(
     narration_artifact: ArtifactRecord,
     *,
+    narration: LessonNarration,
     provider: AvatarVideoProvider,
-) -> str:
-    if provider.__class__.__name__ == "DevelopmentAvatarVideoProvider":
-        return "development://narration-audio"
-    signed_urls = [
-        storage_reference.signed_url
+) -> list[dict[str, object]]:
+    segments = narration.segments or []
+    if not segments:
+        if provider.__class__.__name__ == "DevelopmentAvatarVideoProvider":
+            return [
+                {
+                    "script_segment_id": "narration",
+                    "title": "Narration",
+                    "audio_url": "development://narration-audio",
+                }
+            ]
+        signed_urls = [
+            storage_reference.signed_url
+            for storage_reference in narration_artifact.storage_objects
+            if storage_reference.signed_url
+        ]
+        if len(signed_urls) != 1:
+            raise ValueError("HeyGen avatar generation requires a narration audio URL.")
+        return [
+            {
+                "script_segment_id": "narration",
+                "title": "Narration",
+                "audio_url": signed_urls[0],
+            }
+        ]
+
+    urls_by_segment = {
+        str(storage_reference.metadata.get("scriptSegmentId")): storage_reference.signed_url
         for storage_reference in narration_artifact.storage_objects
-        if storage_reference.signed_url
-    ]
-    if len(signed_urls) != 1:
-        raise ValueError(
-            "HeyGen avatar generation requires one combined narration audio URL. "
-            "The current narration artifact contains segmented audio."
+        if storage_reference.metadata.get("scriptSegmentId") and storage_reference.signed_url
+    }
+    avatar_inputs: list[dict[str, object]] = []
+    for segment in segments:
+        if provider.__class__.__name__ == "DevelopmentAvatarVideoProvider":
+            audio_url = f"development://narration-audio/{segment.script_segment_id}"
+        else:
+            audio_url = urls_by_segment.get(segment.script_segment_id)
+        if not audio_url:
+            raise ValueError(
+                "HeyGen avatar generation requires signed audio URLs for every "
+                f"narration segment. Missing {segment.script_segment_id}."
+            )
+        avatar_inputs.append(
+            {
+                "script_segment_id": segment.script_segment_id,
+                "title": segment.title,
+                "audio_url": audio_url,
+            }
         )
-    return signed_urls[0]
+    return avatar_inputs
 
 
 def _numeric_metadata(metadata: dict[str, object], key: str) -> float | None:

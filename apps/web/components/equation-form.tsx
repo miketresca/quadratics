@@ -204,6 +204,14 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   const narrationLoading =
     viewState.kind === "submitting" &&
     viewState.narrationLoading === true;
+  const inlineError = viewState.kind === "error" ? "This is not a valid quadratic equation." : null;
+
+  function updateEquationValue(nextValue: string) {
+    setEquationValue(nextValue);
+    if (viewState.kind === "error") {
+      setViewState({kind: "idle"});
+    }
+  }
 
   async function refreshInstructors() {
     if (!supabaseConfigured) {
@@ -334,14 +342,21 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       <div className="relative mx-auto w-full max-w-sm rounded-md border border-emerald-400/15 bg-[#080c12]/92 p-4 shadow-[0_0_70px_rgba(16,185,129,0.14),0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur sm:max-w-3xl sm:p-5">
         <div className="pointer-events-none absolute inset-x-6 -bottom-8 h-20 bg-emerald-400/10 blur-3xl" aria-hidden="true" />
         <form action={onSubmit} className="grid gap-4">
-          <div className="relative flex min-h-16 items-center rounded-md border border-zinc-700/90 bg-[#101621] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div
+            className={[
+              "relative flex min-h-16 items-center rounded-md border bg-[#101621] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
+              inlineError
+                ? "border-red-400/70 shadow-[0_0_30px_rgba(248,113,113,0.08),inset_0_1px_0_rgba(255,255,255,0.04)]"
+                : "border-zinc-700/90"
+            ].join(" ")}
+          >
             <label className="sr-only" htmlFor="equation">
               Equation
             </label>
             <MathEquationInput
               disabled={disabled}
               value={equationValue}
-              onEquationChange={(visibleValue) => setEquationValue(visibleValue)}
+              onEquationChange={updateEquationValue}
             />
             <button
               className="group/submit mr-2 flex h-11 w-11 items-center justify-center rounded-md border border-zinc-700 bg-zinc-900 text-zinc-200 transition enabled:hover:border-emerald-400 enabled:hover:bg-emerald-400/10 enabled:hover:text-emerald-300 disabled:opacity-50"
@@ -351,6 +366,16 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               {disabled ? <LoadingDots /> : <EnterIcon />}
             </button>
           </div>
+          {inlineError ? (
+            <p
+              className="-mt-2 rounded border border-red-400/30 bg-red-950/20 px-3 py-2 text-sm text-red-100"
+              ref={errorRef}
+              role="alert"
+              tabIndex={-1}
+            >
+              {inlineError}
+            </p>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-zinc-500">
             <span className="mr-1 uppercase tracking-wide">try</span>
@@ -359,7 +384,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                 className="rounded-md border border-zinc-800 bg-zinc-950/40 px-3 py-2 text-left text-zinc-300 transition enabled:hover:border-emerald-400/70 enabled:hover:bg-emerald-400/10 enabled:hover:text-emerald-300"
                 disabled={disabled}
                 key={sample}
-                onClick={() => setEquationValue(sample)}
+                onClick={() => updateEquationValue(sample)}
                 type="button"
               >
                 {sample}
@@ -367,7 +392,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
             ))}
           </div>
 
-          <div className="relative grid gap-3 rounded-md border border-zinc-800 bg-zinc-950/35 p-2 sm:grid-cols-[minmax(0,1fr)_minmax(17rem,0.85fr)]" ref={instructorEditorRef}>
+          <div className="relative grid gap-3 rounded-md border border-zinc-800 bg-zinc-950/35 p-2" ref={instructorEditorRef}>
             <input name="instructorId" type="hidden" value={selectedInstructor?.id ?? "male"} />
             <div className="relative">
               <span className="mb-2 block px-1 font-mono text-xs uppercase tracking-wide text-zinc-500">Instructor</span>
@@ -506,50 +531,11 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               ) : null}
             </div>
 
-            <fieldset className="grid gap-2">
-              <legend className="sr-only">Output mode</legend>
-              <span className="px-1 font-mono text-xs uppercase tracking-wide text-zinc-500">Output</span>
-              <span className="grid min-h-12 grid-cols-2 gap-1 rounded border border-zinc-800 bg-[#0b1018]/90 p-1 text-sm text-zinc-100">
-                <label className="cursor-pointer">
-                  <input className="peer sr-only" name="outputMode" type="radio" value="audio" defaultChecked />
-                  <span className="flex h-full items-center justify-center border border-transparent bg-zinc-950/40 px-2 text-zinc-400 transition peer-checked:border-emerald-400/45 peer-checked:bg-emerald-400/10 peer-checked:text-emerald-200">
-                    Audio only
-                  </span>
-                </label>
-                <label className="group/avatar relative cursor-not-allowed overflow-visible">
-                  <input className="peer sr-only" disabled name="outputMode" type="radio" value="video_audio" />
-                  <span className="flex h-full items-center justify-center gap-1 border border-transparent bg-black/20 px-2 text-zinc-600 transition">
-                    AI Avatar
-                    <span className="inline-flex h-5 w-5 items-center justify-center text-zinc-500">
-                      <InfoIcon />
-                    </span>
-                  </span>
-                  <span
-                    className="pointer-events-none absolute right-0 top-10 z-20 hidden w-72 rounded-md border border-zinc-700 bg-[#101621] p-3 text-left text-sm leading-6 text-zinc-200 shadow-2xl shadow-black/50 group-hover/avatar:block"
-                    id="avatar-api-key-help"
-                    role="tooltip"
-                  >
-                    For AI avatar generations, add your HeyGen API key from the account menu. Open your profile in the top right,
-                    choose API keys, then paste the key from your HeyGen dashboard.
-                  </span>
-                </label>
-              </span>
-            </fieldset>
           </div>
         </form>
       </div>
 
       {viewState.kind === "submitting" && !lesson ? <LessonResult lesson={null} scriptLoading={scriptLoading} /> : null}
-      {viewState.kind === "error" ? (
-        <p
-          className="mx-auto mt-4 max-w-3xl rounded border border-red-500/50 bg-red-950/40 p-3 text-sm text-red-100"
-          ref={errorRef}
-          role="alert"
-          tabIndex={-1}
-        >
-          {viewState.message}
-        </p>
-      ) : null}
       {lesson ? (
         <LessonResult
           lesson={lesson}
@@ -713,16 +699,6 @@ function ChevronIcon({open}: {open: boolean}) {
       viewBox="0 0 24 24"
     >
       <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
-function InfoIcon() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 10.5v5" strokeLinecap="round" />
-      <path d="M12 7.5h.01" strokeLinecap="round" />
     </svg>
   );
 }

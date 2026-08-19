@@ -60,8 +60,8 @@ try {
     throw new Error("Motion Canvas did not create an output frame directory");
   }
   const narrationAudioPath = await prepareNarrationAudio(renderInput, tempDir);
-  const avatarVideoPath = await prepareAvatarVideo(renderInput, tempDir);
-  const encodedVideoPath = avatarVideoPath ? resolve(tempDir, "base-video.mp4") : outputPath;
+  const avatarVideoPaths = await prepareAvatarVideos(renderInput, tempDir);
+  const encodedVideoPath = avatarVideoPaths.length > 0 ? resolve(tempDir, "base-video.mp4") : outputPath;
   const ffmpegArgs = [
     "-y",
     "-framerate",
@@ -85,8 +85,8 @@ try {
   }
   ffmpegArgs.push(encodedVideoPath);
   await run("ffmpeg", ffmpegArgs);
-  if (avatarVideoPath) {
-    await compositeAvatarVideo(encodedVideoPath, avatarVideoPath, outputPath);
+  if (avatarVideoPaths.length > 0) {
+    await compositeAvatarVideos(encodedVideoPath, avatarVideoPaths, outputPath);
   }
 } finally {
   await server.close();
@@ -94,34 +94,40 @@ try {
   await rm(tempDir, {recursive: true, force: true});
 }
 
-async function prepareAvatarVideo(renderInput, tempDir) {
+async function prepareAvatarVideos(renderInput, tempDir) {
   const storageObjects = Array.isArray(renderInput?.avatarStorageObjects)
     ? renderInput.avatarStorageObjects
     : [];
-  const object = storageObjects.find((candidate) => candidate?.signedUrl);
-  if (!object?.signedUrl) {
-    return null;
+  const objects = storageObjects.filter((candidate) => candidate?.signedUrl);
+  const avatarPaths = [];
+  for (const [index, object] of objects.entries()) {
+    const response = await fetch(object.signedUrl);
+    if (!response.ok) {
+      throw new Error(`Could not download avatar video: ${response.status}`);
+    }
+    const contentType = String(object.contentType ?? "");
+    const extension = contentType.includes("webm") ? "webm" : "mp4";
+    const avatarPath = resolve(tempDir, `avatar-${String(index).padStart(3, "0")}.${extension}`);
+    await writeFile(avatarPath, Buffer.from(await response.arrayBuffer()));
+    avatarPaths.push(avatarPath);
   }
-  const response = await fetch(object.signedUrl);
-  if (!response.ok) {
-    throw new Error(`Could not download avatar video: ${response.status}`);
-  }
-  const contentType = String(object.contentType ?? "");
-  const extension = contentType.includes("webm") ? "webm" : "mp4";
-  const avatarPath = resolve(tempDir, `avatar.${extension}`);
-  await writeFile(avatarPath, Buffer.from(await response.arrayBuffer()));
-  return avatarPath;
+  return avatarPaths;
 }
 
-async function compositeAvatarVideo(baseVideoPath, avatarVideoPath, outputPath) {
+async function compositeAvatarVideos(baseVideoPath, avatarVideoPaths, outputPath) {
+  const inputs = ["-i", baseVideoPath];
+  for (const avatarVideoPath of avatarVideoPaths) {
+    inputs.push("-i", avatarVideoPath);
+  }
+  const avatarInput =
+    avatarVideoPaths.length === 1
+      ? "[1:v]"
+      : `${avatarVideoPaths.map((_path, index) => `[${index + 1}:v]`).join("")}concat=n=${avatarVideoPaths.length}:v=1:a=0[avatarraw];[avatarraw]`;
   await run("ffmpeg", [
     "-y",
-    "-i",
-    baseVideoPath,
-    "-i",
-    avatarVideoPath,
+    ...inputs,
     "-filter_complex",
-    "[1:v]scale=420:-1[avatar];[0:v][avatar]overlay=80:H-h-80:format=auto[v]",
+    `${avatarInput}scale=420:-1[avatar];[0:v][avatar]overlay=80:H-h-80:format=auto[v]`,
     "-map",
     "[v]",
     "-map",

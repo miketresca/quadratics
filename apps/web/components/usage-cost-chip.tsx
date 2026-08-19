@@ -8,6 +8,8 @@ const emptyUsageSummary: UsageSummary = {
   userTotalQuantity: 0,
   userBreakdown: [],
   globalAverageCostPerVideoUsd: 0,
+  globalAverageCostPerVideoWithoutAvatarUsd: 0,
+  globalAverageCostPerVideoWithAvatarUsd: 0,
   globalVideoCount: 0,
   globalBreakdown: []
 };
@@ -29,7 +31,8 @@ export function UsageCostChip({
 
   const usage = summary ?? emptyUsageSummary;
   const total = usage.userTotalCostUsd;
-  const average = usage.globalAverageCostPerVideoUsd;
+  const baseAverage = usage.globalAverageCostPerVideoWithoutAvatarUsd ?? usage.globalAverageCostPerVideoUsd;
+  const avatarAverage = usage.globalAverageCostPerVideoWithAvatarUsd ?? baseAverage;
 
   return (
     <div
@@ -56,7 +59,9 @@ export function UsageCostChip({
         <span className="text-zinc-500">$</span>
         <span>{formatCurrency(total)}</span>
         <span className="text-zinc-700">/</span>
-        <span className="text-zinc-500">avg {formatCurrency(average)}</span>
+        <span className="text-zinc-500">base {formatCurrency(baseAverage)}</span>
+        <span className="text-zinc-700">/</span>
+        <span className="text-pink-200/80">hgn {formatCurrency(avatarAverage)}</span>
       </div>
       {open ? (
         <div className="absolute left-1/2 top-10 z-30 w-96 -translate-x-1/2 pt-2">
@@ -67,8 +72,12 @@ export function UsageCostChip({
             </div>
             <div className="mt-3 grid gap-2">
               <div className="flex justify-between">
-                <span>Global average / video</span>
-                <span>{formatCurrency(average)}</span>
+                <span>Average / base video</span>
+                <span>{formatCurrency(baseAverage)}</span>
+              </div>
+              <div className="flex justify-between text-pink-100">
+                <span>Average / with HeyGen</span>
+                <span>{formatCurrency(avatarAverage)}</span>
               </div>
               <div className="flex justify-between text-zinc-500">
                 <span>Videos sampled</span>

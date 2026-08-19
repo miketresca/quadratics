@@ -257,8 +257,15 @@ async def test_heygen_avatar_stage_persists_development_avatar_video(
     )
     assert avatar_artifact["status"] == "completed"
     assert avatar_artifact["payload"]["outputFormat"] == "webm"
-    assert avatar_artifact["storageObjects"][0]["contentType"] == "video/webm"
-    assert any(event["provider"] == "heygen" for event in usage.json()["events"])
+    assert avatar_artifact["payload"]["segmentCount"] == 3
+    assert len(avatar_artifact["storageObjects"]) == 3
+    assert all(
+        storage_object["contentType"] == "video/webm"
+        for storage_object in avatar_artifact["storageObjects"]
+    )
+    heygen_event = next(event for event in usage.json()["events"] if event["provider"] == "heygen")
+    assert heygen_event["quantity"] == pytest.approx(3.6)
+    assert heygen_event["costUsd"] == pytest.approx(0.072)
 
 
 @pytest.mark.asyncio

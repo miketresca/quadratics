@@ -11,6 +11,8 @@ export interface UsageSummary {
   userTotalQuantity: number;
   userBreakdown: UsageBreakdownItem[];
   globalAverageCostPerVideoUsd: number;
+  globalAverageCostPerVideoWithoutAvatarUsd: number;
+  globalAverageCostPerVideoWithAvatarUsd: number;
   globalVideoCount: number;
   globalBreakdown: UsageBreakdownItem[];
 }

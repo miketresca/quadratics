@@ -129,29 +129,16 @@ class SupabaseUsageCostRepository:
                 headers=self._headers,
                 params={
                     "select": (
-                        "user_id,generation_job_id,stage,provider,unit_type,"
-                        "quantity,cost_usd"
+                        "user_id,generation_job_id,stage,provider,model,unit_type,"
+                        "quantity,unit_cost_usd,cost_usd,metadata,created_at"
                     ),
                     "order": "created_at.desc",
                 },
             )
         _raise_for_storage_error(response)
         events = [
-            UsageCostEvent(
-                id="remote",
-                user_id=str(row["user_id"]),
-                generation_job_id=str(row["generation_job_id"])
-                if row.get("generation_job_id")
-                else None,
-                stage=str(row["stage"]),
-                provider=str(row["provider"]),
-                model=None,
-                unit_type=str(row["unit_type"]),
-                quantity=float(row["quantity"] or 0),
-                unit_cost_usd=0,
-                cost_usd=float(row["cost_usd"] or 0),
-            )
-            for row in response.json()
+            _event_from_row({"id": str(index), **row})
+            for index, row in enumerate(response.json())
         ]
         return _summary_from_events(events, user_id=user_id)
 
@@ -181,18 +168,41 @@ def _summary_from_events(events: list[UsageCostEvent], *, user_id: str) -> Usage
         for event in events
         if event.generation_job_id is not None
     }
-    global_total = sum(event.cost_usd for event in events)
-    global_video_count = len(generation_ids)
+    average_by_paid_stage = _average_cost_by_paid_stage(events)
+    average_without_avatar = sum(
+        cost for stage, cost in average_by_paid_stage.items() if stage != "heygen_avatar"
+    )
+    average_with_avatar = average_without_avatar + average_by_paid_stage.get("heygen_avatar", 0)
     return UsageSummary(
         user_total_cost_usd=sum(event.cost_usd for event in user_events),
         user_total_quantity=sum(event.quantity for event in user_events),
         user_breakdown=_breakdown(user_events),
-        global_average_cost_per_video_usd=(
-            global_total / global_video_count if global_video_count else 0
-        ),
-        global_video_count=global_video_count,
+        global_average_cost_per_video_usd=average_without_avatar,
+        global_average_cost_per_video_without_avatar_usd=average_without_avatar,
+        global_average_cost_per_video_with_avatar_usd=average_with_avatar,
+        global_video_count=len(generation_ids),
         global_breakdown=_breakdown(events),
     )
+
+
+def _average_cost_by_paid_stage(events: list[UsageCostEvent]) -> dict[str, float]:
+    by_generation_stage: dict[tuple[str, str], float] = {}
+    for event in events:
+        if event.generation_job_id is None:
+            continue
+        if event.stage == "heygen_avatar" and event.metadata.get("completeStage") is False:
+            continue
+        key = (event.generation_job_id, event.stage)
+        by_generation_stage[key] = by_generation_stage.get(key, 0) + event.cost_usd
+
+    stage_groups: dict[str, list[float]] = {}
+    for (_generation_id, stage), cost in by_generation_stage.items():
+        stage_groups.setdefault(stage, []).append(cost)
+    return {
+        stage: sum(costs) / len(costs)
+        for stage, costs in stage_groups.items()
+        if costs
+    }
 
 
 def _breakdown(events: list[UsageCostEvent]) -> list[UsageBreakdownItem]:
@@ -247,6 +257,7 @@ def _event_from_row(row: dict[str, object]) -> UsageCostEvent:
         quantity=float(row["quantity"] or 0),
         unit_cost_usd=float(row["unit_cost_usd"] or 0),
         cost_usd=float(row["cost_usd"] or 0),
+        metadata=dict(row.get("metadata") or {}),
         created_at=created_at,
     )
 
