@@ -39,7 +39,12 @@ export function AppModeShell({
         </div>
       </div>
 
-      {mode === "app" ? <EquationForm initialUser={initialUser} /> : <NotesMode readmeMarkdown={readmeMarkdown} />}
+      <div className={mode === "app" ? "block" : "hidden"} aria-hidden={mode !== "app"}>
+        <EquationForm initialUser={initialUser} />
+      </div>
+      <div className={mode === "notes" ? "block" : "hidden"} aria-hidden={mode !== "notes"}>
+        <NotesMode readmeMarkdown={readmeMarkdown} />
+      </div>
     </div>
   );
 }

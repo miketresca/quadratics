@@ -5,6 +5,7 @@ export * from "./costs";
 export * from "./generation";
 export * from "./instructor";
 export * from "./lesson";
+export * from "./lesson-context";
 export * from "./narration";
 export * from "./provider-keys";
 export * from "./script";

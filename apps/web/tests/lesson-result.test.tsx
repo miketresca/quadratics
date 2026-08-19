@@ -36,6 +36,31 @@ describe("LessonResult", () => {
     });
   });
 
+  it("shows a deterministic parabola explorer on the Lesson tab", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(<LessonResult lesson={fixture as never} />);
+    });
+
+    const lessonTab = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Lesson");
+    await act(async () => {
+      lessonTab?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+    });
+
+    expect(container.textContent).toContain("Graph Explorer");
+    expect(container.textContent).toContain("Vertex");
+    expect(container.textContent).toContain("Real-World Context");
+    expect(container.textContent).toContain("Run real_world_context from the Logs tab");
+    expect(container.querySelector('button[aria-label="Generate real-world context"]')).toBeNull();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("omits downstream pipeline logs for unsupported lessons", async () => {
     container = document.createElement("div");
     document.body.append(container);

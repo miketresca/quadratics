@@ -25,6 +25,8 @@ from app.services.artifacts.repository import (
     ArtifactStorageReference,
 )
 from app.services.avatars.base import AvatarVideoProvider, AvatarVideoRequest
+from app.services.context.base import RealWorldContextProvider
+from app.services.context.builder import build_real_world_context
 from app.services.jobs.generation_jobs import (
     GenerationJobRecord,
     InMemoryGenerationJobRepository,
@@ -198,6 +200,68 @@ class SolveGenerationService:
             provider_metadata=script.provider_metadata,
             input_token_cost_per_million_usd=input_token_cost_per_million_usd,
             output_token_cost_per_million_usd=output_token_cost_per_million_usd,
+        )
+        return self.snapshot_for_job(job=job, lesson=lesson)
+
+    async def run_real_world_context(
+        self,
+        *,
+        generation_job_id: str,
+        user_id: str,
+        provider: RealWorldContextProvider,
+        word_budget: int,
+        usage_costs: UsageCostRepository | None = None,
+        input_token_cost_per_million_usd: float = 0,
+        output_token_cost_per_million_usd: float = 0,
+        force: bool = False,
+    ) -> GenerationSnapshot:
+        job, lesson, lesson_artifact = self._current_lesson_context(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+        )
+        stage_run = self._lifecycle.start_stage(
+            generation_job_id=generation_job_id,
+            user_id=user_id,
+            stage="real_world_context",
+            input_payload={
+                "lessonArtifactId": lesson_artifact.id,
+                "wordBudget": word_budget,
+            },
+            upstream_artifact_ids=[lesson_artifact.id],
+            provider=provider.__class__.__name__,
+            model=getattr(provider, "model", None),
+            config_metadata={"optionalLessonEnrichment": True},
+            force=force,
+        )
+        if stage_run.cache_hit:
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        try:
+            context = await build_real_world_context(
+                lesson=lesson,
+                provider=provider,
+                word_budget=word_budget,
+            )
+        except Exception as exc:
+            self._artifacts.fail_attempt(
+                stage_run.artifact.id,
+                error_code="real_world_context_failed",
+                error_message=str(exc),
+            )
+            return self.snapshot_for_job(job=job, lesson=lesson)
+        self._artifacts.complete_attempt(
+            stage_run.artifact.id,
+            payload=context.model_dump(mode="json", by_alias=True),
+        )
+        await _record_openai_token_usage(
+            usage_costs=usage_costs,
+            user_id=user_id,
+            generation_job_id=generation_job_id,
+            stage="real_world_context",
+            model=getattr(provider, "model", None),
+            provider_metadata=context.provider_metadata,
+            input_token_cost_per_million_usd=input_token_cost_per_million_usd,
+            output_token_cost_per_million_usd=output_token_cost_per_million_usd,
+            metadata={"source": "openai_usage", "optionalLessonEnrichment": True},
         )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
@@ -828,6 +892,7 @@ async def _record_openai_token_usage(
     provider_metadata: dict[str, object],
     input_token_cost_per_million_usd: float,
     output_token_cost_per_million_usd: float,
+    metadata: dict[str, object] | None = None,
 ) -> None:
     if usage_costs is None or model is None:
         return
@@ -843,7 +908,7 @@ async def _record_openai_token_usage(
             unit_type="input_tokens",
             quantity=input_tokens,
             unit_cost_usd=input_token_cost_per_million_usd / 1_000_000,
-            metadata={"source": "openai_usage"},
+            metadata=metadata or {"source": "openai_usage"},
         )
     if output_tokens is not None:
         await usage_costs.record(
@@ -855,7 +920,7 @@ async def _record_openai_token_usage(
             unit_type="output_tokens",
             quantity=output_tokens,
             unit_cost_usd=output_token_cost_per_million_usd / 1_000_000,
-            metadata={"source": "openai_usage"},
+            metadata=metadata or {"source": "openai_usage"},
         )
 
 

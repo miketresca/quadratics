@@ -10,6 +10,7 @@ from app.core.security import AuthenticatedUser
 from app.providers.elevenlabs.narration_provider import ElevenLabsNarrationProvider
 from app.providers.heygen.avatar_provider import HeyGenAvatarVideoProvider
 from app.providers.openai.animation_plan_provider import OpenAIAnimationPlanProvider
+from app.providers.openai.real_world_context_provider import OpenAIRealWorldContextProvider
 from app.providers.openai.script_provider import OpenAIScriptProvider
 from app.providers.openai.speech_markup_provider import OpenAISpeechMarkupProvider
 from app.schemas.equation import SolveEquationRequest
@@ -18,6 +19,8 @@ from app.services.animation.base import AnimationPlanProvider
 from app.services.animation.development import DevelopmentAnimationPlanProvider
 from app.services.artifacts import InMemoryArtifactRepository, SupabaseArtifactRepository
 from app.services.avatars import AvatarVideoProvider, DevelopmentAvatarVideoProvider
+from app.services.context.base import RealWorldContextProvider
+from app.services.context.development import DevelopmentRealWorldContextProvider
 from app.services.jobs.generation_jobs import (
     InMemoryGenerationJobRepository,
     SupabaseGenerationJobRepository,
@@ -99,6 +102,17 @@ async def run_generation_stage(
             instructor_id=snapshot.job.instructor_id,
             output_mode="audio",
             word_budget=settings.script_word_budget,
+            usage_costs=_usage_repository(settings),
+            input_token_cost_per_million_usd=settings.openai_gpt5_mini_input_cost_per_million_tokens_usd,
+            output_token_cost_per_million_usd=settings.openai_gpt5_mini_output_cost_per_million_tokens_usd,
+            force=request.force,
+        )
+    if stage == "real_world_context":
+        return await service.run_real_world_context(
+            generation_job_id=generation_id,
+            user_id=current_user.id,
+            provider=_real_world_context_provider(settings),
+            word_budget=settings.real_world_context_word_budget,
             usage_costs=_usage_repository(settings),
             input_token_cost_per_million_usd=settings.openai_gpt5_mini_input_cost_per_million_tokens_usd,
             output_token_cost_per_million_usd=settings.openai_gpt5_mini_output_cost_per_million_tokens_usd,
@@ -250,6 +264,15 @@ def _script_provider(settings: Settings) -> ScriptProvider:
     if not settings.script_generation_enabled:
         return DevelopmentScriptProvider()
     return OpenAIScriptProvider(
+        api_key=settings.openai_api_key,
+        model=settings.openai_script_model,
+    )
+
+
+def _real_world_context_provider(settings: Settings) -> RealWorldContextProvider:
+    if not settings.script_generation_enabled:
+        return DevelopmentRealWorldContextProvider()
+    return OpenAIRealWorldContextProvider(
         api_key=settings.openai_api_key,
         model=settings.openai_script_model,
     )

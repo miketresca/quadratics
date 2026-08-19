@@ -11,6 +11,7 @@ ArtifactStatus = Literal["pending", "running", "completed", "failed", "stale", "
 ArtifactStage = Literal[
     "solution",
     "lesson",
+    "real_world_context",
     "teacher_script",
     "elevenlabs_request",
     "elevenlabs_audio",

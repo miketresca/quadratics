@@ -22,11 +22,15 @@ class Settings(BaseSettings):
             "http://localhost:3010",
             "http://localhost:3011",
             "http://localhost:3012",
+            "http://localhost:3002",
+            "http://localhost:3003",
             "http://127.0.0.1:3000",
             "http://127.0.0.1:3001",
             "http://127.0.0.1:3010",
             "http://127.0.0.1:3011",
             "http://127.0.0.1:3012",
+            "http://127.0.0.1:3002",
+            "http://127.0.0.1:3003",
         ]
     )
     app_environment: str = "production"
@@ -35,6 +39,7 @@ class Settings(BaseSettings):
     openai_script_model: str = "gpt-5-mini"
     script_generation_enabled: bool = False
     script_word_budget: int = 150
+    real_world_context_word_budget: int = 90
     provider_keys_encryption_key: str = ""
     elevenlabs_api_key: str = ""
     elevenlabs_model_id: str = "eleven_multilingual_v2"

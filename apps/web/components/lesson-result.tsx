@@ -6,6 +6,7 @@ import type {
   GenerationSnapshot,
   Lesson,
   LessonNarration,
+  RealWorldContext,
   LessonScript,
   NarrationSegment,
   ResolvedAnimationTimeline
@@ -75,6 +76,7 @@ export function LessonResult({
   const pipelineGeneration = lessonSupportsPipeline ? generation : undefined;
   const solutionLines = lessonSupportsPipeline && lesson ? flattenLessonMathLines(lesson) : [];
   const teacherScriptArtifact = artifactForStage(pipelineGeneration, "teacher_script");
+  const realWorldContextArtifact = artifactForStage(pipelineGeneration, "real_world_context");
   const speechMarkupArtifact = artifactForStage(pipelineGeneration, "elevenlabs_request");
   const narrationArtifact = artifactForStage(pipelineGeneration, "elevenlabs_audio");
   const avatarArtifact = artifactForStage(pipelineGeneration, "heygen_avatar");
@@ -85,6 +87,7 @@ export function LessonResult({
     ? narration ?? payloadForStage<LessonNarration>(pipelineGeneration, "elevenlabs_audio")
     : undefined;
   const speechMarkupArtifactPayload = payloadForStage<LessonNarration>(pipelineGeneration, "elevenlabs_request");
+  const realWorldContext = payloadForStage<RealWorldContext>(pipelineGeneration, "real_world_context");
   const speechMarkup = speechMarkupArtifactPayload ?? effectiveNarration;
   const animationPlanArtifact = artifactForStage(pipelineGeneration, "animation_plan");
   const resolvedTimelineArtifact = artifactForStage(pipelineGeneration, "resolved_timeline");
@@ -99,6 +102,7 @@ export function LessonResult({
   const visibleRenderArtifact = baseVideo ?? renderArtifact;
   const elevenLabsRequestLoading = loadingStage === "elevenlabs_request" || loadingStage === "elevenlabs_audio";
   const elevenLabsAudioLoading = loadingStage === "elevenlabs_audio";
+  const realWorldContextLoading = loadingStage === "real_world_context";
   const avatarLoading = loadingStage === "heygen_avatar";
   const avatarEstimate = estimateHeyGenCost(effectiveNarration, selectedAvatarModel);
   const hasCompletedAvatar = avatarArtifact?.status === "completed";
@@ -141,12 +145,53 @@ export function LessonResult({
       </div>
 
       {activeView === "lesson" ? (
-        <LessonPreview artifact={baseVideo} loading={loadingStage === "motion_canvas_render"} />
+        <LessonPreview
+          artifact={baseVideo}
+          context={realWorldContext}
+          contextArtifact={realWorldContextArtifact}
+          contextLoading={realWorldContextLoading}
+          lesson={lesson}
+          loading={loadingStage === "motion_canvas_render"}
+        />
       ) : (
         <>
           {lesson ? <AnswerLog lesson={lesson} /> : <PendingLog title="answer" />}
 
           {solutionLines.length > 0 ? <SolutionLinesLog lines={solutionLines} /> : lesson ? null : <PendingLog className="mt-6" title="solution_lines" />}
+
+          {realWorldContext ? (
+            <RealWorldContextLog
+              artifact={realWorldContextArtifact}
+              context={realWorldContext}
+              disabled={actionDisabled || !onRunStage || realWorldContextLoading}
+              loading={realWorldContextLoading}
+              onRun={onRunStage ? () => onRunStage("real_world_context", {force: true}) : undefined}
+            />
+          ) : realWorldContextArtifact?.status === "failed" ? (
+            <FailedStageLog
+              accent="cyan"
+              artifact={realWorldContextArtifact}
+              disabled={actionDisabled || !onRunStage || realWorldContextLoading}
+              loading={realWorldContextLoading}
+              onRun={onRunStage ? () => onRunStage("real_world_context", {force: true}) : undefined}
+              title="real_world_context"
+            />
+          ) : realWorldContextLoading ? (
+            <PendingLog accent="cyan" className="mt-6" title="real_world_context" />
+          ) : lessonSupportsPipeline ? (
+            <RunnableLog
+              accent="cyan"
+              className="mt-6"
+              disabled={actionDisabled || !onRunStage || realWorldContextLoading}
+              loading={realWorldContextLoading}
+              onRun={onRunStage ? () => onRunStage("real_world_context") : undefined}
+              title="real_world_context"
+            >
+              <p className="mt-3 rounded border border-cyan-400/20 bg-cyan-950/10 p-3 text-sm text-zinc-300">
+                Optional lesson enrichment. Generates a compact real-world example for the Lesson tab without changing the video pipeline.
+              </p>
+            </RunnableLog>
+          ) : null}
 
           {effectiveScript ? (
             <ScriptLog
@@ -362,45 +407,294 @@ export function LessonResult({
   );
 }
 
-function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; loading?: boolean}) {
+function LessonPreview({
+  artifact,
+  context,
+  contextArtifact,
+  contextLoading,
+  lesson,
+  loading
+}: {
+  artifact?: GenerationArtifact;
+  context?: RealWorldContext;
+  contextArtifact?: GenerationArtifact;
+  contextLoading?: boolean;
+  lesson: Lesson | null;
+  loading?: boolean;
+}) {
   const storageObject = artifact?.storageObjects?.[0];
   return (
-    <div className="min-h-64 rounded border border-zinc-800 bg-zinc-950/25 p-4" aria-label="Video Solution">
-      <div className="mb-4 flex items-center justify-between border-b border-zinc-800 pb-3">
-        <div>
-          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Video Solution</h2>
-          <p className="mt-1 text-xs text-zinc-500">Rendered lesson playback</p>
+    <div className="grid gap-4">
+      <div className="min-h-64 rounded border border-zinc-800 bg-zinc-950/25 p-4" aria-label="Video Solution">
+        <div className="mb-4 flex items-center justify-between border-b border-zinc-800 pb-3">
+          <div>
+            <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Video Solution</h2>
+            <p className="mt-1 text-xs text-zinc-500">Rendered lesson playback</p>
+          </div>
+          {artifact?.status === "completed" ? (
+            <span className="rounded border border-lime-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-lime-200">
+              Ready
+            </span>
+          ) : null}
         </div>
-        {artifact?.status === "completed" ? (
-          <span className="rounded border border-lime-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-lime-200">
+        {loading ? (
+          <div className="flex min-h-56 items-center justify-center gap-3 text-sm text-zinc-300">
+            <Spinner />
+            rendering lesson video
+          </div>
+        ) : artifact?.status === "completed" ? (
+          <div className="grid min-h-56 content-center gap-3">
+            {storageObject?.signedUrl ? (
+              <video className="aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
+                <track kind="captions" />
+              </video>
+            ) : (
+              <>
+                <p className="text-sm text-zinc-300">The render artifact is complete. Waiting for a private playback URL.</p>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex min-h-56 items-center justify-center px-6 text-center text-sm leading-6 text-zinc-400">
+            Run the pipeline from the Logs tab. The finished narrated lesson video will appear here.
+          </div>
+        )}
+      </div>
+      {lesson?.status === "completed" ? <ParabolaExplorer lesson={lesson} /> : null}
+      {lesson?.status === "completed" ? (
+        <RealWorldContextPanel
+          context={context}
+          contextArtifact={contextArtifact}
+          loading={contextLoading}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ParabolaExplorer({lesson}: {lesson: Lesson}) {
+  const model = parabolaModel(lesson);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  if (!model) {
+    return null;
+  }
+  const pointCount = model.points.length;
+  const hovered = hoverIndex === null ? model.vertexPoint : model.points[hoverIndex] ?? model.vertexPoint;
+
+  function updateHover(clientX: number, rect: DOMRect) {
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    setHoverIndex(Math.round(ratio * (pointCount - 1)));
+  }
+
+  return (
+    <section className="overflow-hidden rounded border border-emerald-400/25 bg-black/35 backdrop-blur" aria-label="Interactive parabola">
+      <div className="flex flex-col gap-3 border-b border-zinc-800/80 p-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Graph Explorer</h2>
+          <p className="mt-1 text-xs text-zinc-500">{lesson.normalizedEquation}</p>
+        </div>
+        <dl className="grid grid-cols-3 gap-2 text-right font-mono text-[11px] uppercase tracking-wide text-zinc-500">
+          <div>
+            <dt>Vertex</dt>
+            <dd className="mt-1 text-emerald-200">({formatNumber(model.vertex.x)}, {formatNumber(model.vertex.y)})</dd>
+          </div>
+          <div>
+            <dt>Axis</dt>
+            <dd className="mt-1 text-zinc-200">x = {formatNumber(model.vertex.x)}</dd>
+          </div>
+          <div>
+            <dt>Opens</dt>
+            <dd className="mt-1 text-zinc-200">{model.a > 0 ? "up" : "down"}</dd>
+          </div>
+        </dl>
+      </div>
+      <div className="grid gap-4 p-4 md:grid-cols-[minmax(0,1fr)_180px]">
+        <svg
+          className="aspect-[16/9] w-full rounded border border-zinc-800 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:36px_36px,36px_36px]"
+          onPointerLeave={() => setHoverIndex(null)}
+          onPointerMove={(event) => updateHover(event.clientX, event.currentTarget.getBoundingClientRect())}
+          role="img"
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+        >
+          <line className="stroke-zinc-600/70" x1={model.xAxis.x1} x2={model.xAxis.x2} y1={model.xAxis.y1} y2={model.xAxis.y2} />
+          <line className="stroke-zinc-600/70" x1={model.yAxis.x1} x2={model.yAxis.x2} y1={model.yAxis.y1} y2={model.yAxis.y2} />
+          <path className="fill-none stroke-emerald-300 drop-shadow-[0_0_10px_rgba(110,231,183,0.55)]" d={model.path} strokeLinecap="round" strokeWidth="3" />
+          <line className="stroke-emerald-300/30" x1={hovered.screenX} x2={hovered.screenX} y1={CHART_PADDING} y2={CHART_HEIGHT - CHART_PADDING} strokeDasharray="4 6" />
+          {model.visibleRoots.map((root) => (
+            <circle className="fill-cyan-200 stroke-black" cx={root.screenX} cy={root.screenY} key={root.x} r="5" strokeWidth="2" />
+          ))}
+          <circle className="fill-amber-200 stroke-black" cx={model.vertexPoint.screenX} cy={model.vertexPoint.screenY} r="5" strokeWidth="2" />
+          <circle className="fill-emerald-100 stroke-black" cx={hovered.screenX} cy={hovered.screenY} r="6" strokeWidth="2" />
+        </svg>
+        <div className="grid content-between gap-3 rounded border border-zinc-800 bg-zinc-950/70 p-3">
+          <dl className="grid gap-3 text-sm">
+            <div>
+              <dt className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">Hover point</dt>
+              <dd className="mt-1 font-mono text-zinc-100">({formatNumber(hovered.x)}, {formatNumber(hovered.y)})</dd>
+            </div>
+            <div>
+              <dt className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">Roots</dt>
+              <dd className="mt-1 text-zinc-100">{model.realRootValues.length > 0 ? model.realRootValues.map((root) => formatNumber(root)).join(", ") : "no real roots"}</dd>
+            </div>
+          </dl>
+          <p className="text-xs leading-5 text-zinc-500">Move across the visible branch to inspect the quadratic output at different x-values.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RealWorldContextPanel({
+  context,
+  contextArtifact,
+  loading
+}: {
+  context?: RealWorldContext;
+  contextArtifact?: GenerationArtifact;
+  loading?: boolean;
+}) {
+  return (
+    <section className="rounded border border-cyan-400/25 bg-cyan-950/10 p-4 backdrop-blur" aria-label="Real-world context">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Real-World Context</h2>
+          <p className="mt-1 text-xs text-zinc-500">Optional AI lesson enrichment</p>
+        </div>
+        {loading ? (
+          <span className="inline-flex items-center gap-2 rounded border border-cyan-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-cyan-100">
+            <Spinner />
+            Generating
+          </span>
+        ) : context?.status === "completed" ? (
+          <span className="rounded border border-cyan-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-cyan-100">
             Ready
           </span>
         ) : null}
       </div>
-      {loading ? (
-        <div className="flex min-h-56 items-center justify-center gap-3 text-sm text-zinc-300">
-          <Spinner />
-          rendering lesson video
+      {context?.status === "completed" ? (
+        <div className="mt-4 grid gap-3">
+          <h3 className="text-lg font-semibold text-zinc-100">{context.title}</h3>
+          <p className="text-sm leading-6 text-zinc-300">{context.scenario}</p>
+          <p className="rounded border border-cyan-400/20 bg-black/25 p-3 text-sm leading-6 text-cyan-100">{context.takeaway}</p>
         </div>
-      ) : artifact?.status === "completed" ? (
-        <div className="grid min-h-56 content-center gap-3">
-          {storageObject?.signedUrl ? (
-            <video className="aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
-              <track kind="captions" />
-            </video>
-          ) : (
-            <>
-              <p className="text-sm text-zinc-300">The render artifact is complete. Waiting for a private playback URL.</p>
-            </>
-          )}
-        </div>
+      ) : contextArtifact?.status === "failed" ? (
+        <p className="mt-4 rounded border border-red-400/30 bg-red-950/20 p-3 text-sm text-red-100">
+          {contextArtifact.errorMessage ?? "Could not generate the lesson context."}
+        </p>
       ) : (
-        <div className="flex min-h-56 items-center justify-center px-6 text-center text-sm leading-6 text-zinc-400">
-          Run the pipeline from the Logs tab. The finished narrated lesson video will appear here.
-        </div>
+        <p className="mt-4 rounded border border-zinc-800 bg-black/25 p-3 text-sm leading-6 text-zinc-400">
+          Run real_world_context from the Logs tab to generate a short example for this lesson. This does not affect the video pipeline.
+        </p>
       )}
-    </div>
+    </section>
   );
+}
+
+const CHART_WIDTH = 720;
+const CHART_HEIGHT = 405;
+const CHART_PADDING = 38;
+
+type ChartPoint = {
+  x: number;
+  y: number;
+  screenX: number;
+  screenY: number;
+};
+
+function parabolaModel(lesson: Lesson) {
+  const a = parseMathNumber(lesson.coefficients.a.expression);
+  const b = parseMathNumber(lesson.coefficients.b.expression);
+  const c = parseMathNumber(lesson.coefficients.c.expression);
+  if (a === null || b === null || c === null || a === 0) {
+    return null;
+  }
+  const vertexX = -b / (2 * a);
+  const vertexY = evaluateQuadratic(a, b, c, vertexX);
+  const realRootValues = lesson.solutions
+    .map((solution) => parseMathNumber(solution.expression))
+    .filter((value): value is number => value !== null);
+  const importantXs = [vertexX, ...realRootValues, 0].filter(Number.isFinite);
+  const maxDistance = Math.max(3, ...importantXs.map((value) => Math.abs(value - vertexX)));
+  const branchEnd = vertexX + maxDistance + 1;
+  const xMin = Math.min(vertexX, 0);
+  const xMax = Math.max(branchEnd, 0);
+  const rawPoints = Array.from({length: 121}, (_, index) => {
+    const ratio = index / 120;
+    const x = xMin + (xMax - xMin) * ratio;
+    return {x, y: evaluateQuadratic(a, b, c, x)};
+  });
+  const yValues = [...rawPoints.map((point) => point.y), vertexY, 0];
+  const yMinRaw = Math.min(...yValues);
+  const yMaxRaw = Math.max(...yValues);
+  const yPad = Math.max(1, (yMaxRaw - yMinRaw) * 0.14);
+  const yMin = yMinRaw - yPad;
+  const yMax = yMaxRaw + yPad;
+
+  const toScreen = (x: number, y: number): ChartPoint => ({
+    x,
+    y,
+    screenX: scale(x, xMin, xMax, CHART_PADDING, CHART_WIDTH - CHART_PADDING),
+    screenY: scale(y, yMin, yMax, CHART_HEIGHT - CHART_PADDING, CHART_PADDING)
+  });
+  const points = rawPoints.map((point) => toScreen(point.x, point.y));
+  return {
+    a,
+    vertex: {x: vertexX, y: vertexY},
+    vertexPoint: toScreen(vertexX, vertexY),
+    realRootValues,
+    visibleRoots: realRootValues
+      .filter((root) => root >= xMin && root <= xMax)
+      .map((root) => toScreen(root, 0)),
+    points,
+    path: points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.screenX.toFixed(2)} ${point.screenY.toFixed(2)}`).join(" "),
+    xAxis: {
+      x1: CHART_PADDING,
+      x2: CHART_WIDTH - CHART_PADDING,
+      y1: scale(0, yMin, yMax, CHART_HEIGHT - CHART_PADDING, CHART_PADDING),
+      y2: scale(0, yMin, yMax, CHART_HEIGHT - CHART_PADDING, CHART_PADDING)
+    },
+    yAxis: {
+      x1: scale(0, xMin, xMax, CHART_PADDING, CHART_WIDTH - CHART_PADDING),
+      x2: scale(0, xMin, xMax, CHART_PADDING, CHART_WIDTH - CHART_PADDING),
+      y1: CHART_PADDING,
+      y2: CHART_HEIGHT - CHART_PADDING
+    }
+  };
+}
+
+function parseMathNumber(expression: string): number | null {
+  const normalized = expression.replace(/\s/g, "");
+  const fraction = normalized.match(/^(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/);
+  if (fraction) {
+    const numerator = Number(fraction[1]);
+    const denominator = Number(fraction[2]);
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+      return numerator / denominator;
+    }
+  }
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function evaluateQuadratic(a: number, b: number, c: number, x: number) {
+  return a * x * x + b * x + c;
+}
+
+function scale(value: number, min: number, max: number, outputMin: number, outputMax: number) {
+  if (max === min) {
+    return (outputMin + outputMax) / 2;
+  }
+  return outputMin + ((value - min) / (max - min)) * (outputMax - outputMin);
+}
+
+function formatNumber(value: number) {
+  if (Math.abs(value) < 0.0001) {
+    return "0";
+  }
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+  return value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function AnswerLog({lesson}: {lesson: Lesson}) {
@@ -489,6 +783,44 @@ function ScriptLog({
         </ol>
       ) : (
         <p className="mt-3 text-sm text-zinc-300">{script.unsupportedReason ?? "Script generation is not available for this lesson."}</p>
+      )}
+    </StageCard>
+  );
+}
+
+function RealWorldContextLog({
+  artifact,
+  context,
+  disabled = false,
+  loading = false,
+  onRun
+}: {
+  artifact?: GenerationArtifact;
+  context: RealWorldContext;
+  disabled?: boolean;
+  loading?: boolean;
+  onRun?: () => void;
+}) {
+  const stageLoading = loading || artifact?.status === "running";
+  return (
+    <StageCard
+      accent="cyan"
+      action={onRun ? <IconButton disabled={disabled || stageLoading} label="Regenerate real_world_context" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      artifact={artifact}
+      loading={stageLoading}
+      title="real_world_context"
+    >
+      {context.status === "completed" ? (
+        <div className="mt-4 grid gap-3 rounded border border-cyan-400/20 bg-cyan-950/10 p-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-cyan-200">Lesson story</p>
+            <h4 className="mt-2 text-base font-semibold text-zinc-100">{context.title}</h4>
+          </div>
+          <p className="text-sm leading-6 text-zinc-300">{context.scenario}</p>
+          <p className="rounded border border-zinc-800 bg-black/25 p-3 text-sm leading-6 text-cyan-100">{context.takeaway}</p>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-300">{context.unsupportedReason ?? "Real-world context is not available for this lesson."}</p>
       )}
     </StageCard>
   );
@@ -1448,6 +1780,13 @@ const stageDetails: Record<string, StageDetails> = {
     inputs: "The completed solution artifact.",
     guardrails: "Line IDs are deterministic and become the references used by script, animation, and render stages.",
     cost: "Free. Local lesson builder only."
+  },
+  real_world_context: {
+    summary: "Optional lesson enrichment that gives the graph a compact real-world story.",
+    inputs: "The completed deterministic lesson, including coefficients, roots, and method.",
+    guardrails: "The model can only explain the supplied math. It cannot change roots, coefficients, or the solved equation.",
+    cost: "OpenAI token usage is logged for spend history but excluded from average video cost.",
+    prompt: "Prompt source: apps/api/app/services/context/prompts/real_world_context.md"
   },
   teacher_script: {
     summary: "Writes concise teacher narration from the deterministic lesson.",

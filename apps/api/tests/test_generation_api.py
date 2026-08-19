@@ -195,6 +195,41 @@ async def test_generation_run_all_completes_through_base_video(
 
 
 @pytest.mark.asyncio
+async def test_real_world_context_stage_persists_optional_lesson_context(
+    authenticated_client,
+    app,
+):
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_environment="test",
+        script_generation_enabled=False,
+    )
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+
+        response = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/real_world_context",
+            json={},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    context_artifact = next(
+        artifact
+        for artifact in response.json()["artifacts"]
+        if artifact["stage"] == "real_world_context"
+    )
+    assert context_artifact["status"] == "completed"
+    assert context_artifact["payload"]["status"] == "completed"
+    assert context_artifact["payload"]["title"]
+    assert context_artifact["configMetadata"] == {"optionalLessonEnrichment": True}
+
+
+@pytest.mark.asyncio
 async def test_animation_plan_stage_does_not_regenerate_elevenlabs_audio(
     authenticated_client,
     app,

@@ -3,6 +3,7 @@ export type ArtifactStatus = "pending" | "running" | "completed" | "failed" | "s
 export type ArtifactStage =
   | "solution"
   | "lesson"
+  | "real_world_context"
   | "teacher_script"
   | "elevenlabs_request"
   | "elevenlabs_audio"
