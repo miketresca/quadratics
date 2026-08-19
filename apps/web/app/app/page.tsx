@@ -72,43 +72,65 @@ export default async function AppPage({
 
 type BuildInfo = {
   commit: string;
-  committedAt: string;
+  subject: string;
 };
 
 function getBuildInfo(): BuildInfo {
   try {
-    const output = execSync("git log -1 --format=%h|%cd --date=format:%Y-%m-%d %H:%M", {
+    const output = execSync("git log -1 --format=%h%x00%s", {
       cwd: process.cwd(),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const [commit, committedAt] = output.split("|");
-    if (commit && committedAt) {
-      return {commit, committedAt};
+    const [commit, subject] = output.split("\0");
+    if (commit && subject) {
+      return {commit, subject};
     }
   } catch {
     // Deployment environments do not always expose the .git directory.
   }
 
   const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA;
+  const subject = process.env.VERCEL_GIT_COMMIT_MESSAGE ?? process.env.GIT_COMMIT_MESSAGE;
   return {
     commit: sha ? sha.slice(0, 7) : "local",
-    committedAt: "runtime"
+    subject: subject ?? (sha ? "deployed build" : "local build")
   };
 }
 
 function BuildChip({buildInfo}: {buildInfo: BuildInfo}) {
   return (
     <div
-      aria-label={`Current build ${buildInfo.commit}, last commit ${buildInfo.committedAt}`}
-      className="hidden h-10 items-center gap-2 rounded border border-emerald-400/20 bg-black/45 px-3 font-mono text-[11px] uppercase tracking-wide text-emerald-300/90 shadow-[0_0_24px_rgba(16,185,129,0.08)] sm:flex"
-      title={`Last commit: ${buildInfo.committedAt}`}
+      aria-label={`Current build ${buildInfo.commit}, ${buildInfo.subject}`}
+      className="hidden h-10 items-center gap-2 rounded border border-emerald-400/20 bg-black/45 px-3 font-mono text-[11px] tracking-wide text-emerald-300/90 shadow-[0_0_24px_rgba(16,185,129,0.08)] sm:flex"
     >
       <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.85)]" />
-      <span>{buildInfo.commit}</span>
+      <span className="uppercase">{buildInfo.commit}</span>
       <span className="text-zinc-600">/</span>
-      <time className="text-emerald-200/80">{buildInfo.committedAt}</time>
+      <span className="group/build relative inline-flex h-5 w-5 items-center justify-center">
+        <span
+          aria-label={`Build details for ${buildInfo.commit}`}
+          className="flex h-4 w-4 items-center justify-center rounded-full text-emerald-200/70 transition hover:text-emerald-200 focus:outline-none focus:ring-1 focus:ring-emerald-300/60"
+          tabIndex={0}
+        >
+          <BuildInfoIcon />
+        </span>
+        <span className="pointer-events-none absolute right-0 top-7 z-30 hidden w-72 rounded border border-zinc-700 bg-[#090d14] p-3 text-left text-xs normal-case leading-5 tracking-normal text-zinc-200 shadow-2xl shadow-black/60 group-hover/build:block group-focus-within/build:block">
+          <span className="block font-mono text-[11px] uppercase tracking-wide text-emerald-300">{buildInfo.commit}</span>
+          <span className="mt-1 block font-sans text-zinc-300">{buildInfo.subject}</span>
+        </span>
+      </span>
     </div>
+  );
+}
+
+function BuildInfoIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 10.5v5" strokeLinecap="round" />
+      <path d="M12 7.5h.01" strokeLinecap="round" />
+    </svg>
   );
 }
 
