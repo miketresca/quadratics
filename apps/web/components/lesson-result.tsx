@@ -78,7 +78,13 @@ export function LessonResult({
           {solutionLines.length > 0 ? <SolutionLinesLog lines={solutionLines} /> : lesson ? null : <PendingLog className="mt-6" title="solution_lines" />}
 
           {effectiveScript ? (
-            <ScriptLog artifact={artifactForStage(generation, "teacher_script")} script={effectiveScript} />
+            <ScriptLog
+              artifact={artifactForStage(generation, "teacher_script")}
+              disabled={actionDisabled || scriptLoading}
+              loading={scriptLoading}
+              onRun={onRunStage ? () => onRunStage("teacher_script", {force: true}) : onGenerateScript}
+              script={effectiveScript}
+            />
           ) : scriptLoading ? (
             <PendingLog accent="sky" className="mt-6" title="teacher_script" />
           ) : lesson ? (
@@ -86,7 +92,11 @@ export function LessonResult({
           ) : null}
 
           {speechMarkup?.speechText ? (
-            <SpeechMarkupLog artifact={artifactForStage(generation, "elevenlabs_request")} narration={speechMarkup} />
+            <SpeechMarkupLog
+              artifact={artifactForStage(generation, "elevenlabs_request")}
+              loading={speechMarkupLoading}
+              narration={speechMarkup}
+            />
           ) : speechMarkupLoading ? (
             <PendingLog accent="amber" className="mt-6" title="elevenlabs_request" />
           ) : effectiveScript?.status === "completed" ? (
@@ -102,6 +112,7 @@ export function LessonResult({
           {effectiveNarration ? (
             <NarrationLog
               artifact={artifactForStage(generation, "elevenlabs_audio")}
+              loading={narrationLoading}
               narration={effectiveNarration}
             />
           ) : narrationLoading ? (
@@ -258,9 +269,27 @@ function SolutionLinesLog({lines}: {lines: ReturnType<typeof flattenLessonMathLi
   );
 }
 
-function ScriptLog({artifact, script}: {artifact?: GenerationArtifact; script: LessonScript}) {
+function ScriptLog({
+  artifact,
+  disabled = false,
+  loading = false,
+  onRun,
+  script
+}: {
+  artifact?: GenerationArtifact;
+  disabled?: boolean;
+  loading?: boolean;
+  onRun?: () => void;
+  script: LessonScript;
+}) {
   return (
-    <StageCard accent="sky" artifact={artifact} title="teacher_script">
+    <StageCard
+      accent="sky"
+      action={onRun ? <IconButton disabled={disabled} label="Regenerate teacher_script" onClick={onRun}><RegenerateIcon /></IconButton> : null}
+      artifact={artifact}
+      loading={loading}
+      title="teacher_script"
+    >
       {script.status === "completed" ? (
         <ol className="mt-4 grid gap-4">
           {script.segments.map((segment, index) => (
@@ -283,10 +312,18 @@ function ScriptLog({artifact, script}: {artifact?: GenerationArtifact; script: L
   );
 }
 
-function SpeechMarkupLog({artifact, narration}: {artifact?: GenerationArtifact; narration: LessonNarration}) {
+function SpeechMarkupLog({
+  artifact,
+  loading = false,
+  narration
+}: {
+  artifact?: GenerationArtifact;
+  loading?: boolean;
+  narration: LessonNarration;
+}) {
   const segments = narration.segments ?? [];
   return (
-    <StageCard accent="amber" artifact={artifact} title="elevenlabs_request">
+    <StageCard accent="amber" artifact={artifact} loading={loading} title="elevenlabs_request">
       {segments.length > 0 ? (
         <ol className="mt-4 grid gap-3">
           {segments.map((segment, index) => (
@@ -314,9 +351,11 @@ function SpeechMarkupLog({artifact, narration}: {artifact?: GenerationArtifact; 
 
 function NarrationLog({
   artifact,
+  loading = false,
   narration
 }: {
   artifact?: GenerationArtifact;
+  loading?: boolean;
   narration: LessonNarration;
 }) {
   const segments = narration.segments ?? [];
@@ -324,6 +363,7 @@ function NarrationLog({
     <StageCard
       accent="fuchsia"
       artifact={artifact}
+      loading={loading}
       title="elevenlabs_audio"
     >
       {segments.length > 0 ? (
@@ -405,6 +445,7 @@ function AnimationPlanLog({
   timeline?: ResolvedAnimationTimeline;
 }) {
   const resolvedByCue = new Map((timeline?.cues ?? []).map((cue) => [cue.cueId, cue]));
+  const cues = cuesForAnimationPlanLog(plan, timeline);
   return (
     <StageCard
       accent="violet"
@@ -423,7 +464,7 @@ function AnimationPlanLog({
             </tr>
           </thead>
           <tbody>
-            {plan.cues.map((cue) => {
+            {cues.map((cue) => {
               const resolved = resolvedByCue.get(cue.id);
               return (
                 <tr className="bg-zinc-950/45 text-zinc-200" key={cue.id}>
@@ -702,6 +743,21 @@ function isResolvedTimelinePayload(payload: unknown): payload is ResolvedAnimati
     Array.isArray((payload as {cues?: unknown}).cues) &&
     typeof (payload as {durationSeconds?: unknown}).durationSeconds === "number"
   );
+}
+
+function cuesForAnimationPlanLog(plan: AnimationPlan, timeline?: ResolvedAnimationTimeline) {
+  if (!timeline) {
+    return plan.cues;
+  }
+  const planCueById = new Map(plan.cues.map((cue) => [cue.id, cue]));
+  const orderedCues = timeline.cues
+    .map((cue) => planCueById.get(cue.cueId))
+    .filter((cue): cue is AnimationPlan["cues"][number] => Boolean(cue));
+  const orderedIds = new Set(orderedCues.map((cue) => cue.id));
+  return [
+    ...orderedCues,
+    ...plan.cues.filter((cue) => !orderedIds.has(cue.id)),
+  ];
 }
 
 function formatSeconds(value: number) {

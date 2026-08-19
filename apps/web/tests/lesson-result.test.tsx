@@ -81,6 +81,103 @@ describe("LessonResult", () => {
     });
   });
 
+  it("can regenerate a completed teacher script and shows its loading spinner", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const onRunStage = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={
+            {
+              job: {
+                id: "generation-script",
+                userId: "user-1",
+                equationInput: "x^2 + 5x + 6",
+                status: "completed",
+                creditsUsed: 0
+              },
+              lesson: scriptResponse.lesson,
+              artifacts: [
+                {
+                  id: "script-artifact",
+                  generationJobId: "generation-script",
+                  userId: "user-1",
+                  stage: "teacher_script",
+                  version: 1,
+                  status: "completed",
+                  inputHash: "sha256:script",
+                  payload: scriptResponse.script,
+                  isCurrent: true,
+                  createdAt: "2026-08-18T00:00:00Z"
+                }
+              ]
+            } as never
+          }
+          lesson={scriptResponse.lesson as never}
+          onRunStage={onRunStage}
+          script={scriptResponse.script as never}
+        />
+      );
+    });
+
+    const regenerateButton = container.querySelector('button[aria-label="Regenerate teacher_script"]');
+    expect(regenerateButton).not.toBeNull();
+
+    await act(async () => {
+      regenerateButton?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+    });
+
+    expect(onRunStage).toHaveBeenCalledWith("teacher_script", {force: true});
+
+    await act(async () => {
+      root.render(
+        <LessonResult
+          generation={
+            {
+              job: {
+                id: "generation-script",
+                userId: "user-1",
+                equationInput: "x^2 + 5x + 6",
+                status: "processing",
+                creditsUsed: 0
+              },
+              lesson: scriptResponse.lesson,
+              artifacts: [
+                {
+                  id: "script-artifact",
+                  generationJobId: "generation-script",
+                  userId: "user-1",
+                  stage: "teacher_script",
+                  version: 1,
+                  status: "completed",
+                  inputHash: "sha256:script",
+                  payload: scriptResponse.script,
+                  isCurrent: true,
+                  createdAt: "2026-08-18T00:00:00Z"
+                }
+              ]
+            } as never
+          }
+          lesson={scriptResponse.lesson as never}
+          loadingStage="teacher_script"
+          onRunStage={onRunStage}
+          script={scriptResponse.script as never}
+          scriptLoading
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Regenerate teacher_script"]')).toBeNull();
+    expect(container.querySelectorAll('[role="status"][aria-label="Loading"]')).toHaveLength(1);
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("renders the ElevenLabs request loading block before the audio loading block", async () => {
     container = document.createElement("div");
     document.body.append(container);
@@ -449,6 +546,21 @@ describe("LessonResult", () => {
             layout: {theme: "chalkboard", verticalFlow: true},
             cues: [
               {
+                id: "cue-late",
+                lessonStepId: "factor",
+                mathLineId: "factor_line",
+                trigger: {
+                  type: "narration_text",
+                  scriptSegmentId: "script_factor",
+                  text: "We need two numbers"
+                },
+                visual: {
+                  action: "highlight",
+                  target: {lessonStepId: "factor", mathLineId: "factor_line"}
+                },
+                sync: {mode: "with_narration"}
+              },
+              {
                 id: "cue-1",
                 lessonStepId: "factor",
                 mathLineId: "factor_line",
@@ -489,6 +601,13 @@ describe("LessonResult", () => {
                 narration: {text: "Now factor the quadratic", startSeconds: 1, endSeconds: 2.2},
                 animation: {action: "write_math", startSeconds: 1.1, endSeconds: 2.1},
                 sfx: {type: "chalk_write", startSeconds: 1.1, endSeconds: 2.1}
+              },
+              {
+                cueId: "cue-late",
+                lessonStepId: "factor",
+                mathLineId: "factor_line",
+                narration: {text: "We need two numbers", startSeconds: 3, endSeconds: 3.8},
+                animation: {action: "highlight", startSeconds: 3, endSeconds: 3.8}
               }
             ]
           },
@@ -526,6 +645,11 @@ describe("LessonResult", () => {
     expect(container.textContent).toContain("motion_canvas_render");
     expect(container.textContent).toContain("Now factor the quadratic");
     expect(container.textContent).toContain("write_math -> factor_line");
+    const animationPlanRows = Array.from(container.querySelectorAll("tbody tr")).map(
+      (row) => row.textContent ?? ""
+    );
+    expect(animationPlanRows[0]).toContain("Now factor the quadratic");
+    expect(animationPlanRows[1]).toContain("We need two numbers");
     expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/narration/audio-artifact.mp3");
     expect(container.querySelector('audio[src="https://media.example/audio-artifact.mp3"]')).not.toBeNull();
 

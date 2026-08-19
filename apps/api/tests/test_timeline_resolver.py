@@ -80,6 +80,62 @@ def plan_for(text: str, *, occurrence: int | None = None, sync_mode: str = "with
     )
 
 
+def test_resolver_returns_cues_in_chronological_order():
+    segment = narration_segment(
+        "script_factor",
+        "First write the equation. Then solve each factor.",
+    )
+    plan = AnimationPlan.model_validate(
+        {
+            "lessonArtifactId": "lesson-1",
+            "narrationArtifactId": "narration-1",
+            "cues": [
+                {
+                    "id": "cue_late",
+                    "lessonStepId": "factor",
+                    "mathLineId": "factored_form",
+                    "trigger": {
+                        "type": "narration_text",
+                        "scriptSegmentId": "script_factor",
+                        "text": "Then solve each factor",
+                    },
+                    "visual": {
+                        "action": "write_math",
+                        "target": {
+                            "lessonStepId": "factor",
+                            "mathLineId": "factored_form",
+                        },
+                    },
+                    "sync": {"mode": "with_narration"},
+                },
+                {
+                    "id": "cue_early",
+                    "lessonStepId": "factor",
+                    "mathLineId": "standard_form",
+                    "trigger": {
+                        "type": "narration_text",
+                        "scriptSegmentId": "script_factor",
+                        "text": "First write the equation",
+                    },
+                    "visual": {
+                        "action": "write_math",
+                        "target": {
+                            "lessonStepId": "factor",
+                            "mathLineId": "standard_form",
+                        },
+                    },
+                    "sync": {"mode": "with_narration"},
+                },
+            ],
+        }
+    )
+
+    timeline = resolve_animation_timeline(plan, narration=narration(segment))
+
+    assert [cue.cue_id for cue in timeline.cues] == ["cue_early", "cue_late"]
+    assert timeline.cues[0].animation.start_seconds < timeline.cues[1].animation.start_seconds
+
+
 def test_resolver_maps_phrase_at_beginning_middle_and_end():
     segment = narration_segment("script_factor", "Start here, then middle, then final")
     timeline = resolve_animation_timeline(

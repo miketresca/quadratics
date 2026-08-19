@@ -41,6 +41,13 @@ def resolve_animation_timeline(
         _resolve_cue(cue, segment_by_id=segment_by_id, timing=defaults)
         for cue in plan.cues
     ]
+    resolved_cues.sort(
+        key=lambda cue: (
+            cue.animation.start_seconds,
+            cue.animation.end_seconds,
+            cue.cue_id,
+        )
+    )
     duration = narration.duration_seconds
     if duration is None:
         duration = max((cue.animation.end_seconds for cue in resolved_cues), default=0)
