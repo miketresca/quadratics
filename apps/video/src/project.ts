@@ -1,7 +1,7 @@
 import {makeProject} from "@motion-canvas/core";
 
-import solveStep from "./scenes/solve-step?scene";
+import lesson from "./scenes/lesson?scene";
 
 export default makeProject({
-  scenes: [solveStep]
+  scenes: [lesson]
 });
