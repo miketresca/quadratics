@@ -6,9 +6,12 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.dependencies.auth import get_current_user
+from app.api.routes import instructors
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
 from app.main import create_app
+from app.schemas.instructor import Instructor
+from app.services.instructors.repository import InMemoryInstructorRepository
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +22,12 @@ def test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def app() -> FastAPI:
     get_settings.cache_clear()
+    instructors._instructors = InMemoryInstructorRepository(
+        [
+            Instructor(id="male", display_name="Male Instructor", voice_id="male-voice"),
+            Instructor(id="female", display_name="Female Instructor", voice_id="female-voice"),
+        ]
+    )
     test_app = create_app()
     test_app.dependency_overrides[get_settings] = lambda: Settings(
         supabase_url="",

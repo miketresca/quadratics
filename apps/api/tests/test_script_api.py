@@ -169,7 +169,6 @@ async def test_narration_endpoint_generates_audio_for_completed_audio_script(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
 
@@ -289,7 +288,6 @@ async def test_narration_endpoint_can_generate_one_script_segment(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
 
@@ -335,7 +333,6 @@ async def test_narration_endpoint_returns_unsupported_for_unknown_script_segment
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
 
@@ -371,7 +368,9 @@ async def test_narration_endpoint_returns_unsupported_for_unknown_script_segment
 
 
 @pytest.mark.asyncio
-async def test_narration_endpoint_returns_unsupported_without_voice_id(app, authenticated_client):
+async def test_narration_endpoint_returns_unsupported_without_voice_id(
+    app, authenticated_client, monkeypatch
+):
     script = RecordingScriptProvider()
     completed_script = await script.generate_lesson_script(
         ScriptGenerationRequest(
@@ -386,9 +385,12 @@ async def test_narration_endpoint_returns_unsupported_without_voice_id(app, auth
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="",
-        elevenlabs_female_voice_id="",
     )
+
+    async def empty_voice_id(_settings, _instructor_id):
+        return ""
+
+    monkeypatch.setattr(equations, "_voice_id_for_instructor", empty_voice_id)
     try:
         response = await authenticated_client.post(
             "/api/v1/equations/narration",
@@ -428,7 +430,6 @@ async def test_narration_endpoint_keeps_speech_text_when_provider_fails(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
 
@@ -474,7 +475,6 @@ async def test_narration_endpoint_keeps_attempted_speech_text_when_later_segment
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(equations, "_narration_provider", lambda _settings: provider)
 

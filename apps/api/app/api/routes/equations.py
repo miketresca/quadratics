@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies.auth import get_current_user
+from app.api.routes.instructors import _instructor_repository
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
 from app.providers.elevenlabs.narration_provider import (
@@ -86,7 +87,7 @@ async def narrate_equation(
             provider=provider,
             instructor_id=request.instructor_id,
             output_mode=request.output_mode,
-            voice_id=_voice_id_for_instructor(settings, request.instructor_id),
+            voice_id=await _voice_id_for_instructor(settings, request.instructor_id),
             model_id=settings.elevenlabs_model_id,
             speech_markup_provider=_speech_markup_provider(settings),
             script_segment_id=request.script_segment_id,
@@ -133,7 +134,6 @@ def _speech_markup_provider(settings: Settings) -> SpeechMarkupProvider:
     )
 
 
-def _voice_id_for_instructor(settings: Settings, instructor_id: str | None) -> str:
-    if instructor_id == "female":
-        return settings.elevenlabs_female_voice_id
-    return settings.elevenlabs_male_voice_id
+async def _voice_id_for_instructor(settings: Settings, instructor_id: str | None) -> str:
+    instructor = await _instructor_repository(settings).get(instructor_id)
+    return instructor.voice_id if instructor and instructor.voice_id else ""

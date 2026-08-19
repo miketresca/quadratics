@@ -38,8 +38,6 @@ class Settings(BaseSettings):
     provider_keys_encryption_key: str = ""
     elevenlabs_api_key: str = ""
     elevenlabs_model_id: str = "eleven_multilingual_v2"
-    elevenlabs_male_voice_id: str = ""
-    elevenlabs_female_voice_id: str = ""
     generated_media_bucket: str = "generated-media"
     motion_canvas_render_command: str = ""
     motion_canvas_render_cwd: str = ""

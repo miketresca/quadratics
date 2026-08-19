@@ -82,7 +82,6 @@ async def test_generation_stage_persists_narration_and_reuses_identical_audio(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
     try:
@@ -131,7 +130,6 @@ async def test_generation_run_all_completes_through_base_video(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
     try:
@@ -174,7 +172,6 @@ async def test_animation_plan_stage_does_not_regenerate_elevenlabs_audio(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
     try:
@@ -206,7 +203,6 @@ async def test_animation_plan_stage_records_provider_failure(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
     monkeypatch.setattr(
@@ -257,7 +253,6 @@ async def test_render_stage_records_media_storage_failure(
     app.dependency_overrides[get_settings] = lambda: Settings(
         script_generation_enabled=False,
         elevenlabs_api_key="test-key",
-        elevenlabs_male_voice_id="male-voice",
     )
     monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
     try:

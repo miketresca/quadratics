@@ -67,7 +67,7 @@ export function LessonResult({
   return (
     <section className="mx-auto mt-6 max-w-3xl" aria-live="polite">
       <div className="mb-4 flex flex-col items-center justify-center gap-3 sm:flex-row">
-        <div className="grid w-64 grid-cols-2 rounded-full border border-zinc-800 bg-zinc-950/70 p-1 text-sm shadow-xl shadow-black/30">
+        <div className="grid w-64 grid-cols-2 rounded border border-zinc-800 bg-zinc-950/70 p-1 text-sm shadow-xl shadow-black/30">
           <button className={viewButtonClass(activeView === "lesson")} onClick={() => setActiveView("lesson")} type="button">
             Lesson
           </button>
@@ -291,7 +291,7 @@ function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; load
 
 function AnswerLog({lesson}: {lesson: Lesson}) {
   return (
-    <div className="rounded border border-zinc-700/80 bg-zinc-950/55 p-4 backdrop-blur">
+    <div className="rounded border border-zinc-700/60 bg-black/28 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.22)] backdrop-blur-md">
       <StageTitle accent="zinc" title="answer" />
       <dl className="mt-4 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
         <div>
@@ -1046,5 +1046,10 @@ function formatArtifactTimestamp(value: string | null | undefined) {
 }
 
 function viewButtonClass(active: boolean) {
-  return ["rounded-full px-4 py-2 font-medium transition", active ? "bg-zinc-800/80 text-emerald-300" : "text-zinc-400 hover:text-zinc-100"].join(" ");
+  return [
+    "rounded-sm border px-4 py-2 font-medium transition",
+    active
+      ? "border-emerald-400/45 bg-emerald-400/10 text-emerald-200 shadow-[inset_0_0_18px_rgba(52,211,153,0.08)]"
+      : "border-transparent text-zinc-400 hover:border-zinc-800 hover:text-zinc-100"
+  ].join(" ");
 }

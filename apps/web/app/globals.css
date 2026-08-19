@@ -14,7 +14,6 @@ body {
 
 .quadratics-app-bg {
   background:
-    radial-gradient(circle at 50% 18rem, rgba(16, 185, 129, 0.084), transparent 24rem),
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.048) 0 1px, transparent 1px 80px),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.036) 0 1px, transparent 1px 80px),
     #000;

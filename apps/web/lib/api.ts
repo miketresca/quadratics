@@ -1,6 +1,7 @@
 import type {
   CreateGenerationResponse,
   GenerationSnapshot,
+  Instructor,
   MeResponse,
   NarrationEquationResponse,
   OutputMode,
@@ -109,6 +110,92 @@ export async function runGenerationPipeline(params: {
     throw new Error(body?.detail ?? "Could not run the full pipeline");
   }
   return response.json() as Promise<GenerationSnapshot>;
+}
+
+export async function listInstructors(accessToken: string): Promise<Instructor[]> {
+  const response = await fetch(`${apiUrl}/api/v1/instructors`, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load instructors");
+  }
+  return response.json() as Promise<Instructor[]>;
+}
+
+export async function createInstructor(params: {
+  accessToken: string;
+  displayName: string;
+  voiceId?: string | null;
+  referenceImageUrl?: string | null;
+  imageZoom: number;
+  imageX: number;
+  imageY: number;
+}): Promise<Instructor> {
+  const response = await fetch(`${apiUrl}/api/v1/instructors`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      displayName: params.displayName,
+      voiceId: params.voiceId,
+      referenceImageUrl: params.referenceImageUrl,
+      imageZoom: params.imageZoom,
+      imageX: params.imageX,
+      imageY: params.imageY
+    })
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not create instructor");
+  }
+  return response.json() as Promise<Instructor>;
+}
+
+export async function updateInstructor(params: {
+  accessToken: string;
+  instructorId: string;
+  displayName: string;
+  voiceId?: string | null;
+  referenceImageUrl?: string | null;
+  imageZoom: number;
+  imageX: number;
+  imageY: number;
+}): Promise<Instructor> {
+  const response = await fetch(`${apiUrl}/api/v1/instructors/${params.instructorId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      displayName: params.displayName,
+      voiceId: params.voiceId,
+      referenceImageUrl: params.referenceImageUrl,
+      imageZoom: params.imageZoom,
+      imageX: params.imageX,
+      imageY: params.imageY
+    })
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not update instructor");
+  }
+  return response.json() as Promise<Instructor>;
+}
+
+export async function deleteInstructor(params: {accessToken: string; instructorId: string}): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/v1/instructors/${params.instructorId}`, {
+    method: "DELETE",
+    headers: {Authorization: `Bearer ${params.accessToken}`}
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not delete instructor");
+  }
 }
 
 export async function generateEquationScript(params: {

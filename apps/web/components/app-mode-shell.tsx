@@ -19,7 +19,7 @@ export function AppModeShell({
   return (
     <div className="mx-auto min-h-screen w-full max-w-6xl px-4 pb-24 pt-28 sm:px-6 sm:pt-32">
       <div className="mb-7 flex justify-center">
-        <div className="grid w-56 grid-cols-2 rounded-full border border-zinc-800 bg-zinc-950/70 p-1 text-sm shadow-xl shadow-black/30">
+        <div className="grid w-56 grid-cols-2 rounded border border-zinc-800 bg-zinc-950/70 p-1 text-sm shadow-xl shadow-black/30">
           <button
             aria-pressed={mode === "app"}
             className={modeButtonClass(mode === "app")}
@@ -76,7 +76,9 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
 
 function modeButtonClass(active: boolean) {
   return [
-    "h-9 rounded-full px-4 transition",
-    active ? "bg-emerald-400 text-emerald-950" : "text-zinc-400 hover:text-zinc-100"
+    "h-9 rounded-sm border px-4 transition",
+    active
+      ? "border-emerald-400/45 bg-emerald-400/10 text-emerald-200 shadow-[inset_0_0_18px_rgba(52,211,153,0.08)]"
+      : "border-transparent text-zinc-400 hover:border-zinc-800 hover:text-zinc-100"
   ].join(" ");
 }

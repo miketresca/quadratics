@@ -85,7 +85,7 @@ export function MathEquationInput({value, disabled, onEquationChange}: MathEquat
       {isReady ? (
         <div className="relative min-w-0 flex-1">
           {showPlaceholder ? (
-            <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center font-mono text-lg text-zinc-500 sm:left-5 sm:text-xl">
+            <span className="pointer-events-none absolute inset-y-0 left-4 flex max-w-[calc(100%-1rem)] items-center truncate font-mono text-lg text-zinc-500 sm:left-5 sm:text-xl">
               Enter a quadratic equation
             </span>
           ) : null}
@@ -93,7 +93,7 @@ export function MathEquationInput({value, disabled, onEquationChange}: MathEquat
             ref: mathfieldRef,
             "aria-label": "Equation",
             className:
-              "math-equation-input w-full bg-transparent px-4 py-4 font-mono text-lg text-zinc-100 outline-none sm:px-5 sm:text-xl",
+              "math-equation-input min-w-0 w-full bg-transparent px-4 py-4 font-mono text-lg text-zinc-100 outline-none sm:px-5 sm:text-xl",
             "data-testid": "equation-mathfield",
             id: "equation",
             "math-virtual-keyboard-policy": "manual",

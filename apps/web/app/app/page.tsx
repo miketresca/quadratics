@@ -150,8 +150,8 @@ function AccountMenu({
         <span className="max-w-36 truncate">{label}</span>
         <span className="text-zinc-500 transition group-open:rotate-180">⌄</span>
       </summary>
-      <div className="absolute right-0 mt-2 w-72 rounded border border-zinc-800 bg-[#090d13] p-2 shadow-2xl shadow-black/50">
-        <div className="border-b border-zinc-800 px-2 pb-2">
+      <div className="absolute right-0 mt-2 w-72 rounded border border-zinc-700/70 bg-[#090d13]/88 p-2 shadow-[0_22px_70px_rgba(0,0,0,0.62),0_0_34px_rgba(16,185,129,0.08)] backdrop-blur-md">
+        <div className="border-b border-zinc-800/80 px-2 pb-2">
           <div className="truncate text-sm text-zinc-100">{label}</div>
           <div className="truncate text-xs text-zinc-500">
             {user ? "authenticated session" : "Authentication required to submit"}
@@ -161,9 +161,10 @@ function AccountMenu({
           <ApiKeysDialog />
         ) : null}
         {canSignOut ? (
-          <form action={signOut} className="mt-2 border-t border-zinc-800 pt-2">
-            <button className="w-full rounded px-2 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-900" type="submit">
-              Sign out
+          <form action={signOut} className="mt-2 border-t border-zinc-800/80 pt-2">
+            <button className="flex w-full items-center justify-between rounded border border-red-500/20 bg-red-500/10 px-2.5 py-2.5 text-left text-sm text-red-100 transition hover:border-red-400/50 hover:bg-red-500/15" type="submit">
+              <span>Sign out</span>
+              <SignOutIcon />
             </button>
           </form>
         ) : (
@@ -201,6 +202,16 @@ function AccountMenu({
         )}
       </div>
     </OutsideCloseDetails>
+  );
+}
+
+function SignOutIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <path d="m10 17 5-5-5-5" />
+      <path d="M15 12H3" />
+    </svg>
   );
 }
 
