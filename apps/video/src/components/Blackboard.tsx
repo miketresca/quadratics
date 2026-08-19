@@ -33,29 +33,33 @@ export function Blackboard({title, lines, lineRefs, highlightRefs}: BlackboardPr
           textAlign="left"
         />
         <Rect height={3} width={360} x={-630} y={-416} fill={board.accent} opacity={0.48} />
-        {lines.map((line, index) => (
-          <Layout key={line.id} position={[0, -275 + line.y]}>
-            <Rect
-              ref={highlightRefs[index]}
-              width={Math.max(220, line.expression.length * 34 + 58)}
-              height={74}
-              radius={10}
-              fill={board.highlight}
-              opacity={0}
-            />
-            <Txt
-              ref={lineRefs[index]}
-              text=""
-              fill={board.chalk}
-              fontSize={50}
-              fontFamily="Chalkboard SE, Chalkduster, Bradley Hand, Comic Sans MS, cursive"
-              opacity={0}
-              shadowBlur={3}
-              shadowColor="#f6f1dc44"
-              textAlign="center"
-            />
-          </Layout>
-        ))}
+        {lines.map((line, index) => {
+          const mathFontSize = line.expression.length > 30 ? 42 : 50;
+          return (
+            <Layout key={line.id} position={[0, line.y]}>
+              <Rect
+                ref={highlightRefs[index]}
+                width={Math.min(1320, Math.max(220, line.expression.length * mathFontSize * 0.68 + 64))}
+                height={74}
+                radius={10}
+                fill={board.highlight}
+                opacity={0}
+              />
+              <Txt
+                ref={lineRefs[index]}
+                text=""
+                fill={board.chalk}
+                fontSize={mathFontSize}
+                fontFamily="Chalkboard SE, Chalkduster, Bradley Hand, Comic Sans MS, cursive"
+                opacity={0}
+                shadowBlur={3}
+                shadowColor="#f6f1dc44"
+                textAlign="center"
+                width={1500}
+              />
+            </Layout>
+          );
+        })}
       </Layout>
     </Rect>
   );

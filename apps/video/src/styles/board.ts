@@ -6,5 +6,9 @@ export const board = {
   chalk: "#f6f1dc",
   muted: "#bbc6b7",
   accent: "#d8c891",
-  highlight: "#e6c84f"
+  highlight: "#e6c84f",
+  caption: "#f8fafc",
+  captionActive: "#ffd84d",
+  captionBackground: "#050505cc",
+  solution: "#7ee787"
 };

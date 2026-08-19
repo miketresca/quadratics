@@ -1,5 +1,6 @@
 import type {Rect} from "@motion-canvas/2d";
 import type {ThreadGenerator} from "@motion-canvas/core";
+import {waitFor} from "@motion-canvas/core";
 
 import type {RenderableAction} from "./dispatcher";
 import {board} from "../styles/board";
@@ -11,6 +12,10 @@ export function* showVisualAction(
 ): ThreadGenerator {
   configureShape(highlight, action);
   yield* highlight.opacity(opacityForAction(action), Math.min(duration, 0.18));
+  if (action === "box") {
+    yield* waitFor(Math.max(duration - 0.18, 0));
+    return;
+  }
   yield* highlight.opacity(0, Math.max(duration - 0.18, 0.12));
 }
 
