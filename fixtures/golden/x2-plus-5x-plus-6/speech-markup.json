@@ -1,0 +1,22 @@
+{
+  "provider": "development",
+  "model": "golden-fixture",
+  "speechText": "Start with x squared plus five x plus six equals zero. We want two numbers that multiply to six and add to five. Those numbers are two and three, so the quadratic factors into x plus two times x plus three. Now set each factor equal to zero. x plus three equals zero gives x equals negative three. x plus two equals zero gives x equals negative two. So the solutions are negative three and negative two.",
+  "segments": [
+    {
+      "scriptSegmentId": "script_factor",
+      "stepId": "factor",
+      "speechText": "Start with x squared plus five x plus six equals zero. We want two numbers that multiply to six and add to five. Those numbers are two and three, so the quadratic factors into x plus two times x plus three."
+    },
+    {
+      "scriptSegmentId": "script_solve_factors",
+      "stepId": "solve_factors",
+      "speechText": "Now set each factor equal to zero. x plus three equals zero gives x equals negative three. x plus two equals zero gives x equals negative two."
+    },
+    {
+      "scriptSegmentId": "script_final_answer",
+      "stepId": "final_answer",
+      "speechText": "So the solutions are negative three and negative two."
+    }
+  ]
+}

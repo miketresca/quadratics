@@ -1,0 +1,45 @@
+{
+  "status": "completed",
+  "originalEquation": "x^2 + 5*x + 6 = 0",
+  "normalizedEquation": "x**2 + 5*x + 6 = 0",
+  "method": "factoring",
+  "coefficients": {
+    "a": {"expression": "1", "latex": "1"},
+    "b": {"expression": "5", "latex": "5"},
+    "c": {"expression": "6", "latex": "6"}
+  },
+  "solutions": [
+    {"expression": "-3", "latex": "-3"},
+    {"expression": "-2", "latex": "-2"}
+  ],
+  "steps": [
+    {
+      "id": "factor",
+      "title": "Factor the quadratic",
+      "stepType": "factor",
+      "mathLines": [
+        {"id": "standard_form", "expression": "x^2 + 5*x + 6 = 0", "latex": "x^{2} + 5 x + 6 = 0"},
+        {"id": "factored_form", "expression": "(x + 2)*(x + 3) = 0", "latex": "\\left(x + 2\\right) \\left(x + 3\\right) = 0"}
+      ]
+    },
+    {
+      "id": "solve_factors",
+      "title": "Solve each factor",
+      "stepType": "solve_factors",
+      "mathLines": [
+        {"id": "first_factor", "expression": "x + 3 = 0", "latex": "x + 3 = 0"},
+        {"id": "first_solution", "expression": "x = -3", "latex": "x = -3"},
+        {"id": "second_factor", "expression": "x + 2 = 0", "latex": "x + 2 = 0"},
+        {"id": "second_solution", "expression": "x = -2", "latex": "x = -2"}
+      ]
+    },
+    {
+      "id": "final_answer",
+      "title": "State the final answer",
+      "stepType": "final_answer",
+      "mathLines": [
+        {"id": "solutions", "expression": "x = -3, -2", "latex": "x = -3, -2"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "status": "completed",
+  "provider": "development",
+  "voiceId": "golden-development-voice",
+  "modelId": "golden-elevenlabs-shape",
+  "audioMimeType": null,
+  "audioBase64": null,
+  "durationSeconds": 24,
+  "speechText": "Start with x squared plus five x plus six equals zero. We want two numbers that multiply to six and add to five. Those numbers are two and three, so the quadratic factors into x plus two times x plus three. Now set each factor equal to zero. x plus three equals zero gives x equals negative three. x plus two equals zero gives x equals negative two. So the solutions are negative three and negative two.",
+  "segments": [
+    {
+      "scriptSegmentId": "script_factor",
+      "stepId": "factor",
+      "title": "Factor the quadratic",
+      "provider": "development",
+      "voiceId": "golden-development-voice",
+      "modelId": "golden-elevenlabs-shape",
+      "audioMimeType": "audio/mpeg",
+      "audioBase64": "ZmFrZS1nb2xkZW4tbXAz",
+      "durationSeconds": 10,
+      "speechText": "Start with x squared plus five x plus six equals zero. We want two numbers that multiply to six and add to five. Those numbers are two and three, so the quadratic factors into x plus two times x plus three.",
+      "alignment": {
+        "characters": ["S", "t", "a", "r", "t"],
+        "characterStartTimesSeconds": [0, 0.08, 0.16, 0.24, 0.32],
+        "characterEndTimesSeconds": [0.08, 0.16, 0.24, 0.32, 0.4]
+      },
+      "normalizedAlignment": {
+        "characters": ["S", "t", "a", "r", "t"],
+        "characterStartTimesSeconds": [0, 0.08, 0.16, 0.24, 0.32],
+        "characterEndTimesSeconds": [0.08, 0.16, 0.24, 0.32, 0.4]
+      },
+      "providerMetadata": {"segmentOffsetSeconds": 0}
+    },
+    {
+      "scriptSegmentId": "script_solve_factors",
+      "stepId": "solve_factors",
+      "title": "Solve each factor",
+      "provider": "development",
+      "voiceId": "golden-development-voice",
+      "modelId": "golden-elevenlabs-shape",
+      "audioMimeType": "audio/mpeg",
+      "audioBase64": "ZmFrZS1nb2xkZW4tbXAz",
+      "durationSeconds": 9,
+      "speechText": "Now set each factor equal to zero. x plus three equals zero gives x equals negative three. x plus two equals zero gives x equals negative two.",
+      "alignment": {
+        "characters": ["N", "o", "w", " "],
+        "characterStartTimesSeconds": [0, 0.1, 0.2, 0.3],
+        "characterEndTimesSeconds": [0.1, 0.2, 0.3, 0.4]
+      },
+      "normalizedAlignment": {
+        "characters": ["N", "o", "w", " "],
+        "characterStartTimesSeconds": [0, 0.1, 0.2, 0.3],
+        "characterEndTimesSeconds": [0.1, 0.2, 0.3, 0.4]
+      },
+      "providerMetadata": {"segmentOffsetSeconds": 10}
+    },
+    {
+      "scriptSegmentId": "script_final_answer",
+      "stepId": "final_answer",
+      "title": "State the final answer",
+      "provider": "development",
+      "voiceId": "golden-development-voice",
+      "modelId": "golden-elevenlabs-shape",
+      "audioMimeType": "audio/mpeg",
+      "audioBase64": "ZmFrZS1nb2xkZW4tbXAz",
+      "durationSeconds": 5,
+      "speechText": "So the solutions are negative three and negative two.",
+      "alignment": {
+        "characters": ["S", "o", " "],
+        "characterStartTimesSeconds": [0, 0.12, 0.24],
+        "characterEndTimesSeconds": [0.12, 0.24, 0.36]
+      },
+      "normalizedAlignment": {
+        "characters": ["S", "o", " "],
+        "characterStartTimesSeconds": [0, 0.12, 0.24],
+        "characterEndTimesSeconds": [0.12, 0.24, 0.36]
+      },
+      "providerMetadata": {"segmentOffsetSeconds": 19}
+    }
+  ],
+  "providerMetadata": {
+    "fixture": true,
+    "segmentCount": 3,
+    "alignmentSource": "provider-shaped synthetic timing"
+  }
+}

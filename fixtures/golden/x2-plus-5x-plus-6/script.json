@@ -1,0 +1,42 @@
+{
+  "status": "completed",
+  "method": "factoring",
+  "totalEstimatedSeconds": 24,
+  "totalWordCount": 76,
+  "segments": [
+    {
+      "id": "script_factor",
+      "stepId": "factor",
+      "title": "Factor the quadratic",
+      "narration": "Start with x squared plus five x plus six equals zero. We want two numbers that multiply to six and add to five. Those numbers are two and three, so the quadratic factors into x plus two times x plus three.",
+      "mathLineIds": ["standard_form", "factored_form"],
+      "estimatedSeconds": 10,
+      "wordCount": 42,
+      "deliveryNotes": ["Read equations conversationally, not character by character."]
+    },
+    {
+      "id": "script_solve_factors",
+      "stepId": "solve_factors",
+      "title": "Solve each factor",
+      "narration": "Now set each factor equal to zero. x plus three equals zero gives x equals negative three. x plus two equals zero gives x equals negative two.",
+      "mathLineIds": ["first_factor", "first_solution", "second_factor", "second_solution"],
+      "estimatedSeconds": 9,
+      "wordCount": 28,
+      "deliveryNotes": ["Keep the factor-to-root connection clear."]
+    },
+    {
+      "id": "script_final_answer",
+      "stepId": "final_answer",
+      "title": "State the final answer",
+      "narration": "So the solutions are negative three and negative two.",
+      "mathLineIds": ["solutions"],
+      "estimatedSeconds": 5,
+      "wordCount": 9,
+      "deliveryNotes": []
+    }
+  ],
+  "providerMetadata": {
+    "provider": "golden-fixture",
+    "model": "development"
+  }
+}

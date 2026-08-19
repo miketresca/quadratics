@@ -11,6 +11,7 @@
     "api:dev": "uv run --project apps/api uvicorn app.main:app --reload --app-dir apps/api",
     "web:dev": "pnpm --filter @quadratics/web dev",
     "video:dev": "pnpm --filter @quadratics/video dev",
+    "video:fixture": "pnpm --filter @quadratics/video fixture",
     "sb:login": "node scripts/supabase-env.mjs login",
     "sb:link": "node scripts/supabase-env.mjs link",
     "sb:link:dev": "node scripts/supabase-env.mjs link dev",
