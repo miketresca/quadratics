@@ -731,7 +731,7 @@ describe("LessonResult", () => {
 
     expect(container.textContent).toContain("animation_plan");
     expect(container.textContent).toContain("resolved_timeline");
-    expect(container.textContent).toContain("render_context");
+    expect(container.textContent).toContain("render input");
     expect(container.textContent).toContain("Motion Canvas receives the lesson, resolved timeline, and signed narration segment URLs.");
     expect(container.textContent).toContain("motion_canvas_render");
     expect(container.textContent).toContain("Now factor the quadratic");

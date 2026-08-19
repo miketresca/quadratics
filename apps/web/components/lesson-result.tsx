@@ -227,20 +227,14 @@ export function LessonResult({
             />
           ) : null}
 
-          {resolvedTimeline ? (
-            <RenderContextLog
-              narration={effectiveNarration}
-              renderArtifact={renderArtifact}
-              timeline={resolvedTimeline}
-            />
-          ) : null}
-
           {visibleRenderArtifact ? (
             <RenderLog
               actionDisabled={actionDisabled}
               artifact={visibleRenderArtifact}
               loading={loadingStage === "motion_canvas_render"}
+              narration={effectiveNarration}
               onRun={onRunStage ? () => onRunStage("motion_canvas_render", {force: true}) : undefined}
+              timeline={resolvedTimeline}
             />
           ) : loadingStage === "motion_canvas_render" ? (
             <PendingLog accent="lime" className="mt-6" title="motion_canvas_render" />
@@ -252,7 +246,9 @@ export function LessonResult({
               loading={loadingStage === "motion_canvas_render"}
               onRun={onRunStage ? () => onRunStage("motion_canvas_render") : undefined}
               title="motion_canvas_render"
-            />
+            >
+              <RenderInputSummary narration={effectiveNarration} timeline={resolvedTimeline} />
+            </RunnableLog>
           ) : null}
         </>
       )}
@@ -325,7 +321,8 @@ function AnswerLog({lesson}: {lesson: Lesson}) {
 
 function SolutionLinesLog({lines}: {lines: ReturnType<typeof flattenLessonMathLines>}) {
   return (
-    <div className="mt-6 rounded border border-emerald-400/35 bg-emerald-950/10 p-4">
+    <div className="relative mt-8 rounded border border-emerald-400/35 bg-emerald-950/10 p-4">
+      <PipelineConnector />
       <StageTitle accent="lime" title="solution_lines" />
       <ol className="mt-4 grid gap-2 font-mono text-sm text-zinc-100">
         {lines.map((line, index) => (
@@ -633,12 +630,16 @@ function RenderLog({
   actionDisabled = false,
   artifact,
   loading = false,
-  onRun
+  narration,
+  onRun,
+  timeline
 }: {
   actionDisabled?: boolean;
   artifact: GenerationArtifact;
   loading?: boolean;
+  narration?: LessonNarration;
   onRun?: () => void;
+  timeline?: ResolvedAnimationTimeline;
 }) {
   const stageLoading = loading || artifact.status === "running";
   return (
@@ -652,12 +653,13 @@ function RenderLog({
       <p className="mt-3 text-sm text-zinc-300">
         {artifact.status === "completed" ? "Blackboard video render completed. Stored narration is included when playback URLs are available to the renderer." : artifact.errorMessage ?? "Render artifact is not current."}
       </p>
+      {timeline ? <RenderInputSummary narration={narration} renderArtifact={artifact} timeline={timeline} /> : null}
       {artifact.storageObjects?.[0] ? <ArtifactStorage object={artifact.storageObjects[0]} /> : null}
     </StageCard>
   );
 }
 
-function RenderContextLog({
+function RenderInputSummary({
   narration,
   renderArtifact,
   timeline
@@ -669,16 +671,12 @@ function RenderContextLog({
   const narrationSegments = narration?.segments?.length ?? 0;
   const renderProvider = [renderArtifact?.provider, renderArtifact?.model].filter(Boolean).join(" / ");
   return (
-    <div className="mt-6 rounded border border-lime-400/20 bg-lime-950/5 p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <StageTitle accent="lime" title="render_context" />
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
-            Motion Canvas receives the lesson, resolved timeline, and signed narration segment URLs. The renderer uses those inputs to
-            draw the blackboard scene, place captions, and mux narration into the final MP4.
-          </p>
-        </div>
-      </div>
+    <div className="mt-4 rounded border border-lime-400/20 bg-lime-950/5 p-3">
+      <p className="font-mono text-xs uppercase tracking-wide text-lime-200">render input</p>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
+        Motion Canvas receives the lesson, resolved timeline, and signed narration segment URLs. The renderer uses those inputs to
+        draw the blackboard scene, place captions, and mux narration into the final MP4.
+      </p>
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
         <div className="rounded border border-zinc-800 bg-zinc-950/45 p-3">
           <dt className="font-mono text-xs uppercase tracking-wide text-zinc-500">Timeline</dt>
@@ -714,7 +712,8 @@ function StageCard({
 }) {
   const isLoading = loading || artifact?.status === "running";
   return (
-    <div className={`mt-6 rounded border ${accentBorderClass(accent)} p-4`}>
+    <div className={`relative mt-8 rounded border ${accentBorderClass(accent)} p-4`}>
+      <PipelineConnector />
       <div className="flex items-start justify-between gap-4">
         <div>
           <StageTitle accent={accent} title={title} />
@@ -792,7 +791,8 @@ type Accent = "amber" | "cyan" | "fuchsia" | "lime" | "sky" | "violet" | "zinc";
 
 function PendingLog({accent = "zinc", className = "", title}: {accent?: Accent; className?: string; title: string}) {
   return (
-    <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
+    <div className={`${className} relative rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
+      {title !== "answer" ? <PipelineConnector /> : null}
       <div className="flex items-center justify-between gap-4">
         <StageTitle accent={accent} title={title} />
         <Spinner />
@@ -803,6 +803,7 @@ function PendingLog({accent = "zinc", className = "", title}: {accent?: Accent; 
 
 function RunnableLog({
   accent = "zinc",
+  children,
   className = "",
   disabled = false,
   loading = false,
@@ -810,6 +811,7 @@ function RunnableLog({
   title
 }: {
   accent?: Accent;
+  children?: React.ReactNode;
   className?: string;
   disabled?: boolean;
   loading?: boolean;
@@ -817,14 +819,18 @@ function RunnableLog({
   title: string;
 }) {
   return (
-    <div className={`${className} rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
+    <div className={`${className} relative rounded border ${accentBorderClass(accent)} p-4 backdrop-blur`}>
+      <PipelineConnector />
       <div className="flex items-center justify-between gap-4">
         <StageTitle accent={accent} title={title} />
-        {loading ? <Spinner /> : null}
-        <IconButton disabled={disabled || loading || !onRun} label={`Run ${title}`} onClick={onRun}>
-          <RunIcon />
-        </IconButton>
+        <div className="flex items-center gap-2">
+          {loading ? <Spinner /> : null}
+          <IconButton disabled={disabled || loading || !onRun} label={`Run ${title}`} onClick={onRun}>
+            <RunIcon />
+          </IconButton>
+        </div>
       </div>
+      {children}
     </div>
   );
 }
@@ -941,9 +947,18 @@ const stageDescriptions: Record<string, string> = {
   elevenlabs_audio: "ElevenLabs generates per-step narration audio and character alignment. The MP3 segments are stored in private Supabase Storage and exposed through signed playback URLs.",
   animation_plan: "The animation planner uses the lesson, script, and narration text to choose semantic visual actions like write, highlight, underline, or box. It does not create Motion Canvas code.",
   resolved_timeline: "Deterministic resolver code maps planner trigger phrases to ElevenLabs character timestamps and creates exact animation, caption, and chalk-SFX windows.",
-  render_context: "This derived log summarizes the payload Motion Canvas will receive: lesson data, resolved cue timing, narration segment URLs, and renderer configuration.",
   motion_canvas_render: "The API calls the configured Motion Canvas command adapter. It renders the blackboard scene from the resolved timeline, downloads signed narration segments, and muxes the MP4 with ffmpeg."
 };
+
+function PipelineConnector() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute -top-8 left-1/2 flex h-8 -translate-x-1/2 flex-col items-center justify-end">
+      <span className="h-5 w-px bg-gradient-to-b from-transparent via-emerald-400/45 to-cyan-300/35" />
+      <span className="-mt-0.5 h-2 w-2 rotate-45 border-b border-r border-cyan-300/45" />
+      <span className="mt-0.5 h-1.5 w-1.5 rounded-full border border-emerald-300/35 bg-[#07100d]" />
+    </div>
+  );
+}
 
 function accentTextClass(accent: Accent) {
   return {
