@@ -241,7 +241,7 @@ async def test_heygen_avatar_stage_persists_development_avatar_video(
         supabase_jwt_secret="test-secret",
         supabase_jwks_url="",
         elevenlabs_api_key="test-key",
-        heygen_avatar_cost_per_second_usd=0.02,
+        heygen_avatar_iv_cost_per_second_usd=0.02,
     )
     monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
     try:
@@ -275,7 +275,7 @@ async def test_heygen_avatar_stage_persists_development_avatar_video(
 
         response = await authenticated_client.post(
             f"/api/v1/generations/{generation_id}/stages/heygen_avatar",
-            json={},
+            json={"avatarModel": "avatar_iv"},
         )
         usage = await authenticated_client.get("/api/v1/usage/events")
     finally:
@@ -288,6 +288,8 @@ async def test_heygen_avatar_stage_persists_development_avatar_video(
         if artifact["stage"] == "heygen_avatar"
     )
     assert avatar_artifact["status"] == "completed"
+    assert avatar_artifact["model"] == "avatar_iv"
+    assert avatar_artifact["payload"]["avatarModel"] == "avatar_iv"
     assert avatar_artifact["payload"]["outputFormat"] == "webm"
     assert avatar_artifact["payload"]["segmentCount"] == 3
     assert len(avatar_artifact["storageObjects"]) == 3
@@ -296,8 +298,89 @@ async def test_heygen_avatar_stage_persists_development_avatar_video(
         for storage_object in avatar_artifact["storageObjects"]
     )
     heygen_event = next(event for event in usage.json()["events"] if event["provider"] == "heygen")
+    assert heygen_event["model"] == "avatar_iv"
     assert heygen_event["quantity"] == pytest.approx(3.6)
     assert heygen_event["costUsd"] == pytest.approx(0.072)
+
+
+@pytest.mark.asyncio
+async def test_render_stage_requires_explicit_avatar_inclusion(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        app_environment="development",
+        script_generation_enabled=False,
+        supabase_url="",
+        supabase_service_role_key="",
+        supabase_anon_key="",
+        supabase_jwt_secret="test-secret",
+        supabase_jwks_url="",
+        elevenlabs_api_key="test-key",
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    try:
+        instructor = await authenticated_client.post(
+            "/api/v1/instructors",
+            json={
+                "displayName": "Avatar Instructor",
+                "voiceId": "voice-avatar",
+                "avatarId": "heygen-avatar",
+                "imageZoom": 1,
+                "imageX": 50,
+                "imageY": 50,
+            },
+        )
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={
+                "equation": "x^2 + 5*x + 6 = 0",
+                "instructorId": instructor.json()["id"],
+            },
+        )
+        generation_id = created.json()["job"]["id"]
+        for stage in [
+            "teacher_script",
+            "elevenlabs_audio",
+            "heygen_avatar",
+            "animation_plan",
+            "resolved_timeline",
+        ]:
+            await authenticated_client.post(
+                f"/api/v1/generations/{generation_id}/stages/{stage}",
+                json={},
+            )
+
+        without_avatar = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/motion_canvas_render",
+            json={"includeAvatar": False},
+        )
+        with_avatar = await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/stages/motion_canvas_render",
+            json={"includeAvatar": True, "force": True},
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert without_avatar.status_code == 200
+    render_without_avatar = [
+        artifact
+        for artifact in without_avatar.json()["artifacts"]
+        if artifact["stage"] == "motion_canvas_render"
+    ][-1]
+    assert render_without_avatar["payload"]["includeAvatar"] is False
+    assert "avatarArtifactId" not in render_without_avatar["payload"]
+
+    assert with_avatar.status_code == 200
+    render_with_avatar = [
+        artifact
+        for artifact in with_avatar.json()["artifacts"]
+        if artifact["stage"] == "motion_canvas_render"
+    ][-1]
+    assert render_with_avatar["payload"]["includeAvatar"] is True
+    assert render_with_avatar["payload"]["avatarArtifactId"]
 
 
 @pytest.mark.asyncio

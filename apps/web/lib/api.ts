@@ -73,6 +73,8 @@ export async function runGenerationStage(params: {
   generationId: string;
   stage: string;
   force?: boolean;
+  avatarModel?: string | null;
+  includeAvatar?: boolean | null;
   scriptSegmentId?: string | null;
 }): Promise<GenerationSnapshot> {
   const url = `${apiUrl}/api/v1/generations/${params.generationId}/stages/${params.stage}`;
@@ -82,7 +84,12 @@ export async function runGenerationStage(params: {
       Authorization: `Bearer ${params.accessToken}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({force: params.force ?? false, scriptSegmentId: params.scriptSegmentId})
+    body: JSON.stringify({
+      force: params.force ?? false,
+      avatarModel: params.avatarModel,
+      includeAvatar: params.includeAvatar,
+      scriptSegmentId: params.scriptSegmentId
+    })
   }).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : "network request failed";
     throw new Error(`Could not reach API while running ${params.stage} at ${url}: ${message}`);

@@ -158,6 +158,7 @@ async def run_generation_stage(
         )
         if snapshot is None:
             raise HTTPException(status_code=404, detail="Generation not found")
+        avatar_model = _heygen_avatar_model(settings, request.avatar_model)
         return await service.run_heygen_avatar(
             generation_job_id=generation_id,
             user_id=current_user.id,
@@ -166,7 +167,8 @@ async def run_generation_stage(
             media_store=media_store,
             usage_costs=_usage_repository(settings),
             output_format=settings.heygen_avatar_output_format,
-            cost_per_second_usd=settings.heygen_avatar_cost_per_second_usd,
+            avatar_model=avatar_model,
+            cost_per_second_usd=_heygen_avatar_cost_per_second(settings, avatar_model),
             force=request.force,
         )
     if stage == "motion_canvas_render":
@@ -175,6 +177,7 @@ async def run_generation_stage(
             user_id=current_user.id,
             renderer=_renderer_for_settings(settings),
             media_store=media_store,
+            include_avatar=request.include_avatar is True,
             force=request.force,
         )
     raise HTTPException(status_code=400, detail=f"Unsupported generation stage '{stage}'")
@@ -291,6 +294,23 @@ async def _avatar_provider(settings: Settings, user_id: str) -> AvatarVideoProvi
         poll_interval_seconds=settings.heygen_avatar_poll_interval_seconds,
         timeout_seconds=settings.heygen_avatar_timeout_seconds,
     )
+
+
+def _heygen_avatar_model(settings: Settings, requested_model: str | None) -> str:
+    model = (requested_model or settings.heygen_avatar_default_model).strip() or "avatar_iii"
+    if model not in {"avatar_iii", "avatar_iv", "avatar_v"}:
+        raise HTTPException(status_code=400, detail=f"Unsupported HeyGen avatar model '{model}'")
+    return model
+
+
+def _heygen_avatar_cost_per_second(settings: Settings, avatar_model: str) -> float:
+    if avatar_model == "avatar_iii":
+        return settings.heygen_avatar_iii_cost_per_second_usd
+    if avatar_model == "avatar_iv":
+        return settings.heygen_avatar_iv_cost_per_second_usd
+    if avatar_model == "avatar_v":
+        return settings.heygen_avatar_v_cost_per_second_usd
+    return settings.heygen_avatar_cost_per_second_usd
 
 
 def _speech_markup_provider(settings: Settings) -> SpeechMarkupProvider:

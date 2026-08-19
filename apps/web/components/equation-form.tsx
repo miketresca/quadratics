@@ -556,7 +556,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     </div>
   );
 
-  function runStage(stage: string, options: {force?: boolean} = {}) {
+  function runStage(stage: string, options: {force?: boolean; avatarModel?: string; includeAvatar?: boolean} = {}) {
     if (!lesson || !generation || !startPipelineOperation(stage)) {
       return;
     }
@@ -568,7 +568,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
           accessToken,
           generationId: generation.job.id,
           stage,
-          force: options.force
+          avatarModel: options.avatarModel,
+          force: options.force,
+          includeAvatar: options.includeAvatar
         });
         setViewState(stateForLesson(nextGeneration.lesson as Lesson, undefined, undefined, nextGeneration));
       } catch (stageError) {

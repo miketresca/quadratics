@@ -423,6 +423,7 @@ class SolveGenerationService:
         media_store: MediaStore,
         usage_costs: UsageCostRepository | None = None,
         output_format: str = "webm",
+        avatar_model: str = "avatar_iii",
         cost_per_second_usd: float = 0,
         force: bool = False,
     ) -> GenerationSnapshot:
@@ -447,13 +448,15 @@ class SolveGenerationService:
                     avatar_input["script_segment_id"] for avatar_input in avatar_inputs
                 ],
                 "avatarId": avatar_id,
+                "avatarModel": avatar_model,
                 "outputFormat": output_format,
             },
             upstream_artifact_ids=[narration_artifact.id],
             provider="heygen",
-            model="avatar_iv",
+            model=avatar_model,
             config_metadata={
                 "avatarId": avatar_id,
+                "avatarModel": avatar_model,
                 "outputFormat": output_format,
             },
             force=force,
@@ -472,6 +475,7 @@ class SolveGenerationService:
                                 f"Quadratics {generation_job_id} "
                                 f"{avatar_input['script_segment_id']}"
                             ),
+                            avatar_model=avatar_model,
                             output_format=output_format,
                             script_segment_id=str(avatar_input["script_segment_id"]),
                         )
@@ -495,6 +499,7 @@ class SolveGenerationService:
                         content_type=result.content_type,
                         metadata={
                             "providerVideoId": result.provider_video_id,
+                            "avatarModel": avatar_model,
                             "outputFormat": result.output_format,
                             "scriptSegmentId": script_segment_id,
                             "title": avatar_input["title"],
@@ -514,6 +519,7 @@ class SolveGenerationService:
             stage_run.artifact.id,
             payload={
                 "durationSeconds": total_duration_seconds,
+                "avatarModel": avatar_model,
                 "outputFormat": output_format,
                 "segmentCount": len(results),
                 "segments": [
@@ -548,6 +554,7 @@ class SolveGenerationService:
             duration_seconds=total_duration_seconds,
             cost_per_second_usd=cost_per_second_usd,
             segment_count=len(results),
+            avatar_model=avatar_model,
         )
         return self.snapshot_for_job(job=job, lesson=lesson)
 
@@ -558,6 +565,7 @@ class SolveGenerationService:
         user_id: str,
         renderer: MotionCanvasRenderer,
         media_store: MediaStore,
+        include_avatar: bool = False,
         force: bool = False,
     ) -> GenerationSnapshot:
         job, lesson, _lesson_artifact = self._current_lesson_context(
@@ -570,19 +578,31 @@ class SolveGenerationService:
             generation_job_id=generation_job_id,
             stage="heygen_avatar",
         )
+        completed_avatar_artifact = (
+            avatar_artifact
+            if (
+                include_avatar
+                and avatar_artifact is not None
+                and avatar_artifact.status == "completed"
+            )
+            else None
+        )
         avatar_storage_objects = [
             _storage_reference_payload(storage_reference)
-            for storage_reference in (avatar_artifact.storage_objects if avatar_artifact else [])
+            for storage_reference in (
+                completed_avatar_artifact.storage_objects if completed_avatar_artifact else []
+            )
         ]
         upstream_artifact_ids = [timeline_artifact.id, narration_artifact.id]
         input_payload: dict[str, object] = {
             "timelineArtifactId": timeline_artifact.id,
             "narrationArtifactId": narration_artifact.id,
             "rendererVersion": renderer.__class__.__name__,
+            "includeAvatar": include_avatar,
         }
-        if avatar_artifact is not None and avatar_artifact.status == "completed":
-            upstream_artifact_ids.append(avatar_artifact.id)
-            input_payload["avatarArtifactId"] = avatar_artifact.id
+        if completed_avatar_artifact is not None:
+            upstream_artifact_ids.append(completed_avatar_artifact.id)
+            input_payload["avatarArtifactId"] = completed_avatar_artifact.id
         stage_run = self._lifecycle.start_stage(
             generation_job_id=generation_job_id,
             user_id=user_id,
@@ -605,8 +625,8 @@ class SolveGenerationService:
                 for storage_reference in narration_artifact.storage_objects
             ],
         }
-        if avatar_artifact is not None and avatar_artifact.status == "completed":
-            render_input["avatar"] = avatar_artifact.payload
+        if completed_avatar_artifact is not None:
+            render_input["avatar"] = completed_avatar_artifact.payload
             render_input["avatarStorageObjects"] = avatar_storage_objects
         try:
             result = renderer.render(
@@ -635,9 +655,10 @@ class SolveGenerationService:
             payload={
                 "durationSeconds": result.duration_seconds,
                 "rendererVersion": result.renderer_version,
+                "includeAvatar": include_avatar,
                 **(
-                    {"avatarArtifactId": avatar_artifact.id}
-                    if avatar_artifact is not None and avatar_artifact.status == "completed"
+                    {"avatarArtifactId": completed_avatar_artifact.id}
+                    if completed_avatar_artifact is not None
                     else {}
                 ),
             },
@@ -874,6 +895,7 @@ async def _record_heygen_usage(
     duration_seconds: float,
     cost_per_second_usd: float,
     segment_count: int,
+    avatar_model: str,
 ) -> None:
     if usage_costs is None:
         return
@@ -882,12 +904,13 @@ async def _record_heygen_usage(
         generation_job_id=generation_job_id,
         stage="heygen_avatar",
         provider="heygen",
-        model="avatar_iv",
+        model=avatar_model,
         unit_type="seconds",
         quantity=max(duration_seconds, 0),
         unit_cost_usd=cost_per_second_usd,
         metadata={
             "source": "avatar_video_duration",
+            "avatarModel": avatar_model,
             "segmentCount": segment_count,
             "completeStage": True,
         },

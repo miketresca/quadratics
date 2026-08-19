@@ -28,4 +28,6 @@ class GenerationSnapshot(ApiModel):
 
 class GenerationStageRunRequest(ApiModel):
     force: bool = False
+    avatar_model: Literal["avatar_iii", "avatar_iv", "avatar_v"] | None = None
+    include_avatar: bool | None = None
     script_segment_id: str | None = None

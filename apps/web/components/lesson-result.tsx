@@ -14,10 +14,33 @@ import {useRef, useState} from "react";
 
 import {flattenLessonMathLines} from "@/lib/lesson-view";
 
-type StageRunOptions = {force?: boolean};
-const HEYGEN_AVATAR_COST_PER_SECOND_USD = Number(
-  process.env.NEXT_PUBLIC_HEYGEN_AVATAR_COST_PER_SECOND_USD ?? "0.0167"
-);
+type HeyGenAvatarModel = "avatar_iii" | "avatar_iv" | "avatar_v";
+type StageRunOptions = {force?: boolean; avatarModel?: HeyGenAvatarModel; includeAvatar?: boolean};
+const HEYGEN_AVATAR_MODELS: Array<{
+  id: HeyGenAvatarModel;
+  label: string;
+  rate: number;
+  note: string;
+}> = [
+  {
+    id: "avatar_iii",
+    label: "Avatar III",
+    note: "lowest cost",
+    rate: Number(process.env.NEXT_PUBLIC_HEYGEN_AVATAR_III_COST_PER_SECOND_USD ?? "0.0167")
+  },
+  {
+    id: "avatar_iv",
+    label: "Avatar IV",
+    note: "v3 default",
+    rate: Number(process.env.NEXT_PUBLIC_HEYGEN_AVATAR_IV_COST_PER_SECOND_USD ?? "0.0667")
+  },
+  {
+    id: "avatar_v",
+    label: "Avatar V",
+    note: "highest fidelity",
+    rate: Number(process.env.NEXT_PUBLIC_HEYGEN_AVATAR_V_COST_PER_SECOND_USD ?? "0.0667")
+  }
+];
 
 export function LessonResult({
   actionDisabled = false,
@@ -46,6 +69,8 @@ export function LessonResult({
 }) {
   const [activeView, setActiveView] = useState<"lesson" | "logs">("logs");
   const [pendingAvatarRun, setPendingAvatarRun] = useState<{force: boolean} | null>(null);
+  const [pendingRenderRun, setPendingRenderRun] = useState<{force: boolean} | null>(null);
+  const [selectedAvatarModel, setSelectedAvatarModel] = useState<HeyGenAvatarModel>("avatar_iii");
   const solutionLines = lesson ? flattenLessonMathLines(lesson) : [];
   const teacherScriptArtifact = artifactForStage(generation, "teacher_script");
   const speechMarkupArtifact = artifactForStage(generation, "elevenlabs_request");
@@ -69,7 +94,8 @@ export function LessonResult({
   const elevenLabsRequestLoading = loadingStage === "elevenlabs_request" || loadingStage === "elevenlabs_audio";
   const elevenLabsAudioLoading = loadingStage === "elevenlabs_audio";
   const avatarLoading = loadingStage === "heygen_avatar";
-  const avatarEstimate = estimateHeyGenCost(effectiveNarration);
+  const avatarEstimate = estimateHeyGenCost(effectiveNarration, selectedAvatarModel);
+  const hasCompletedAvatar = avatarArtifact?.status === "completed";
 
   function requestAvatarRun(force = false) {
     setPendingAvatarRun({force});
@@ -78,7 +104,21 @@ export function LessonResult({
   function confirmAvatarRun() {
     const force = pendingAvatarRun?.force;
     setPendingAvatarRun(null);
-    onRunStage?.("heygen_avatar", {force});
+    onRunStage?.("heygen_avatar", {avatarModel: selectedAvatarModel, force});
+  }
+
+  function requestRenderRun(force = false) {
+    if (hasCompletedAvatar) {
+      setPendingRenderRun({force});
+      return;
+    }
+    onRunStage?.("motion_canvas_render", {force, includeAvatar: false});
+  }
+
+  function confirmRenderRun(includeAvatar: boolean) {
+    const force = pendingRenderRun?.force;
+    setPendingRenderRun(null);
+    onRunStage?.("motion_canvas_render", {force, includeAvatar});
   }
 
   return (
@@ -189,7 +229,9 @@ export function LessonResult({
               artifact={avatarArtifact}
               estimate={avatarEstimate}
               loading={avatarLoading}
+              onModelChange={setSelectedAvatarModel}
               onRun={onRunStage ? () => requestAvatarRun(true) : undefined}
+              selectedModel={selectedAvatarModel}
             />
           ) : avatarLoading ? (
             <PendingLog accent="pink" className="mt-6" title="heygen_avatar" />
@@ -202,7 +244,8 @@ export function LessonResult({
               onRun={onRunStage ? () => requestAvatarRun(false) : undefined}
               title="heygen_avatar"
             >
-              <AvatarRunSummary estimate={avatarEstimate} />
+              <AvatarModelSelector onChange={setSelectedAvatarModel} value={selectedAvatarModel} />
+              <AvatarRunSummary estimate={avatarEstimate} model={selectedAvatarModel} />
             </RunnableLog>
           ) : null}
 
@@ -274,7 +317,7 @@ export function LessonResult({
               loading={loadingStage === "motion_canvas_render"}
               narration={effectiveNarration}
               onOpenLesson={() => setActiveView("lesson")}
-              onRun={onRunStage ? () => onRunStage("motion_canvas_render", {force: true}) : undefined}
+              onRun={onRunStage ? () => requestRenderRun(true) : undefined}
               timeline={resolvedTimeline}
             />
           ) : loadingStage === "motion_canvas_render" ? (
@@ -285,7 +328,7 @@ export function LessonResult({
               className="mt-6"
               disabled={actionDisabled || !onRunStage || loadingStage === "motion_canvas_render"}
               loading={loadingStage === "motion_canvas_render"}
-              onRun={onRunStage ? () => onRunStage("motion_canvas_render") : undefined}
+              onRun={onRunStage ? () => requestRenderRun(false) : undefined}
               title="motion_canvas_render"
             >
               <RenderInputSummary narration={effectiveNarration} timeline={resolvedTimeline} />
@@ -299,6 +342,14 @@ export function LessonResult({
           force={pendingAvatarRun.force}
           onCancel={() => setPendingAvatarRun(null)}
           onConfirm={confirmAvatarRun}
+          selectedModel={selectedAvatarModel}
+        />
+      ) : null}
+      {pendingRenderRun ? (
+        <RenderRunConfirm
+          force={pendingRenderRun.force}
+          onCancel={() => setPendingRenderRun(null)}
+          onConfirm={confirmRenderRun}
         />
       ) : null}
     </section>
@@ -688,17 +739,22 @@ function AvatarLog({
   artifact,
   estimate,
   loading = false,
-  onRun
+  onModelChange,
+  onRun,
+  selectedModel
 }: {
   actionDisabled?: boolean;
   artifact: GenerationArtifact;
   estimate: HeyGenCostEstimate;
   loading?: boolean;
+  onModelChange: (model: HeyGenAvatarModel) => void;
   onRun?: () => void;
+  selectedModel: HeyGenAvatarModel;
 }) {
   const stageLoading = loading || artifact.status === "running";
   const storageObjects = artifact.storageObjects ?? [];
   const outputFormat = typeof artifact.payload?.outputFormat === "string" ? artifact.payload.outputFormat : "webm";
+  const artifactModel = readHeyGenAvatarModel(artifact) ?? selectedModel;
   const durationSeconds =
     typeof artifact.payload?.durationSeconds === "number"
       ? artifact.payload.durationSeconds
@@ -711,9 +767,14 @@ function AvatarLog({
       loading={stageLoading}
       title="heygen_avatar"
     >
+      <AvatarModelSelector onChange={onModelChange} value={selectedModel} />
       {artifact.status === "completed" ? (
         <div className="mt-4 grid gap-3">
-          <div className="grid gap-3 rounded border border-pink-400/20 bg-pink-950/10 p-3 text-sm sm:grid-cols-3">
+          <div className="grid gap-3 rounded border border-pink-400/20 bg-pink-950/10 p-3 text-sm sm:grid-cols-4">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-wide text-zinc-500">Engine</p>
+              <p className="mt-1 text-zinc-100">{heygenModelLabel(artifactModel)}</p>
+            </div>
             <div>
               <p className="font-mono text-xs uppercase tracking-wide text-zinc-500">Format</p>
               <p className="mt-1 text-zinc-100">{outputFormat}</p>
@@ -764,7 +825,7 @@ type HeyGenCostEstimate = {
   costUsd: number;
 };
 
-function estimateHeyGenCost(narration: LessonNarration | undefined): HeyGenCostEstimate {
+function estimateHeyGenCost(narration: LessonNarration | undefined, avatarModel: HeyGenAvatarModel): HeyGenCostEstimate {
   const segments = narration?.segments ?? [];
   const segmentDurations = segments.map((segment) => Math.max(0, segment.durationSeconds ?? 0));
   const durationSeconds =
@@ -775,11 +836,11 @@ function estimateHeyGenCost(narration: LessonNarration | undefined): HeyGenCostE
     durationSeconds,
     averageSegmentSeconds: segmentCount > 0 ? durationSeconds / segmentCount : 0,
     segmentCount,
-    costUsd: durationSeconds * HEYGEN_AVATAR_COST_PER_SECOND_USD,
+    costUsd: durationSeconds * heygenModelRate(avatarModel),
   };
 }
 
-function AvatarRunSummary({estimate}: {estimate: HeyGenCostEstimate}) {
+function AvatarRunSummary({estimate, model}: {estimate: HeyGenCostEstimate; model: HeyGenAvatarModel}) {
   return (
     <div className="mt-4 rounded border border-pink-400/25 bg-pink-950/10 p-3 text-sm text-zinc-300">
       <p>
@@ -787,8 +848,40 @@ function AvatarRunSummary({estimate}: {estimate: HeyGenCostEstimate}) {
         {estimate.segmentCount === 1 ? "" : "s"} from the completed ElevenLabs audio and only makes the render stale.
       </p>
       <p className="mt-2 font-mono text-xs uppercase tracking-wide text-pink-200">
-        estimate: {formatSeconds(estimate.durationSeconds)} / {formatCurrency(estimate.costUsd)}
+        estimate: {heygenModelLabel(model)} / {formatSeconds(estimate.durationSeconds)} / {formatCurrency(estimate.costUsd)}
       </p>
+    </div>
+  );
+}
+
+function AvatarModelSelector({
+  onChange,
+  value
+}: {
+  onChange: (model: HeyGenAvatarModel) => void;
+  value: HeyGenAvatarModel;
+}) {
+  return (
+    <div className="mt-4 rounded border border-pink-400/20 bg-pink-950/5 p-2">
+      <div className="grid gap-2 sm:grid-cols-3">
+        {HEYGEN_AVATAR_MODELS.map((model) => (
+          <button
+            className={`rounded border px-3 py-2 text-left transition ${
+              value === model.id
+                ? "border-pink-300/60 bg-pink-300/10 text-pink-100"
+                : "border-zinc-800 bg-zinc-950/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+            }`}
+            key={model.id}
+            onClick={() => onChange(model.id)}
+            type="button"
+          >
+            <span className="block text-sm font-medium">{model.label}</span>
+            <span className="mt-1 block font-mono text-[10px] uppercase tracking-wide">
+              {formatCurrency(model.rate)}/sec · {model.note}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -797,12 +890,14 @@ function AvatarRunConfirm({
   estimate,
   force,
   onCancel,
-  onConfirm
+  onConfirm,
+  selectedModel
 }: {
   estimate: HeyGenCostEstimate;
   force: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  selectedModel: HeyGenAvatarModel;
 }) {
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
@@ -817,6 +912,9 @@ function AvatarRunConfirm({
               This will submit {estimate.segmentCount || "the"} narration segment
               {estimate.segmentCount === 1 ? "" : "s"} to HeyGen. Estimated cost is
               {" "}{formatCurrency(estimate.costUsd)} for {formatSeconds(estimate.durationSeconds)}.
+            </p>
+            <p className="mt-2 font-mono text-xs uppercase tracking-wide text-pink-200">
+              engine: {heygenModelLabel(selectedModel)} / {formatCurrency(heygenModelRate(selectedModel))} per second
             </p>
             {force ? (
               <p className="mt-2 text-sm leading-6 text-amber-100">
@@ -839,6 +937,55 @@ function AvatarRunConfirm({
             type="button"
           >
             Run HeyGen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RenderRunConfirm({
+  force,
+  onCancel,
+  onConfirm
+}: {
+  force: boolean;
+  onCancel: () => void;
+  onConfirm: (includeAvatar: boolean) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-md border border-lime-400/30 bg-[#080c12]/95 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.75),0_0_48px_rgba(132,204,22,0.1)]">
+        <h3 className="font-mono text-sm uppercase tracking-wide text-lime-200">Render video solution</h3>
+        <p className="mt-2 text-sm leading-6 text-zinc-300">
+          Completed HeyGen clips are available. Choose whether Motion Canvas should overlay the avatar in this render.
+        </p>
+        {force ? (
+          <p className="mt-2 text-sm leading-6 text-amber-100">
+            Regenerating will replace the current rendered video artifact.
+          </p>
+        ) : null}
+        <div className="mt-5 grid gap-2 sm:grid-cols-3">
+          <button
+            className="rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-700 hover:text-zinc-100"
+            onClick={onCancel}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded border border-zinc-700 bg-zinc-950/70 px-3 py-2 text-sm text-zinc-100 transition hover:border-zinc-500"
+            onClick={() => onConfirm(false)}
+            type="button"
+          >
+            No avatar
+          </button>
+          <button
+            className="rounded border border-lime-300/55 bg-lime-400/10 px-3 py-2 text-sm text-lime-100 transition hover:bg-lime-400/20"
+            onClick={() => onConfirm(true)}
+            type="button"
+          >
+            Include avatar
           </button>
         </div>
       </div>
@@ -1135,6 +1282,28 @@ function isResolvedTimelinePayload(payload: unknown): payload is ResolvedAnimati
   );
 }
 
+function readHeyGenAvatarModel(artifact: GenerationArtifact): HeyGenAvatarModel | null {
+  const values = [
+    artifact.payload?.avatarModel,
+    artifact.configMetadata?.avatarModel,
+    artifact.model
+  ];
+  const model = values.find((value): value is string => typeof value === "string");
+  return isHeyGenAvatarModel(model) ? model : null;
+}
+
+function isHeyGenAvatarModel(value: string | undefined): value is HeyGenAvatarModel {
+  return value === "avatar_iii" || value === "avatar_iv" || value === "avatar_v";
+}
+
+function heygenModelLabel(model: HeyGenAvatarModel) {
+  return HEYGEN_AVATAR_MODELS.find((option) => option.id === model)?.label ?? model;
+}
+
+function heygenModelRate(model: HeyGenAvatarModel) {
+  return HEYGEN_AVATAR_MODELS.find((option) => option.id === model)?.rate ?? 0;
+}
+
 function cuesForAnimationPlanLog(plan: AnimationPlan, timeline?: ResolvedAnimationTimeline) {
   if (!timeline) {
     return plan.cues;
@@ -1298,7 +1467,7 @@ const stageDetails: Record<string, StageDetails> = {
     summary: "Optional paid avatar pass. It creates one transparent avatar clip per narration segment.",
     inputs: "Completed ElevenLabs segment audio URLs and the selected instructor HeyGen avatar ID.",
     guardrails: "The stage is explicit and confirmed before running. Regenerating it only makes downstream render artifacts stale.",
-    cost: `Estimate uses ${formatCurrency(HEYGEN_AVATAR_COST_PER_SECOND_USD)} per generated second. Override with NEXT_PUBLIC_HEYGEN_AVATAR_COST_PER_SECOND_USD.`
+    cost: `Estimate uses the selected engine rate: Avatar III ${formatCurrency(heygenModelRate("avatar_iii"))}/sec, Avatar IV ${formatCurrency(heygenModelRate("avatar_iv"))}/sec, Avatar V ${formatCurrency(heygenModelRate("avatar_v"))}/sec.`
   },
   animation_plan: {
     summary: "Chooses semantic blackboard actions for the lesson.",

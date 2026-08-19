@@ -8,6 +8,7 @@ class AvatarVideoRequest:
     avatar_id: str
     audio_url: str
     title: str
+    avatar_model: str = "avatar_iii"
     output_format: str = "webm"
     script_segment_id: str | None = None
 

@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     openai_gpt5_mini_input_cost_per_million_tokens_usd: float = 0.25
     openai_gpt5_mini_output_cost_per_million_tokens_usd: float = 2.00
     heygen_api_key: str = ""
+    heygen_avatar_default_model: str = "avatar_iii"
+    heygen_avatar_iii_cost_per_second_usd: float = 0.0167
+    heygen_avatar_iv_cost_per_second_usd: float = 0.0667
+    heygen_avatar_v_cost_per_second_usd: float = 0.0667
     heygen_avatar_cost_per_second_usd: float = 0.0167
     heygen_avatar_output_format: str = "webm"
     heygen_avatar_poll_interval_seconds: float = 10

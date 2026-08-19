@@ -42,7 +42,7 @@ class HeyGenAvatarVideoProvider(AvatarVideoProvider):
             "aspect_ratio": "16:9",
             "audio_url": request.audio_url,
             "output_format": request.output_format,
-            "engine": {"type": "avatar_iv"},
+            "engine": {"type": request.avatar_model},
         }
         if request.output_format != "webm":
             payload["remove_background"] = True
@@ -87,6 +87,7 @@ class HeyGenAvatarVideoProvider(AvatarVideoProvider):
                 "thumbnailUrl": detail.get("thumbnail_url"),
                 "downloadContentType": content_type,
                 "downloadSizeBytes": len(download_response.content),
+                "avatarModel": request.avatar_model,
             },
         )
 
@@ -141,7 +142,9 @@ def _content_type(response: httpx.Response, output_format: str) -> str:
 def _validate_video_download(*, content: bytes, content_type: str, output_format: str) -> None:
     if not content:
         raise HeyGenProviderError("HeyGen video download was empty")
-    if output_format == "webm" and (content_type == "video/webm" or content.startswith(b"\x1a\x45\xdf\xa3")):
+    if output_format == "webm" and (
+        content_type == "video/webm" or content.startswith(b"\x1a\x45\xdf\xa3")
+    ):
         return
     if output_format == "mp4" and (content_type == "video/mp4" or b"ftyp" in content[:16]):
         return
