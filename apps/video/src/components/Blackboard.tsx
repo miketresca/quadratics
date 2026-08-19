@@ -31,7 +31,7 @@ export function Blackboard({title, lines, lineRefs, highlightRefs}: BlackboardPr
             />
             <Txt
               ref={lineRefs[index]}
-              text={line.expression}
+              text=""
               fill={board.chalk}
               fontSize={46}
               fontFamily="JetBrains Mono, Menlo, monospace"

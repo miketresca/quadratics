@@ -4,6 +4,7 @@ import {createRef, waitFor} from "@motion-canvas/core";
 import {showHighlight} from "../actions/highlight";
 import {assertSupportedCue, durationForCue} from "../actions/dispatcher";
 import {writeMath} from "../actions/writeMath";
+import {chalkSfxTracksForTimeline} from "../audio/chalkEffects";
 import {Blackboard} from "../components/Blackboard";
 import {goldenRenderInput} from "../data/golden";
 import {board} from "../styles/board";
@@ -18,6 +19,7 @@ export default makeScene2D(function* (view) {
   const lineRefs = lines.map(() => createRef<Txt>());
   const highlightRefs = lines.map(() => createRef<Rect>());
   const lineIndexById = new Map(lines.map((line, index) => [line.id, index]));
+  const chalkSfxTracks = chalkSfxTracksForTimeline(input.timeline);
 
   view.add(
     <Blackboard
@@ -45,7 +47,7 @@ export default makeScene2D(function* (view) {
       linesById.has(lineId) &&
       cue.animation.action === "write_math"
     ) {
-      yield* writeMath(lineRefs[lineIndex](), duration);
+      yield* writeMath(lineRefs[lineIndex](), linesById.get(lineId)!.expression, duration);
     } else if (
       lineId &&
       lineIndex !== undefined &&
@@ -58,5 +60,6 @@ export default makeScene2D(function* (view) {
     playhead = Math.max(playhead + wait + duration, cue.animation.endSeconds);
   }
 
+  console.info(`Prepared ${chalkSfxTracks.length} chalk SFX cue(s).`);
   yield* waitFor(Math.max(0, input.timeline.durationSeconds - playhead));
 });
