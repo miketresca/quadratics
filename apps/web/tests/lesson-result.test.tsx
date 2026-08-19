@@ -771,8 +771,9 @@ describe("LessonResult", () => {
       openLesson?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
 
-    expect(container.textContent).toContain("base video ready");
-    expect(container.textContent).toContain("storage: generated-media/user-1/generation-1/renders/video-artifact.mp4");
+    expect(container.textContent).toContain("Video Solution");
+    expect(container.textContent).toContain("Rendered lesson playback");
+    expect(container.textContent).not.toContain("storage: generated-media/user-1/generation-1/renders/video-artifact.mp4");
     expect(container.querySelector('video[src="https://media.example/video-artifact.mp4"]')).not.toBeNull();
 
     await act(async () => {

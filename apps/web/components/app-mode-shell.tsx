@@ -34,7 +34,7 @@ export function AppModeShell({
             onClick={() => setMode("notes")}
             type="button"
           >
-            Notes
+            Demo
           </button>
         </div>
       </div>
@@ -53,7 +53,7 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
   );
 
   return (
-    <section className="mx-auto grid max-w-5xl gap-6" aria-label="Notes">
+    <section className="mx-auto grid max-w-5xl gap-6" aria-label="Demo">
       <div
         aria-label="Loom video embed placeholder"
         className="group relative aspect-video overflow-hidden rounded-md border border-zinc-800 bg-[#080c12] shadow-2xl shadow-black/40"

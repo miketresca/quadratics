@@ -308,7 +308,18 @@ export function LessonResult({
 function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; loading?: boolean}) {
   const storageObject = artifact?.storageObjects?.[0];
   return (
-    <div className="min-h-64 rounded border border-zinc-800 bg-zinc-950/25 p-4" aria-label="Lesson preview">
+    <div className="min-h-64 rounded border border-zinc-800 bg-zinc-950/25 p-4" aria-label="Video Solution">
+      <div className="mb-4 flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div>
+          <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Video Solution</h2>
+          <p className="mt-1 text-xs text-zinc-500">Rendered lesson playback</p>
+        </div>
+        {artifact?.status === "completed" ? (
+          <span className="rounded border border-lime-400/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-lime-200">
+            Ready
+          </span>
+        ) : null}
+      </div>
       {loading ? (
         <div className="flex min-h-56 items-center justify-center gap-3 text-sm text-zinc-300">
           <Spinner />
@@ -316,7 +327,6 @@ function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; load
         </div>
       ) : artifact?.status === "completed" ? (
         <div className="grid min-h-56 content-center gap-3">
-          <p className="font-mono text-sm uppercase tracking-wide text-lime-300">base video ready</p>
           {storageObject?.signedUrl ? (
             <video className="aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
               <track kind="captions" />
@@ -326,7 +336,6 @@ function LessonPreview({artifact, loading}: {artifact?: GenerationArtifact; load
               <p className="text-sm text-zinc-300">The render artifact is complete. Waiting for a private playback URL.</p>
             </>
           )}
-          {storageObject ? <ArtifactStorage object={storageObject} /> : null}
         </div>
       ) : (
         <div className="flex min-h-56 items-center justify-center px-6 text-center text-sm leading-6 text-zinc-400">
