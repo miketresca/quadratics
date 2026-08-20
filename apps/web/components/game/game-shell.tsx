@@ -2,7 +2,8 @@
 
 import type {GameLessonId} from "@quadratics/types";
 import {useEffect, useRef, useState} from "react";
-import type {Group, Mesh, PerspectiveCamera, Scene, Texture, WebGLRenderer} from "three";
+import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, WebGLRenderer} from "three";
+import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
 
 import {getGameLesson} from "@/lib/game/lessons";
 
@@ -14,12 +15,26 @@ type LessonChoice = {
   box: {x: number; y: number; width: number; height: number};
 };
 
-const PAPER_WIDTH = 3.05;
-const PAPER_HEIGHT = 4.45;
+type SceneTunableName = "laptop" | "clock" | "coffee" | "paper";
+
+const PAPER_WIDTH = 2.68;
+const PAPER_HEIGHT = 3.9;
 const DESK_SURFACE_Y = 1.08;
 const PAPER_Y = DESK_SURFACE_Y + 0.045;
 const WORKSHEET_CANVAS_WIDTH = 1200;
 const WORKSHEET_CANVAS_HEIGHT = 1600;
+const LOFI_GIRL_EMBED_URL =
+  "https://www.youtube.com/embed/0muHFBSiybw?enablejsapi=1&autoplay=1&mute=0&playsinline=1&controls=0&rel=0&modestbranding=1";
+const ROOM = {
+  width: 10.6,
+  depth: 9.4,
+  height: 5.8,
+  floorY: -0.31,
+  backWindowZ: -4.32,
+  leftWindowX: -5.3,
+  rightWallX: 5.3,
+  deskZ: 0.04
+} as const;
 const LESSON_CHOICES: LessonChoice[] = [
   {
     id: "volume-cubes-lesson-1",
@@ -47,11 +62,13 @@ export function GameShell() {
   const [started, setStarted] = useState(false);
   const [worksheetFocused, setWorksheetFocused] = useState(false);
   const [pointerLocked, setPointerLocked] = useState(false);
+  const [sceneEditorHud, setSceneEditorHud] = useState<string | null>(null);
   const selectedLesson = selectedLessonId ? getGameLesson(selectedLessonId) : null;
 
   useEffect(() => {
     let disposed = false;
     let renderer: WebGLRenderer | null = null;
+    let cssRenderer: CSS3DRenderer | null = null;
     let scene: Scene | null = null;
     let camera: PerspectiveCamera | null = null;
     let animationFrame: number | null = null;
@@ -61,14 +78,41 @@ export function GameShell() {
     let penGroup: Group | null = null;
     let steamGroup: Group | null = null;
     let clockTexture: Texture | null = null;
-    let lofiContext: AudioContext | null = null;
-    let lofiTimer: number | null = null;
+    let lofiIframe: HTMLIFrameElement | null = null;
+    let lofiPlaying = true;
     let hoveredChoiceId: GameLessonId | null = null;
+    let sceneEditorSelection: SceneTunableName = "laptop";
+    const sceneTunables: Partial<Record<SceneTunableName, Object3D>> = {};
     const pointerTarget = {x: 1.08, z: 0.82};
     const cameraTarget = {x: 0, y: 2.85, z: 5.45};
     const lookTarget = {x: 0, y: 1.52, z: -2.25};
     const lookAngles = {yaw: 0, pitch: -0.2};
     const cleanupCallbacks: Array<() => void> = [];
+
+    function toggleLofiVideo() {
+      lofiPlaying = !lofiPlaying;
+      postLofiCommand(lofiPlaying ? "playVideo" : "pauseVideo");
+    }
+
+    function postLofiCommand(command: "playVideo" | "pauseVideo" | "unMute") {
+      lofiIframe?.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args: []}), "https://www.youtube.com");
+    }
+
+    function startExperience() {
+      startedRef.current = true;
+      setStarted(true);
+      postLofiCommand("playVideo");
+      postLofiCommand("unMute");
+      void renderer?.domElement.requestPointerLock();
+    }
+
+    function pauseExperience() {
+      startedRef.current = false;
+      setStarted(false);
+      setFocusMode(false);
+      document.exitPointerLock?.();
+      postLofiCommand("pauseVideo");
+    }
 
     function setFocusMode(focused: boolean) {
       worksheetFocusedRef.current = focused;
@@ -97,6 +141,7 @@ export function GameShell() {
       }
 
       const THREE = await import("three");
+      const {CSS3DObject, CSS3DRenderer} = await import("three/examples/jsm/renderers/CSS3DRenderer.js");
       if (disposed || !mountRef.current) {
         return;
       }
@@ -120,6 +165,11 @@ export function GameShell() {
       renderer.shadowMap.enabled = true;
       renderer.domElement.className = "absolute inset-0 h-full w-full cursor-none";
       mount.append(renderer.domElement);
+
+      cssRenderer = new CSS3DRenderer();
+      cssRenderer.domElement.className = "pointer-events-none absolute inset-0 h-full w-full cursor-none";
+      cssRenderer.domElement.style.overflow = "hidden";
+      mount.append(cssRenderer.domElement);
 
       const hemiLight = new THREE.HemisphereLight(0x9fb7d8, 0x0d0908, 0.42);
       scene.add(hemiLight);
@@ -151,12 +201,21 @@ export function GameShell() {
       steamGroup = supplies.steamGroup;
       clockTexture = supplies.clockTexture;
       scene.add(supplies.group);
+      sceneTunables.clock = supplies.clock;
+      sceneTunables.coffee = supplies.coffeeGroup;
+      const laptop = createDeskLaptop(THREE);
+      const lofiEmbed = createLaptopLofiEmbed(CSS3DObject, window.location.origin);
+      lofiIframe = lofiEmbed.iframe;
+      laptop.add(lofiEmbed.object);
+      sceneTunables.laptop = laptop;
+      scene.add(laptop);
 
       const clockTimer = window.setInterval(() => refreshClockTexture(clockTexture), 15_000);
       cleanupCallbacks.push(() => window.clearInterval(clockTimer));
 
       paperTexture = createWorksheetTexture(THREE, selectedLessonId, null);
       paperMesh = createPaper(THREE, paperTexture);
+      sceneTunables.paper = paperMesh;
       scene.add(paperMesh);
 
       penGroup = createPenHand(THREE);
@@ -173,7 +232,7 @@ export function GameShell() {
         }
         const rect = renderer.domElement.getBoundingClientRect();
         if (pointerLockedRef.current && !worksheetFocusedRef.current) {
-          lookAngles.yaw = Math.max(-0.9, Math.min(0.9, lookAngles.yaw + event.movementX * 0.0022));
+          lookAngles.yaw = Math.max(-1.24, Math.min(1.24, lookAngles.yaw + event.movementX * 0.0022));
           lookAngles.pitch = Math.max(-0.78, Math.min(0.45, lookAngles.pitch - event.movementY * 0.0022));
           pointer.set(0, 0);
         } else {
@@ -189,7 +248,7 @@ export function GameShell() {
           lookTarget.z = -0.35;
         } else {
           if (!pointerLockedRef.current) {
-            lookAngles.yaw = pointer.x * 0.58;
+            lookAngles.yaw = pointer.x * 0.78;
             lookAngles.pitch = Math.max(-0.78, Math.min(0.45, -0.28 + pointer.y * 0.58));
           }
           applyRoomLook(pointer.x, pointer.y);
@@ -219,7 +278,6 @@ export function GameShell() {
         if (!startedRef.current) {
           return;
         }
-        startLofiLoop();
         if (worksheetFocusedRef.current) {
           const rect = renderer.domElement.getBoundingClientRect();
           pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -232,6 +290,11 @@ export function GameShell() {
           pointer.set(0, 0);
         }
         raycaster.setFromCamera(pointer, camera);
+        const selectedLaptop = sceneTunables.laptop;
+        if (!worksheetFocusedRef.current && selectedLaptop && raycaster.intersectObject(selectedLaptop, true).length > 0) {
+          toggleLofiVideo();
+          return;
+        }
         const [hit] = raycaster.intersectObject(paperMesh);
         if (!hit?.uv) {
           if (!worksheetFocusedRef.current && pointerLockedRef.current && lookAngles.pitch < -0.33) {
@@ -272,19 +335,101 @@ export function GameShell() {
       cleanupCallbacks.push(() => renderer?.domElement.removeEventListener("pointerdown", activatePointer));
 
       function handleKeyDown(event: KeyboardEvent) {
+        if (handleSceneEditorKey(event)) {
+          return;
+        }
         if (event.key === "Enter" && !startedRef.current) {
-          startedRef.current = true;
-          setStarted(true);
-          startLofiLoop();
-          void renderer?.domElement.requestPointerLock();
+          startExperience();
           return;
         }
         if (event.key === "Escape") {
-          setFocusMode(false);
+          pauseExperience();
         }
       }
       window.addEventListener("keydown", handleKeyDown);
       cleanupCallbacks.push(() => window.removeEventListener("keydown", handleKeyDown));
+
+      const sceneEditorEnabled =
+        process.env.NODE_ENV === "development" && new URLSearchParams(window.location.search).has("sceneEditor");
+      if (sceneEditorEnabled) {
+        refreshSceneEditorHud();
+      }
+
+      function handleSceneEditorKey(event: KeyboardEvent) {
+        if (!sceneEditorEnabled) {
+          return false;
+        }
+        const selected = sceneTunables[sceneEditorSelection];
+        const orderedNames: SceneTunableName[] = ["laptop", "clock", "coffee", "paper"];
+        if (event.key === "Tab") {
+          event.preventDefault();
+          const currentIndex = orderedNames.indexOf(sceneEditorSelection);
+          sceneEditorSelection = orderedNames[(currentIndex + 1) % orderedNames.length];
+          refreshSceneEditorHud();
+          return true;
+        }
+        if (!selected) {
+          return false;
+        }
+
+        const moveStep = event.shiftKey ? 0.02 : 0.1;
+        const rotateStep = event.shiftKey ? 0.02 : 0.08;
+        const scaleStep = event.shiftKey ? 0.02 : 0.08;
+        let handled = true;
+        switch (event.key) {
+          case "ArrowLeft":
+            selected.position.x -= moveStep;
+            break;
+          case "ArrowRight":
+            selected.position.x += moveStep;
+            break;
+          case "ArrowUp":
+            selected.position.z -= moveStep;
+            break;
+          case "ArrowDown":
+            selected.position.z += moveStep;
+            break;
+          case "PageUp":
+            selected.position.y += moveStep;
+            break;
+          case "PageDown":
+            selected.position.y -= moveStep;
+            break;
+          case "[":
+            selected.rotation.y -= rotateStep;
+            break;
+          case "]":
+            selected.rotation.y += rotateStep;
+            break;
+          case "-":
+            selected.scale.multiplyScalar(Math.max(0.05, 1 - scaleStep));
+            break;
+          case "=":
+          case "+":
+            selected.scale.multiplyScalar(1 + scaleStep);
+            break;
+          case "c":
+          case "C":
+            void navigator.clipboard?.writeText(formatSceneTransform(sceneEditorSelection, selected));
+            break;
+          default:
+            handled = false;
+        }
+        if (handled) {
+          event.preventDefault();
+          refreshSceneEditorHud();
+        }
+        return handled;
+      }
+
+      function refreshSceneEditorHud() {
+        const selected = sceneTunables[sceneEditorSelection];
+        if (!selected) {
+          setSceneEditorHud(null);
+          return;
+        }
+        setSceneEditorHud(formatSceneTransform(sceneEditorSelection, selected));
+      }
 
       function handlePointerLockChange() {
         const isLocked = document.pointerLockElement === renderer?.domElement;
@@ -294,62 +439,13 @@ export function GameShell() {
       document.addEventListener("pointerlockchange", handlePointerLockChange);
       cleanupCallbacks.push(() => document.removeEventListener("pointerlockchange", handlePointerLockChange));
 
-      function startLofiLoop() {
-        if (lofiContext) {
-          return;
-        }
-        const AudioContextClass = window.AudioContext ?? (window as Window & {webkitAudioContext?: typeof AudioContext}).webkitAudioContext;
-        if (!AudioContextClass) {
-          return;
-        }
-        lofiContext = new AudioContextClass();
-        const masterGain = lofiContext.createGain();
-        const lowpass = lofiContext.createBiquadFilter();
-        masterGain.gain.value = 0.026;
-        lowpass.type = "lowpass";
-        lowpass.frequency.value = 1250;
-        lowpass.Q.value = 0.6;
-        lowpass.connect(masterGain);
-        masterGain.connect(lofiContext.destination);
-
-        const chords = [
-          [261.63, 329.63, 392.0],
-          [220.0, 261.63, 329.63],
-          [246.94, 293.66, 369.99],
-          [196.0, 246.94, 329.63]
-        ];
-        let chordIndex = 0;
-        const playChord = () => {
-          if (!lofiContext) {
-            return;
-          }
-          const now = lofiContext.currentTime;
-          const notes = chords[chordIndex % chords.length];
-          chordIndex += 1;
-          for (const [index, note] of notes.entries()) {
-            const oscillator = lofiContext.createOscillator();
-            const noteGain = lofiContext.createGain();
-            oscillator.type = index === 0 ? "sine" : "triangle";
-            oscillator.frequency.value = note / 2;
-            noteGain.gain.setValueAtTime(0, now);
-            noteGain.gain.linearRampToValueAtTime(0.18 / notes.length, now + 0.08);
-            noteGain.gain.exponentialRampToValueAtTime(0.001, now + 2.1);
-            oscillator.connect(noteGain);
-            noteGain.connect(lowpass);
-            oscillator.start(now);
-            oscillator.stop(now + 2.15);
-          }
-        };
-        playChord();
-        lofiTimer = window.setInterval(playChord, 2200);
-      }
-
       const resize = () => {
         if (!mountRef.current || !renderer || !camera) {
           return;
         }
         const rect = mountRef.current.getBoundingClientRect();
         renderer.setSize(rect.width, rect.height, false);
+        cssRenderer?.setSize(rect.width, rect.height);
         camera.aspect = rect.width / Math.max(1, rect.height);
         camera.updateProjectionMatrix();
       };
@@ -380,6 +476,7 @@ export function GameShell() {
           }
         }
         renderer.render(scene, camera);
+        cssRenderer?.render(scene, camera);
         animationFrame = requestAnimationFrame(animate);
       };
       animate();
@@ -400,6 +497,7 @@ export function GameShell() {
         renderer.dispose();
         renderer.domElement.remove();
       }
+      cssRenderer?.domElement.remove();
       scene?.traverse((child) => {
         const mesh = child as Mesh & {
           geometry?: {dispose: () => void};
@@ -415,10 +513,7 @@ export function GameShell() {
         }
       });
       paperTexture?.dispose();
-      if (lofiTimer !== null) {
-        window.clearInterval(lofiTimer);
-      }
-      void lofiContext?.close();
+      setSceneEditorHud(null);
     };
   }, [selectedLessonId]);
 
@@ -445,8 +540,8 @@ export function GameShell() {
           {worksheetFocused
             ? "Click a checkbox to choose a lesson. Press Escape to look around."
             : pointerLocked
-              ? "Look around with the mouse. Center the worksheet and click to focus."
-              : "Click once to enter seated look mode. Press Escape to release."}
+              ? "Look around with the mouse. Center the worksheet and click to focus. Escape pauses."
+              : "Press Enter to resume seated look mode."}
         </p>
       </div>
 
@@ -463,6 +558,14 @@ export function GameShell() {
       {pointerLocked && !worksheetFocused ? (
         <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 rounded border border-white/10 bg-zinc-950/45 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-zinc-300/75 backdrop-blur-sm">
           Esc releases cursor
+        </div>
+      ) : null}
+
+      {sceneEditorHud ? (
+        <div className="pointer-events-none absolute bottom-5 right-5 z-40 max-w-[28rem] rounded border border-cyan-200/25 bg-zinc-950/80 px-4 py-3 font-mono text-[11px] text-cyan-50/80 shadow-2xl backdrop-blur-md">
+          <p className="mb-2 uppercase tracking-wide text-cyan-200">Scene tuner</p>
+          <pre className="whitespace-pre-wrap">{sceneEditorHud}</pre>
+          <p className="mt-2 text-cyan-100/55">Tab object / arrows move / PgUp PgDn height / [ ] rotate / +/- scale / C copy</p>
         </div>
       ) : null}
 
@@ -526,7 +629,7 @@ function createDeskSurface(THREE: typeof import("three")) {
 
   const matTexture = createLeatherTexture(THREE);
   const mat = new THREE.Mesh(
-    new THREE.BoxGeometry(3.85, 0.035, 4.55),
+    new THREE.BoxGeometry(3.25, 0.035, 4.05),
     new THREE.MeshStandardMaterial({map: matTexture, color: 0x24231f, roughness: 0.94, metalness: 0.03, bumpMap: matTexture, bumpScale: 0.035})
   );
   mat.position.set(0, DESK_SURFACE_Y + 0.006, 0.06);
@@ -541,12 +644,19 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   const wallMaterial = new THREE.MeshStandardMaterial({color: 0x111319, roughness: 0.92});
   const floorTexture = createWoodTexture(THREE, 0x5d3f27, 0x2c1b14);
   const floorMaterial = new THREE.MeshStandardMaterial({map: floorTexture, roughness: 0.82, metalness: 0.02});
+  const ceilingMaterial = new THREE.MeshStandardMaterial({color: 0x080a0f, roughness: 0.9});
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 10), floorMaterial);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.width, ROOM.depth), floorMaterial);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(0, -0.31, -2.4);
+  floor.position.set(0, ROOM.floorY, -0.05);
   floor.receiveShadow = true;
   group.add(floor);
+
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.width, ROOM.depth), ceilingMaterial);
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.set(0, ROOM.height, -0.05);
+  ceiling.receiveShadow = true;
+  group.add(ceiling);
 
   const sideGlassMaterial = new THREE.MeshStandardMaterial({
     color: 0x111a24,
@@ -558,14 +668,14 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
     opacity: 0.78
   });
 
-  const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 5.2), sideGlassMaterial.clone());
-  sideWall.position.set(-5.3, 2.55, -1.6);
+  const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.depth, ROOM.height - 0.6), sideGlassMaterial.clone());
+  sideWall.position.set(ROOM.leftWindowX, ROOM.height / 2, -0.05);
   sideWall.rotation.y = Math.PI / 2;
   sideWall.receiveShadow = true;
   group.add(sideWall);
 
-  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 5.35), wallMaterial);
-  rightWall.position.set(5.75, 2.55, -1.55);
+  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.depth, ROOM.height), wallMaterial);
+  rightWall.position.set(ROOM.rightWallX, ROOM.height / 2, -0.05);
   rightWall.rotation.y = -Math.PI / 2;
   rightWall.receiveShadow = true;
   group.add(rightWall);
@@ -574,12 +684,12 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
     new THREE.PlaneGeometry(2.6, 2.1),
     new THREE.MeshBasicMaterial({color: 0x5e2384, transparent: true, opacity: 0.08})
   );
-  rightWallGlow.position.set(5.73, 2.62, -2.2);
+  rightWallGlow.position.set(ROOM.rightWallX - 0.02, 2.62, -2.2);
   rightWallGlow.rotation.y = -Math.PI / 2;
   group.add(rightWallGlow);
 
   const glass = new THREE.Mesh(
-    new THREE.PlaneGeometry(9.9, 4.7),
+    new THREE.PlaneGeometry(ROOM.width, ROOM.height - 0.6),
     new THREE.MeshStandardMaterial({
       color: 0x1a2a34,
       emissive: 0x0b1c2e,
@@ -590,7 +700,7 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
       opacity: 0.72
     })
   );
-  glass.position.set(0, 3.25, -4.31);
+  glass.position.set(0, ROOM.height / 2, ROOM.backWindowZ);
   group.add(glass);
 
   group.add(createCityView(THREE, "back"));
@@ -607,16 +717,16 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
 
   const frameMaterial = new THREE.MeshStandardMaterial({color: 0x242a2e, roughness: 0.44, metalness: 0.22});
   for (const [x, y, width, height] of [
-    [0, 5.58, 10.15, 0.16],
-    [0, 0.92, 10.15, 0.16],
-    [-5.05, 3.25, 0.16, 4.82],
-    [5.05, 3.25, 0.16, 4.82],
-    [0, 3.25, 0.11, 4.7],
-    [-2.5, 3.25, 0.075, 4.6],
-    [2.5, 3.25, 0.075, 4.6]
+    [0, ROOM.height - 0.1, ROOM.width, 0.16],
+    [0, 0.92, ROOM.width, 0.16],
+    [-ROOM.width / 2, ROOM.height / 2, 0.16, ROOM.height - 0.75],
+    [ROOM.width / 2, ROOM.height / 2, 0.16, ROOM.height - 0.75],
+    [0, ROOM.height / 2, 0.11, ROOM.height - 0.9],
+    [-2.65, ROOM.height / 2, 0.075, ROOM.height - 1],
+    [2.65, ROOM.height / 2, 0.075, ROOM.height - 1]
   ] as const) {
     const rail = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.1), frameMaterial);
-    rail.position.set(x, y, -4.04);
+    rail.position.set(x, y, ROOM.backWindowZ + 0.18);
     rail.castShadow = true;
     group.add(rail);
   }
@@ -624,13 +734,15 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   const sideFrameMaterial = new THREE.MeshStandardMaterial({color: 0x1a1d22, roughness: 0.45, metalness: 0.25});
   for (const side of [-1]) {
     for (const [z, y, width, height] of [
-      [-1.6, 5.02, 10.1, 0.11],
-      [-1.6, 0.92, 10.1, 0.11],
-      [-3.8, 2.98, 0.09, 4.18],
-      [0.62, 2.98, 0.09, 4.18]
+      [-0.05, ROOM.height - 0.1, ROOM.depth, 0.11],
+      [-0.05, 0.92, ROOM.depth, 0.11],
+      [-ROOM.depth / 2, ROOM.height / 2, 0.09, ROOM.height - 0.9],
+      [ROOM.depth / 2, ROOM.height / 2, 0.09, ROOM.height - 0.9],
+      [-1.65, ROOM.height / 2, 0.075, ROOM.height - 1],
+      [1.65, ROOM.height / 2, 0.075, ROOM.height - 1]
     ] as const) {
       const frame = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.08), sideFrameMaterial);
-      frame.position.set(side * 5.12, y, z);
+      frame.position.set(side * (ROOM.width / 2 - 0.08), y, z);
       frame.rotation.y = side === -1 ? Math.PI / 2 : -Math.PI / 2;
       group.add(frame);
     }
@@ -643,16 +755,21 @@ function createCityView(THREE: typeof import("three"), side: "back" | "left") {
   const group = new THREE.Group();
   const skylineMaterial = new THREE.MeshStandardMaterial({color: 0x172030, emissive: 0x101c31, emissiveIntensity: 0.72, roughness: 0.8});
   const rainMaterial = new THREE.MeshBasicMaterial({color: 0xa9d8ff, transparent: true, opacity: 0.35});
+  const buildingBaseY = 0.92;
+  const litWindowBaseY = 1;
+  const cityBackZ = ROOM.backWindowZ - 0.34;
+  const cityLeftX = ROOM.leftWindowX - 0.34;
 
   for (let index = 0; index < 28; index += 1) {
     const width = 0.18 + (index % 4) * 0.055;
     const height = 0.7 + ((index * 7) % 10) * 0.17;
-    const x = -4.45 + index * 0.34;
+    const x = -4.65 + index * 0.36;
+    const z = ROOM.backWindowZ - 0.2 + index * 0.18;
     const building =
       side === "back"
         ? new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.06), skylineMaterial)
         : new THREE.Mesh(new THREE.BoxGeometry(0.06, height, width), skylineMaterial);
-    building.position.set(side === "back" ? x : -5.02, 1.02 + height / 2, side === "back" ? -4.18 : -4.35 + index * 0.18);
+    building.position.set(side === "back" ? x : cityLeftX, buildingBaseY + height / 2, side === "back" ? cityBackZ : z);
     group.add(building);
 
     const windowRows = Math.max(2, Math.floor(height / 0.28));
@@ -662,7 +779,7 @@ function createCityView(THREE: typeof import("three"), side: "back" | "left") {
         continue;
       }
       const litWindow = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.46, 0.035), new THREE.MeshBasicMaterial({color: windowColor, transparent: true, opacity: 0.72}));
-      litWindow.position.set(side === "back" ? x : -4.97, 1.08 + row * 0.22, side === "back" ? -4.13 : -4.35 + index * 0.18);
+      litWindow.position.set(side === "back" ? x : cityLeftX + 0.04, litWindowBaseY + row * 0.22, side === "back" ? cityBackZ + 0.05 : z);
       if (side === "left") {
         litWindow.rotation.y = Math.PI / 2;
       }
@@ -672,7 +789,11 @@ function createCityView(THREE: typeof import("three"), side: "back" | "left") {
 
   for (let index = 0; index < 115; index += 1) {
     const rain = new THREE.Mesh(new THREE.PlaneGeometry(0.006, 0.34), rainMaterial);
-    rain.position.set(side === "back" ? -4.8 + Math.random() * 9.6 : -4.96, 1.05 + Math.random() * 4.15, side === "back" ? -4.08 : -4.3 + Math.random() * 4.6);
+    rain.position.set(
+      side === "back" ? -ROOM.width / 2 + Math.random() * ROOM.width : ROOM.leftWindowX - 0.12,
+      1.05 + Math.random() * 4.15,
+      side === "back" ? ROOM.backWindowZ - 0.08 : -ROOM.depth / 2 + Math.random() * ROOM.depth
+    );
     rain.rotation.z = -0.24;
     if (side === "left") {
       rain.rotation.y = Math.PI / 2;
@@ -687,23 +808,6 @@ function createDeskSupplies(THREE: typeof import("three")) {
   const group = new THREE.Group();
   group.position.y = DESK_SURFACE_Y;
 
-  const globe = createGlobe(THREE);
-  globe.position.set(-3.2, 0.03, -2.14);
-  group.add(globe);
-
-  const stickyShadow = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.02, 0.88), new THREE.MeshBasicMaterial({color: 0x000000, transparent: true, opacity: 0.18}));
-  stickyShadow.position.set(-3.2, 0.025, -0.55);
-  stickyShadow.rotation.y = -0.02;
-  group.add(stickyShadow);
-
-  for (let index = 0; index < 5; index += 1) {
-    const sticky = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.018, 0.82), new THREE.MeshStandardMaterial({color: 0xf4edaa, roughness: 0.86}));
-    sticky.position.set(-3.25 + index * 0.018, 0.055 + index * 0.008, -0.58 - index * 0.016);
-    sticky.rotation.y = -0.045 + index * 0.012;
-    sticky.castShadow = true;
-    group.add(sticky);
-  }
-
   const clockTexture = createClockTexture(THREE);
   const clock = createClock(THREE, clockTexture);
   clock.position.set(3.22, 0.03, -2.05);
@@ -715,7 +819,88 @@ function createDeskSupplies(THREE: typeof import("three")) {
   coffee.group.rotation.y = -0.32;
   group.add(coffee.group);
 
-  return {group, steamGroup: coffee.steamGroup, clockTexture};
+  return {group, steamGroup: coffee.steamGroup, clockTexture, clock, coffeeGroup: coffee.group};
+}
+
+function createDeskLaptop(THREE: typeof import("three")) {
+  const group = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({color: 0x9aa8af, roughness: 0.42, metalness: 0.36});
+  const dark = new THREE.MeshStandardMaterial({color: 0x101820, roughness: 0.5, metalness: 0.16});
+  const keyboard = new THREE.MeshStandardMaterial({color: 0x0b1015, roughness: 0.68, metalness: 0.08});
+
+  const base = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.08, 1.76), shell);
+  base.position.y = 0.03;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  const screen = new THREE.Mesh(new THREE.BoxGeometry(2.92, 1.62, 0.08), dark);
+  screen.position.set(0, 0.88, -0.72);
+  screen.rotation.x = 0.12;
+  screen.castShadow = true;
+  group.add(screen);
+
+  const display = new THREE.Mesh(new THREE.PlaneGeometry(2.48, 1.28), new THREE.MeshBasicMaterial({color: 0x1a2a35}));
+  display.position.set(0, 0.88, -0.67);
+  display.rotation.x = 0.12;
+  group.add(display);
+
+  const trackpad = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.012, 0.42), new THREE.MeshStandardMaterial({color: 0x5d6d77, roughness: 0.5, metalness: 0.2}));
+  trackpad.position.set(0, 0.09, 0.42);
+  group.add(trackpad);
+
+  for (let row = 0; row < 4; row += 1) {
+    for (let col = 0; col < 14; col += 1) {
+      const key = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.02, 0.065), keyboard);
+      key.position.set(-0.8 + col * 0.123, 0.1, -0.06 - row * 0.092);
+      group.add(key);
+    }
+  }
+
+  group.name = "desk-laptop";
+  group.position.set(-3.32, DESK_SURFACE_Y + 0.06, -0.92);
+  group.rotation.set(0, 0.56, 0);
+  group.scale.setScalar(1.08);
+  return group;
+}
+
+function createLaptopLofiEmbed(CSS3DObject: typeof import("three/examples/jsm/renderers/CSS3DRenderer.js").CSS3DObject, origin: string) {
+  const screen = document.createElement("div");
+  screen.style.width = "1068px";
+  screen.style.height = "600px";
+  screen.style.overflow = "hidden";
+  screen.style.borderRadius = "14px";
+  screen.style.background = "#071018";
+  screen.style.boxShadow = "inset 0 0 36px rgba(35, 220, 255, 0.16)";
+
+  const iframe = document.createElement("iframe");
+  iframe.src = `${LOFI_GIRL_EMBED_URL}&origin=${encodeURIComponent(origin)}`;
+  iframe.title = "Lo-Fi Girl livestream";
+  iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+  iframe.allowFullscreen = true;
+  iframe.referrerPolicy = "strict-origin-when-cross-origin";
+  iframe.style.width = "100%";
+  iframe.style.height = "100%";
+  iframe.style.border = "0";
+  iframe.style.display = "block";
+  screen.append(iframe);
+
+  const object = new CSS3DObject(screen);
+  object.name = "laptop-lofi-girl-embed";
+  object.position.set(0, 0.88, -0.668);
+  object.rotation.x = 0.12;
+  object.scale.setScalar(0.0025);
+  return {object, iframe};
+}
+
+function formatSceneTransform(name: SceneTunableName, object: Object3D) {
+  const position = [object.position.x, object.position.y, object.position.z].map((value) => value.toFixed(3)).join(", ");
+  const rotation = [object.rotation.x, object.rotation.y, object.rotation.z].map((value) => value.toFixed(3)).join(", ");
+  const scale = [object.scale.x, object.scale.y, object.scale.z].map((value) => value.toFixed(3)).join(", ");
+  return `${name}
+position.set(${position})
+rotation.set(${rotation})
+scale.set(${scale})`;
 }
 
 function createLeatherTexture(THREE: typeof import("three")) {
@@ -1065,13 +1250,33 @@ function createMugMark(THREE: typeof import("three")) {
   const context = canvas.getContext("2d");
   if (context) {
     context.clearRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "rgba(127,255,230,0.92)";
-    context.font = "700 76px Georgia, serif";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
+    const gradient = context.createLinearGradient(80, 28, 176, 132);
+    gradient.addColorStop(0, "#8cffd7");
+    gradient.addColorStop(0.45, "#fff7a6");
+    gradient.addColorStop(1, "#ff72cf");
+    context.fillStyle = gradient;
+    context.strokeStyle = "rgba(127,255,230,0.92)";
+    context.lineWidth = 7;
     context.shadowColor = "rgba(127,255,230,0.8)";
     context.shadowBlur = 14;
-    context.fillText("π", canvas.width / 2, canvas.height / 2 + 4);
+    context.beginPath();
+    context.ellipse(canvas.width / 2, canvas.height / 2 + 4, 33, 48, 0, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+    context.shadowBlur = 0;
+    context.strokeStyle = "rgba(12,18,20,0.72)";
+    context.lineWidth = 6;
+    context.beginPath();
+    context.moveTo(104, 78);
+    context.quadraticCurveTo(128, 60, 152, 78);
+    context.moveTo(101, 99);
+    context.quadraticCurveTo(128, 116, 155, 99);
+    context.stroke();
+    context.fillStyle = "rgba(12,18,20,0.86)";
+    context.font = "700 28px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("egg", canvas.width / 2, canvas.height / 2 + 2);
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
