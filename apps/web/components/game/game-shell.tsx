@@ -854,36 +854,37 @@ function createCityView(THREE: typeof import("three"), side: "back" | "left") {
 function createRightWallMap(THREE: typeof import("three")) {
   const group = new THREE.Group();
   const texture = createWorldMapTexture(THREE, null);
-  const frameMaterial = new THREE.MeshStandardMaterial({color: 0x1d2025, roughness: 0.55, metalness: 0.18});
-  const mapMaterial = new THREE.MeshStandardMaterial({map: texture, color: 0xffffff, roughness: 0.72, metalness: 0.02});
+  const frameMaterial = new THREE.MeshStandardMaterial({color: 0x11161f, roughness: 0.58, metalness: 0.2});
+  const mapMaterial = new THREE.MeshBasicMaterial({map: texture, color: 0xffffff, side: THREE.DoubleSide});
 
-  const backing = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.72, 3.16), frameMaterial);
+  // The group is mounted on the right wall; child XY coordinates are the map face.
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(3.16, 1.72, 0.08), frameMaterial);
+  backing.position.z = -0.035;
   backing.castShadow = true;
   backing.receiveShadow = true;
   group.add(backing);
 
   const map = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.42), mapMaterial);
-  map.position.x = -0.046;
-  map.rotation.y = -Math.PI / 2;
+  map.position.z = 0.018;
   group.add(map);
 
   const dart = new THREE.Group();
   const red = new THREE.MeshStandardMaterial({color: 0xf04444, emissive: 0x5f0808, emissiveIntensity: 0.45, roughness: 0.38, metalness: 0.08});
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.38, 12), red);
-  shaft.rotation.z = Math.PI / 2;
-  shaft.position.x = -0.22;
+  shaft.rotation.x = Math.PI / 2;
+  shaft.position.z = 0.17;
   shaft.castShadow = true;
   dart.add(shaft);
   const head = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 16), red);
-  head.rotation.z = Math.PI / 2;
-  head.position.x = -0.02;
+  head.rotation.x = Math.PI / 2;
+  head.position.z = 0.38;
   head.castShadow = true;
   dart.add(head);
   dart.visible = false;
   group.add(dart);
 
   group.name = "visitor-world-map";
-  group.position.set(ROOM.rightWallX - 0.045, 3.12, -1.65);
+  group.position.set(ROOM.rightWallX - 0.1, 3.08, -1.65);
   group.rotation.y = -Math.PI / 2;
   return {group, texture, dart};
 }
@@ -913,7 +914,7 @@ function positionMapDart(dart: Object3D, location: VisitorLocation | null) {
     return;
   }
   const {x, y} = projectLocationToMap(location.latitude, location.longitude);
-  dart.position.set(-0.14, y * 1.42, x * 2.9);
+  dart.position.set(x * 2.9, y * 1.42, 0.12);
   dart.visible = true;
 }
 
