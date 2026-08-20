@@ -178,7 +178,6 @@ function AccountMenu({
                 autoComplete="username"
                 className="rounded border border-zinc-800 bg-[#101621] px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
                 name="username"
-                placeholder="username"
                 required
                 type="text"
               />

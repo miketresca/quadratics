@@ -1,5 +1,5 @@
 const invalidQuadraticMessage = "This is not a valid quadratic equation.";
-const signedOutMessage = "Sign in to run equations.";
+const signedOutMessage = "Log in to run equations.";
 
 // Keeps auth failures from being presented as math validation failures.
 export function equationSubmitErrorMessage(message: string) {
