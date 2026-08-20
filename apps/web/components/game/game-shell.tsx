@@ -14,8 +14,8 @@ type LessonChoice = {
   box: {x: number; y: number; width: number; height: number};
 };
 
-const PAPER_WIDTH = 4.5;
-const PAPER_HEIGHT = 6.15;
+const PAPER_WIDTH = 4.25;
+const PAPER_HEIGHT = 5.8;
 const WORKSHEET_CANVAS_WIDTH = 1200;
 const WORKSHEET_CANVAS_HEIGHT = 1600;
 const LESSON_CHOICES: LessonChoice[] = [
@@ -52,8 +52,8 @@ export function GameShell() {
     let paperTexture: Texture | null = null;
     let penGroup: Group | null = null;
     let hoveredChoiceId: GameLessonId | null = null;
-    const pointerTarget = {x: 0.68, z: -0.62};
-    const cameraTarget = {x: 0, y: 5.65, z: 6.7};
+    const pointerTarget = {x: 0.9, z: 0.65};
+    const cameraTarget = {x: 0, y: 7.55, z: 4.9};
     const cleanupCallbacks: Array<() => void> = [];
 
     async function setupScene() {
@@ -70,9 +70,9 @@ export function GameShell() {
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0xf0c27b);
 
-      camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.1, 80);
-      camera.position.set(0, 5.65, 6.7);
-      camera.lookAt(0, 0.05, -0.4);
+      camera = new THREE.PerspectiveCamera(36, 16 / 9, 0.1, 80);
+      camera.position.set(0, 7.55, 4.9);
+      camera.lookAt(0, 0.05, -0.55);
 
       try {
         renderer = new THREE.WebGLRenderer({alpha: false, antialias: true});
@@ -84,16 +84,16 @@ export function GameShell() {
       renderer.domElement.className = "absolute inset-0 h-full w-full cursor-none";
       mount.append(renderer.domElement);
 
-      const hemiLight = new THREE.HemisphereLight(0xfff5e0, 0x7c4a23, 2.3);
+      const hemiLight = new THREE.HemisphereLight(0xfff5e0, 0x7c4a23, 1.45);
       scene.add(hemiLight);
 
-      const keyLight = new THREE.DirectionalLight(0xfff3cf, 4.6);
+      const keyLight = new THREE.DirectionalLight(0xfff3cf, 2.8);
       keyLight.position.set(-3.5, 7, 5.5);
       keyLight.castShadow = true;
       keyLight.shadow.mapSize.set(2048, 2048);
       scene.add(keyLight);
 
-      const fillLight = new THREE.DirectionalLight(0x94a3b8, 1.15);
+      const fillLight = new THREE.DirectionalLight(0x94a3b8, 0.85);
       fillLight.position.set(4, 3.5, -2);
       scene.add(fillLight);
 
@@ -117,8 +117,8 @@ export function GameShell() {
         const rect = renderer.domElement.getBoundingClientRect();
         pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        cameraTarget.x = pointer.x * 0.34;
-        cameraTarget.z = 6.7 + pointer.y * 0.16;
+        cameraTarget.x = pointer.x * 0.18;
+        cameraTarget.z = 4.9 + pointer.y * 0.08;
         raycaster.setFromCamera(pointer, camera);
         const [hit] = raycaster.intersectObject(paperMesh);
         if (!hit || !hit.uv) {
@@ -126,8 +126,8 @@ export function GameShell() {
           refreshPaperTexture(paperTexture, selectedLessonId, hoveredChoiceId);
           return;
         }
-        pointerTarget.x = hit.point.x + 0.42;
-        pointerTarget.z = hit.point.z + 0.32;
+        pointerTarget.x = hit.point.x + 0.58;
+        pointerTarget.z = hit.point.z + 0.54;
         const canvasX = hit.uv.x * WORKSHEET_CANVAS_WIDTH;
         const canvasY = (1 - hit.uv.y) * WORKSHEET_CANVAS_HEIGHT;
         const nextHover = choiceAtCanvasPoint(canvasX, canvasY)?.id ?? null;
@@ -191,11 +191,11 @@ export function GameShell() {
         camera.position.x += (cameraTarget.x - camera.position.x) * 0.045;
         camera.position.y += (cameraTarget.y - camera.position.y) * 0.045;
         camera.position.z += (cameraTarget.z - camera.position.z) * 0.045;
-        camera.lookAt(0, 0.05, -0.45);
+        camera.lookAt(0, 0.05, -0.55);
         if (penGroup) {
           penGroup.position.x += (pointerTarget.x - penGroup.position.x) * 0.18;
           penGroup.position.z += (pointerTarget.z - penGroup.position.z) * 0.18;
-          penGroup.rotation.z = -0.28 + (pointerTarget.x - 0.6) * 0.025;
+          penGroup.rotation.z = -0.44 + (pointerTarget.x - 0.6) * 0.022;
         }
         renderer.render(scene, camera);
         animationFrame = requestAnimationFrame(animate);
@@ -343,7 +343,7 @@ function createDeskSupplies(THREE: typeof import("three")) {
 function createPaper(THREE: typeof import("three"), paperTexture: Texture) {
   const paper = new THREE.Mesh(
     new THREE.PlaneGeometry(PAPER_WIDTH, PAPER_HEIGHT),
-    new THREE.MeshStandardMaterial({map: paperTexture, roughness: 0.78, metalness: 0})
+    new THREE.MeshBasicMaterial({map: paperTexture})
   );
   paper.rotation.x = -Math.PI / 2;
   paper.position.set(0, 0.01, -0.15);
@@ -353,8 +353,9 @@ function createPaper(THREE: typeof import("three"), paperTexture: Texture) {
 
 function createPenHand(THREE: typeof import("three")) {
   const group = new THREE.Group();
-  group.position.set(1.2, 0.28, 1.4);
-  group.rotation.set(-0.12, -0.42, -0.28);
+  group.position.set(1.25, 0.24, 1.05);
+  group.rotation.set(-0.08, -0.34, -0.44);
+  group.scale.setScalar(0.78);
 
   const skin = new THREE.MeshStandardMaterial({color: 0xf3b27d, roughness: 0.64});
   const shadowSkin = new THREE.MeshStandardMaterial({color: 0xdf9464, roughness: 0.7});
@@ -362,55 +363,67 @@ function createPenHand(THREE: typeof import("three")) {
   const penWhite = new THREE.MeshStandardMaterial({color: 0xf8fafc, roughness: 0.3});
   const penTip = new THREE.MeshStandardMaterial({color: 0x334155, roughness: 0.4, metalness: 0.15});
 
-  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.36, 24, 18), skin);
-  palm.scale.set(1.1, 0.55, 0.78);
-  palm.position.set(0.2, 0.22, 0.1);
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 18), skin);
+  palm.scale.set(1.0, 0.42, 0.7);
+  palm.position.set(0.2, 0.2, 0.08);
   palm.castShadow = true;
   group.add(palm);
 
-  const wrist = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 1.2, 12, 24), skin);
-  wrist.position.set(0.88, 0.16, 0.42);
-  wrist.rotation.z = Math.PI / 2.9;
+  const wrist = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 1.28, 12, 24), skin);
+  wrist.position.set(0.86, 0.13, 0.45);
+  wrist.rotation.z = Math.PI / 2.75;
   wrist.castShadow = true;
   group.add(wrist);
 
   for (let index = 0; index < 4; index += 1) {
-    const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.42 - index * 0.025, 8, 16), index === 0 ? shadowSkin : skin);
-    finger.position.set(-0.08 - index * 0.08, 0.08, -0.07 + index * 0.05);
-    finger.rotation.set(0.88, 0.35, -0.45);
+    const finger = new THREE.Mesh(new THREE.CapsuleGeometry(0.042, 0.36 - index * 0.018, 8, 16), index === 0 ? shadowSkin : skin);
+    finger.position.set(-0.02 - index * 0.07, 0.085, -0.09 + index * 0.052);
+    finger.rotation.set(0.95, 0.22, -0.62);
     finger.castShadow = true;
     group.add(finger);
+
+    const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.052, 12, 10), skin);
+    knuckle.position.set(0.08 - index * 0.07, 0.105, -0.03 + index * 0.047);
+    knuckle.scale.set(1, 0.65, 0.9);
+    knuckle.castShadow = true;
+    group.add(knuckle);
   }
 
-  const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.42, 8, 16), shadowSkin);
-  thumb.position.set(0.06, 0.1, -0.28);
-  thumb.rotation.set(0.5, -0.35, 0.68);
+  const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.058, 0.45, 8, 16), shadowSkin);
+  thumb.position.set(0.08, 0.1, -0.26);
+  thumb.rotation.set(0.48, -0.34, 0.74);
   thumb.castShadow = true;
   group.add(thumb);
 
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 1.18, 18), penWhite);
-  barrel.position.set(-0.22, 0.06, -0.28);
-  barrel.rotation.set(Math.PI / 2, 0, -0.77);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.45, 18), penWhite);
+  barrel.position.set(-0.22, 0.055, -0.26);
+  barrel.rotation.set(Math.PI / 2, 0, -0.8);
   barrel.castShadow = true;
   group.add(barrel);
 
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.32, 18), penBlue);
-  grip.position.set(-0.68, 0.035, -0.58);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.38, 18), penBlue);
+  grip.position.set(-0.78, 0.03, -0.62);
   grip.rotation.copy(barrel.rotation);
   grip.castShadow = true;
   group.add(grip);
 
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.25, 18), penTip);
-  tip.position.set(-0.86, 0.02, -0.72);
-  tip.rotation.set(Math.PI / 2, 0, -0.77);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.25, 18), penTip);
+  tip.position.set(-1, 0.018, -0.76);
+  tip.rotation.copy(barrel.rotation);
   tip.castShadow = true;
   group.add(tip);
 
-  const clicker = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.28, 18), penBlue);
-  clicker.position.set(0.2, 0.09, 0.03);
+  const clicker = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 18), penBlue);
+  clicker.position.set(0.32, 0.085, 0.06);
   clicker.rotation.copy(barrel.rotation);
   clicker.castShadow = true;
   group.add(clicker);
+
+  const endCap = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 10), penTip);
+  endCap.position.set(0.5, 0.092, 0.18);
+  endCap.scale.set(1, 0.7, 1);
+  endCap.castShadow = true;
+  group.add(endCap);
 
   return group;
 }
@@ -500,7 +513,6 @@ function drawWorksheet(canvas: HTMLCanvasElement, checkedLessonId: GameLessonId 
   context.fillStyle = "#9a8973";
   context.font = "28px ui-rounded, system-ui, sans-serif";
   context.fillText("Notes", 118, 892);
-  context.fillText("Future Sprint: handwriting will follow narration timestamps here.", 118, 1432);
 }
 
 function roundRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
