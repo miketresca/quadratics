@@ -61,7 +61,6 @@ try {
     throw new Error(`Motion Canvas did not create PNG frames. ${renderInputSummary(renderInput)}`);
   }
   const narrationAudioPath = await prepareNarrationAudio(renderInput, tempDir);
-  const chalkAudioPath = await prepareChalkSfxAudio(renderInput, tempDir);
   const avatarVideoPaths = await prepareAvatarVideos(renderInput, tempDir);
   const encodedVideoPath = avatarVideoPaths.length > 0 ? resolve(tempDir, "base-video.mp4") : outputPath;
   const ffmpegArgs = [
@@ -71,14 +70,8 @@ try {
     "-i",
     frameExport.pattern
   ];
-  const audioInputs = [];
   if (narrationAudioPath) {
     ffmpegArgs.push("-i", narrationAudioPath);
-    audioInputs.push({kind: "narration", index: audioInputs.length + 1});
-  }
-  if (chalkAudioPath) {
-    ffmpegArgs.push("-i", chalkAudioPath);
-    audioInputs.push({kind: "chalk", index: audioInputs.length + 1});
   }
   ffmpegArgs.push(
     "-c:v",
@@ -88,23 +81,8 @@ try {
     "-threads",
     String(Math.max(1, Math.min(4, cpus().length)))
   );
-  if (audioInputs.length === 1) {
-    ffmpegArgs.push("-map", "0:v", "-map", `${audioInputs[0].index}:a`, "-c:a", "aac", "-b:a", "160k", "-shortest");
-  } else if (audioInputs.length > 1) {
-    const mixInputs = audioInputs.map((input) => `[${input.index}:a]`).join("");
-    ffmpegArgs.push(
-      "-filter_complex",
-      `${mixInputs}amix=inputs=${audioInputs.length}:duration=longest:normalize=0[a]`,
-      "-map",
-      "0:v",
-      "-map",
-      "[a]",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "160k",
-      "-shortest"
-    );
+  if (narrationAudioPath) {
+    ffmpegArgs.push("-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "160k", "-shortest");
   }
   ffmpegArgs.push(encodedVideoPath);
   await run("ffmpeg", ffmpegArgs);
@@ -227,68 +205,6 @@ async function prepareNarrationAudio(renderInput, tempDir) {
     await run("ffmpeg", ["-y", "-f", "concat", "-safe", "0", "-i", concatListPath, combinedPath]);
   }
   return combinedPath;
-}
-
-async function prepareChalkSfxAudio(renderInput, tempDir) {
-  const cues = Array.isArray(renderInput?.timeline?.cues) ? renderInput.timeline.cues : [];
-  const windows = cues
-    .map((cue) => cue?.sfx)
-    .filter((sfx) => sfx?.type === "chalk_write" && Number.isFinite(sfx.startSeconds) && Number.isFinite(sfx.endSeconds));
-  if (windows.length === 0) {
-    return null;
-  }
-  const durationSeconds = Math.max(
-    Number(renderInput?.timeline?.durationSeconds ?? 0),
-    ...windows.map((window) => Number(window.endSeconds))
-  );
-  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
-    return null;
-  }
-  const sampleRate = 44100;
-  const samples = Math.ceil(durationSeconds * sampleRate);
-  const data = Buffer.alloc(samples * 2);
-  for (const window of windows) {
-    const start = Math.max(0, Math.floor(Number(window.startSeconds) * sampleRate));
-    const end = Math.min(samples, Math.ceil(Number(window.endSeconds) * sampleRate));
-    for (let index = start; index < end; index += 1) {
-      const local = (index - start) / Math.max(1, end - start);
-      const envelope = Math.sin(Math.PI * local) * 0.42;
-      const scratch = seededNoise(index) * 0.7 + Math.sin(index * 0.19) * 0.2 + Math.sin(index * 0.047) * 0.1;
-      const current = data.readInt16LE(index * 2);
-      const next = clampInt16(current + scratch * envelope * 32767);
-      data.writeInt16LE(next, index * 2);
-    }
-  }
-  const wavPath = resolve(tempDir, "chalk-sfx.wav");
-  await writeFile(wavPath, wavBuffer(data, sampleRate));
-  return wavPath;
-}
-
-function wavBuffer(pcmData, sampleRate) {
-  const header = Buffer.alloc(44);
-  header.write("RIFF", 0);
-  header.writeUInt32LE(36 + pcmData.length, 4);
-  header.write("WAVE", 8);
-  header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write("data", 36);
-  header.writeUInt32LE(pcmData.length, 40);
-  return Buffer.concat([header, pcmData]);
-}
-
-function seededNoise(seed) {
-  const value = Math.sin(seed * 12.9898) * 43758.5453;
-  return (value - Math.floor(value)) * 2 - 1;
-}
-
-function clampInt16(value) {
-  return Math.max(-32768, Math.min(32767, Math.round(value)));
 }
 
 function virtualTimeBudgetForRender(renderInput) {

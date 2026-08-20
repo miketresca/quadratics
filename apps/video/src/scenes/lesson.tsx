@@ -4,7 +4,6 @@ import {all, createRef, waitFor} from "@motion-canvas/core";
 import {showVisualAction} from "../actions/highlight";
 import {assertSupportedCue, durationForCue, isRenderableAction, overlayActionFor} from "../actions/dispatcher";
 import {writeMath} from "../actions/writeMath";
-import {chalkSfxTracksForTimeline} from "../audio/chalkEffects";
 import {captionGroupsForNarration, captionWordSlots} from "../captions/captions";
 import {renderCaptionTrack} from "../captions/renderCaptionTrack";
 import {Blackboard} from "../components/Blackboard";
@@ -23,7 +22,6 @@ export default makeScene2D(function* (view) {
   const lineRefs = lines.map(() => createRef<Txt>());
   const highlightRefs = lines.map(() => createRef<Rect>());
   const lineIndexById = new Map(lines.map((line, index) => [line.id, index]));
-  const chalkSfxTracks = chalkSfxTracksForTimeline(input.timeline);
   const captionContainerRef = createRef<Rect>();
   const captionWordRefs = Array.from({length: captionWordSlots}, () => createRef<Txt>());
   const captionGroups = captionGroupsForNarration(input.narration);
@@ -91,7 +89,6 @@ export default makeScene2D(function* (view) {
         playhead = Math.max(playhead + wait + duration, cue.animation.endSeconds);
       }
 
-      console.info(`Prepared ${chalkSfxTracks.length} chalk SFX cue(s).`);
       yield* waitFor(Math.max(0, input.timeline.durationSeconds - playhead));
     })(),
     renderCaptionTrack(
