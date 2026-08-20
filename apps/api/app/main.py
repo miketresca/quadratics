@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     equations,
+    game_progress,
     generations,
     health,
     instructors,
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(provider_keys.router, prefix="/api/v1")
     app.include_router(instructors.router, prefix="/api/v1")
     app.include_router(usage_costs.router, prefix="/api/v1")
+    app.include_router(game_progress.router, prefix="/api/v1")
     app.include_router(generations.router, prefix="/api/v1")
     app.include_router(equations.router, prefix="/api/v1")
     return app

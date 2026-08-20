@@ -3,6 +3,7 @@ export * from "./animation";
 export * from "./artifact";
 export * from "./costs";
 export * from "./generation";
+export * from "./game";
 export * from "./instructor";
 export * from "./lesson";
 export * from "./lesson-context";
