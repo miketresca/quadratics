@@ -1,40 +1,52 @@
 "use client";
 
 import type {CurrentUser, GameFighterId, GameLessonId, GameProgress} from "@quadratics/types";
-import type {CSSProperties, Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction} from "react";
+import type {Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction} from "react";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import type {Group, Material, Object3D, PerspectiveCamera, Scene, WebGLRenderer} from "three";
 import type {OrbitControls as OrbitControlsType} from "three/examples/jsm/controls/OrbitControls.js";
 
-import {GAME_AUDIO_CUES, GAME_FIGHTERS, getAsset, getFighter, type GameAudioCueId, type GameFighter} from "@/lib/game/assets";
+import {GAME_AUDIO_CUES, GAME_FIGHTERS, getFighter, type GameAudioCueId, type GameFighter} from "@/lib/game/assets";
 import {GAME_LESSONS, getGameLesson, type GameLesson} from "@/lib/game/lessons";
 import {getGameProgress, resetGameProgress, updateGameProgress} from "@/lib/game/progress-client";
 import {createClient} from "@/lib/supabase/client";
 
 type GameMode = "select" | "arena" | "lesson";
 type Prompt = "login" | "locked" | "save-failed" | "reset-confirm" | null;
-type PlayerState = {x: number; y: number; vy: number; grounded: boolean; facing: 1 | -1};
+type PlayerState = {x: number; y: number; vy: number; grounded: boolean; facing: 1 | -1; moving: boolean};
 
 const ARENA_WIDTH = 960;
 const ARENA_HEIGHT = 540;
 const GROUND_Y = 388;
 const PLAYER_WIDTH = 76;
 const PLAYER_HEIGHT = 92;
+const PLAYER_MIN_X = 70;
+const PLAYER_MAX_X = ARENA_WIDTH - 70 - PLAYER_WIDTH;
 const SPEED = 5.6;
 const GRAVITY = 0.72;
 const JUMP_VELOCITY = -14;
-const PLATFORM_TOP_Y = -0.95;
-const PLAYER_MODEL_BASE_Y = PLATFORM_TOP_Y + 0.7;
-const ORB_MODEL_Y = PLATFORM_TOP_Y + 2.3;
+const PLATFORM_TOP_Y = -1.7;
+const ARENA_FIGHTER_HEIGHT = 1.8;
+const CARD_FIGHTER_HEIGHT = 2.25;
+const ORB_MODEL_Y = PLATFORM_TOP_Y + 3.65;
+const GAME_SESSION_KEY = "quadratics-game-session";
 const ORBS = [
   {lessonId: "volume-cubes-lesson-1" as const, x: 360, y: 150},
   {lessonId: "dynamic-lesson-locked" as const, x: 600, y: 150}
 ];
 
-export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
-  const [mode, setMode] = useState<GameMode>("select");
+export function GameShell({
+  initialFighterId,
+  initialMode,
+  initialUser
+}: {
+  initialFighterId?: GameFighterId | null;
+  initialMode?: GameMode;
+  initialUser: CurrentUser | null;
+}) {
+  const [mode, setMode] = useState<GameMode>(initialMode ?? "select");
   const [prompt, setPrompt] = useState<Prompt>(null);
-  const [selectedFighterId, setSelectedFighterId] = useState<GameFighterId | null>("captain-falcon");
+  const [selectedFighterId, setSelectedFighterId] = useState<GameFighterId | null>(initialFighterId ?? "captain-falcon");
   const [focusedFighterIndex, setFocusedFighterIndex] = useState(0);
   const [activeLessonId, setActiveLessonId] = useState<GameLessonId>("volume-cubes-lesson-1");
   const [progress, setProgress] = useState<GameProgress>({selectedFighterId: null, lessons: []});
@@ -42,12 +54,12 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
   const [progressBusy, setProgressBusy] = useState(false);
   const [startBusy, setStartBusy] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
-  const [player, setPlayer] = useState<PlayerState>({x: 448, y: GROUND_Y, vy: 0, grounded: true, facing: 1});
+  const [player, setPlayer] = useState<PlayerState>({x: 448, y: GROUND_Y, vy: 0, grounded: true, facing: 1, moving: false});
   const [pdfReady, setPdfReady] = useState(false);
   const keysRef = useRef(new Set<string>());
   const frameRef = useRef<number | null>(null);
   const collisionLessonRef = useRef<GameLessonId | null>(null);
-  const playerRef = useRef<PlayerState>({x: 448, y: GROUND_Y, vy: 0, grounded: true, facing: 1});
+  const playerRef = useRef<PlayerState>({x: 448, y: GROUND_Y, vy: 0, grounded: true, facing: 1, moving: false});
   const progressRequestRef = useRef(0);
   const startBusyRef = useRef(false);
   const promptCloseRef = useRef<HTMLButtonElement | null>(null);
@@ -55,6 +67,23 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
   const signedIn = initialUser !== null;
   const selectedFighter = getFighter(selectedFighterId);
   const activeLesson = getGameLesson(activeLessonId);
+
+  useEffect(() => {
+    if (initialMode) {
+      return;
+    }
+    const stored = readGameSession();
+    if (!stored) {
+      return;
+    }
+    setMode(stored.mode);
+    setSelectedFighterId(stored.selectedFighterId);
+    setFocusedFighterIndex(Math.max(0, GAME_FIGHTERS.findIndex((fighter) => fighter.id === stored.selectedFighterId)));
+  }, [initialMode]);
+
+  useEffect(() => {
+    writeGameSession({mode, selectedFighterId: selectedFighter.id});
+  }, [mode, selectedFighter.id]);
 
   useEffect(() => {
     if (!signedIn) {
@@ -161,13 +190,16 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
       let nextX = current.x;
       let nextVy = current.vy;
       let facing = current.facing;
+      let moving = false;
       if (keys.has("arrowleft") || keys.has("a")) {
         nextX -= SPEED;
         facing = -1;
+        moving = true;
       }
       if (keys.has("arrowright") || keys.has("d")) {
         nextX += SPEED;
         facing = 1;
+        moving = true;
       }
       if ((keys.has(" ") || keys.has("arrowup") || keys.has("w")) && current.grounded) {
         nextVy = JUMP_VELOCITY;
@@ -176,9 +208,9 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
       const nextY = current.y + nextVy;
       nextVy += GRAVITY;
       const grounded = nextY >= GROUND_Y;
-      const boundedX = Math.max(130, Math.min(ARENA_WIDTH - 130 - PLAYER_WIDTH, nextX));
+      const boundedX = Math.max(PLAYER_MIN_X, Math.min(PLAYER_MAX_X, nextX));
       const resolvedY = grounded ? GROUND_Y : nextY;
-      const next = {x: boundedX, y: resolvedY, vy: grounded ? 0 : nextVy, grounded, facing};
+      const next = {x: boundedX, y: resolvedY, vy: grounded ? 0 : nextVy, grounded, facing, moving};
       playerRef.current = next;
       setPlayer(next);
       const hitOrb = ORBS.find((orb) => intersectsOrb(next, orb));
@@ -477,6 +509,7 @@ function CharacterSelect({
 
 function FighterModelPreview({fighter}: {fighter: GameFighter}) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -484,6 +517,7 @@ function FighterModelPreview({fighter}: {fighter: GameFighter}) {
     let scene: Scene | null = null;
     let camera: PerspectiveCamera | null = null;
     let model: Group | null = null;
+    let animationFrame: number | null = null;
 
     async function setupPreview() {
       const mount = mountRef.current;
@@ -500,9 +534,9 @@ function FighterModelPreview({fighter}: {fighter: GameFighter}) {
       }
 
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(28, 1.1, 0.1, 40);
-      camera.position.set(0, 0.45, 6.2);
-      camera.lookAt(0, 0.1, 0);
+      camera = new THREE.PerspectiveCamera(30, 1.1, 0.1, 40);
+      camera.position.set(0, 0.35, 6.8);
+      camera.lookAt(0, 0, 0);
 
       renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
       renderer.setClearColor(0x000000, 0);
@@ -511,10 +545,12 @@ function FighterModelPreview({fighter}: {fighter: GameFighter}) {
       renderer.domElement.className = "absolute inset-0 h-full w-full";
       mount.append(renderer.domElement);
 
-      const ambient = new THREE.AmbientLight(0xffffff, 2.4);
-      const key = new THREE.DirectionalLight(0xffffff, 2.7);
+      const ambient = new THREE.AmbientLight(0xffffff, 3);
+      const key = new THREE.DirectionalLight(0xffffff, 3.4);
       key.position.set(-2, 4, 5);
-      scene.add(ambient, key);
+      const fill = new THREE.DirectionalLight(0x93c5fd, 1.6);
+      fill.position.set(3, 1.5, 4);
+      scene.add(ambient, key, fill);
 
       model = await loadObjModel({
         directory: fighter.model.directory,
@@ -526,18 +562,31 @@ function FighterModelPreview({fighter}: {fighter: GameFighter}) {
       if (disposed || !scene || !model || !renderer || !camera) {
         return;
       }
-      removeModelHelpers(model);
-      normalizeObject(THREE, model, 2.1);
-      model.position.set(0, -0.15, 0);
-      model.rotation.y = fighter.model.rotationY + 0.12;
+      removeNonFighterMeshes(model, fighter.id);
+      normalizeObject(THREE, model, CARD_FIGHTER_HEIGHT);
+      alignObjectBottom(THREE, model, -1.08);
+      model.rotation.y = fighter.model.rotationY;
       scene.add(model);
-      renderer.render(scene, camera);
+      setLoaded(true);
+
+      const animate = () => {
+        if (!renderer || !scene || !camera || !model) {
+          return;
+        }
+        model.rotation.y += 0.0014;
+        renderer.render(scene, camera);
+        animationFrame = requestAnimationFrame(animate);
+      };
+      animate();
     }
 
     void setupPreview();
 
     return () => {
       disposed = true;
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
       if (renderer) {
         renderer.dispose();
         renderer.domElement.remove();
@@ -561,7 +610,11 @@ function FighterModelPreview({fighter}: {fighter: GameFighter}) {
 
   return (
     <div className="absolute inset-0" ref={mountRef}>
-      <SheetPortrait className="h-full w-full opacity-35" fighter={fighter} />
+      {!loaded ? (
+        <div className="grid h-full w-full place-items-center bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.12),rgba(0,0,0,0.8)_58%)] font-mono text-[10px] uppercase tracking-wide text-zinc-600">
+          loading model
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -579,6 +632,18 @@ function Arena({
   selectedFighter: GameFighter;
   setPlayer: Dispatch<SetStateAction<PlayerState>>;
 }) {
+  function nudgePlayer(direction: 1 | -1) {
+    setPlayer((current) => ({
+      ...current,
+      x: direction === -1 ? Math.max(PLAYER_MIN_X, current.x - 80) : Math.min(PLAYER_MAX_X, current.x + 80),
+      facing: direction,
+      moving: true
+    }));
+    window.setTimeout(() => {
+      setPlayer((current) => ({...current, moving: false}));
+    }, 180);
+  }
+
   return (
     <div className="p-4">
       <div className="relative mx-auto h-[min(74vh,820px)] min-h-[560px] overflow-hidden rounded border border-zinc-700 bg-black">
@@ -615,10 +680,10 @@ function Arena({
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => setPlayer((current) => ({...current, x: Math.max(130, current.x - 80), facing: -1}))} type="button">
+        <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => nudgePlayer(-1)} type="button">
           Left
         </button>
-        <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => setPlayer((current) => ({...current, x: Math.min(ARENA_WIDTH - 130 - PLAYER_WIDTH, current.x + 80), facing: 1}))} type="button">
+        <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => nudgePlayer(1)} type="button">
           Right
         </button>
         <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => setPlayer((current) => current.grounded ? {...current, vy: JUMP_VELOCITY, grounded: false} : current)} type="button">
@@ -670,9 +735,9 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       }
 
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.1, 160);
-      camera.position.set(0, 1.35, 10.4);
-      camera.lookAt(0, -0.35, 0);
+      camera = new THREE.PerspectiveCamera(31, 16 / 9, 0.1, 180);
+      camera.position.set(0, 3.2, 23.5);
+      camera.lookAt(0, 0.15, 0);
 
       renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
       renderer.setClearColor(0x000000, 0);
@@ -684,13 +749,13 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       controls.enableDamping = true;
       controls.enablePan = true;
       controls.enableRotate = false;
-      controls.minDistance = 8.2;
-      controls.maxDistance = 13.5;
+      controls.minDistance = 15;
+      controls.maxDistance = 28;
       controls.minPolarAngle = Math.PI * 0.2;
       controls.maxPolarAngle = Math.PI * 0.48;
       controls.minAzimuthAngle = -Math.PI * 0.16;
       controls.maxAzimuthAngle = Math.PI * 0.16;
-      controls.target.set(0, -0.35, 0);
+      controls.target.set(0, 0.15, 0);
 
       const ambient = new THREE.AmbientLight(0xffffff, 2.3);
       const key = new THREE.DirectionalLight(0xffffff, 2.6);
@@ -710,10 +775,10 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       if (disposed || !scene) {
         return;
       }
-      normalizeObject(THREE, platform, 8.4);
-      platform.scale.y *= 0.32;
-      platform.position.set(0, -1.62, 0);
-      platform.rotation.set(0.1, 0, 0);
+      normalizeObject(THREE, platform, 12.4);
+      platform.scale.y *= 0.16;
+      platform.rotation.set(0.08, 0, 0);
+      alignObjectTop(THREE, platform, PLATFORM_TOP_Y);
       scene.add(platform);
 
       unlockedOrb = await loadObjModel({
@@ -726,7 +791,7 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       if (disposed || !scene || !unlockedOrb) {
         return;
       }
-      normalizeObject(THREE, unlockedOrb, 0.5);
+      normalizeObject(THREE, unlockedOrb, 0.95);
       unlockedOrb.position.set(screenXToWorld(ORBS[0].x), ORB_MODEL_Y, 0.18);
       scene.add(unlockedOrb);
 
@@ -763,9 +828,10 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       if (disposed || !scene || !studentModel) {
         return;
       }
-      removeModelHelpers(studentModel);
-      normalizeObject(THREE, studentModel, selectedFighter.model.scale * 13);
-      studentModel.position.y = PLAYER_MODEL_BASE_Y + selectedFighter.model.yOffset * 0.15;
+      removeNonFighterMeshes(studentModel, selectedFighter.id);
+      normalizeObject(THREE, studentModel, ARENA_FIGHTER_HEIGHT);
+      studentModel.rotation.y = selectedFighter.model.rotationY;
+      alignObjectBottom(THREE, studentModel, PLATFORM_TOP_Y + 0.03);
       scene.add(studentModel);
 
       const resize = () => {
@@ -788,16 +854,8 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
         if (studentModel) {
           const current = playerStateRef.current;
           studentModel.position.x = screenXToWorld(current.x);
-          studentModel.position.y = PLAYER_MODEL_BASE_Y + selectedFighter.model.yOffset * 0.15 + ((GROUND_Y - current.y) / GROUND_Y) * 2.2;
-          studentModel.rotation.y = selectedFighter.model.rotationY + (current.facing === -1 ? Math.PI : 0);
-        }
-        if (unlockedOrb) {
-          unlockedOrb.rotation.y += 0.018;
-          unlockedOrb.rotation.z += 0.008;
-        }
-        if (lockedOrb) {
-          lockedOrb.rotation.y -= 0.014;
-          lockedOrb.rotation.z += 0.006;
+          alignObjectBottom(THREE, studentModel, PLATFORM_TOP_Y + 0.03 + ((GROUND_Y - current.y) / GROUND_Y) * 2.2);
+          studentModel.rotation.y = selectedFighter.model.rotationY + playerFacingRotation(current);
         }
         controls?.update();
         renderer.render(scene, camera);
@@ -878,6 +936,18 @@ function normalizeObject(THREE: typeof import("three"), object: Object3D, target
   object.position.sub(center.multiplyScalar(scale));
 }
 
+function alignObjectTop(THREE: typeof import("three"), object: Object3D, topY: number) {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  object.position.y += topY - box.max.y;
+}
+
+function alignObjectBottom(THREE: typeof import("three"), object: Object3D, bottomY: number) {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  object.position.y += bottomY - box.min.y;
+}
+
 function createSpaceBackdrop(THREE: typeof import("three")) {
   const group = new THREE.Group();
   const starVertices: number[] = [];
@@ -894,12 +964,36 @@ function createSpaceBackdrop(THREE: typeof import("three")) {
   return group;
 }
 
-function removeModelHelpers(model: Object3D) {
-  const helperNames = ["pipe", "fireball", "egg", "tounge", "tongue"];
+function removeNonFighterMeshes(model: Object3D, fighterId: GameFighterId) {
+  const helperNames = [
+    "batwin",
+    "barrel",
+    "bf_",
+    "bomb",
+    "boomerang",
+    "egg",
+    "fireball",
+    "hat_",
+    "hookshot",
+    "inhale",
+    "intro",
+    "light_",
+    "pkfire",
+    "pokeball",
+    "stone",
+    "teleport",
+    "tounge",
+    "tongue",
+    "yoyo"
+  ];
   const removable: Object3D[] = [];
   model.traverse((child) => {
     const name = child.name.toLowerCase();
-    if (helperNames.some((helperName) => name.includes(helperName))) {
+    if (
+      helperNames.some((helperName) => name.includes(helperName)) ||
+      fighterSpecificHelperNames(fighterId).some((helperName) => name.includes(helperName)) ||
+      !isBaseFighterMesh(name, fighterId)
+    ) {
       removable.push(child);
     }
   });
@@ -908,8 +1002,47 @@ function removeModelHelpers(model: Object3D) {
   }
 }
 
+function fighterSpecificHelperNames(fighterId: GameFighterId) {
+  const helpers: Partial<Record<GameFighterId, string[]>> = {
+    jigglypuff: ["4a8a0a50", "65988d95", "4ec2cd09", "4365faf5"],
+    kirby: ["775209d4"],
+    samus: ["72ec6bab", "34feeed9"]
+  };
+  return helpers[fighterId] ?? [];
+}
+
+function isBaseFighterMesh(name: string, fighterId: GameFighterId) {
+  if (!name) {
+    return true;
+  }
+  if (fighterId === "yoshi") {
+    return true;
+  }
+  const basePrefixes: Partial<Record<GameFighterId, string[]>> = {
+    "captain-falcon": ["arm", "body", "hand", "head", "leg"],
+    "donkey-kong": ["arm", "body", "hand", "head", "leg"],
+    fox: ["nemu"],
+    jigglypuff: ["nemu"],
+    kirby: ["nemu"],
+    link: ["arm", "body", "hand", "head", "leg", "shield", "sword"],
+    luigi: ["arm", "body", "hand", "head", "leg"],
+    mario: ["arm", "body", "hand", "head", "leg"],
+    ness: ["arm", "body", "hand", "head", "leg"],
+    pikachu: ["arm", "body", "head", "leg", "tail"],
+    samus: ["nemu"]
+  };
+  return (basePrefixes[fighterId] ?? []).some((prefix) => name.startsWith(prefix));
+}
+
 function screenXToWorld(x: number) {
-  return (x / ARENA_WIDTH - 0.5) * 7.4;
+  return (x / ARENA_WIDTH - 0.5) * 9.2;
+}
+
+function playerFacingRotation(player: PlayerState) {
+  if (!player.moving) {
+    return 0;
+  }
+  return player.facing === -1 ? -Math.PI / 2 : Math.PI / 2;
 }
 
 function supportsWebGl() {
@@ -918,32 +1051,6 @@ function supportsWebGl() {
   }
   const canvas = document.createElement("canvas");
   return Boolean(canvas.getContext("webgl") ?? canvas.getContext("experimental-webgl"));
-}
-
-function SheetPortrait({
-  className,
-  fighter,
-  style
-}: {
-  className?: string;
-  fighter: GameFighter;
-  style?: CSSProperties;
-}) {
-  const sheet = getAsset("character-select-screen");
-  const positionX = (fighter.portrait.x / (sheet.width - fighter.portrait.width)) * 100;
-  const positionY = (fighter.portrait.y / (sheet.height - fighter.portrait.height)) * 100;
-  return (
-    <div
-      aria-hidden="true"
-      className={`overflow-hidden bg-no-repeat [image-rendering:pixelated] ${className ?? ""}`}
-      style={{
-        backgroundImage: `url(${sheet.src})`,
-        backgroundPosition: `${positionX}% ${positionY}%`,
-        backgroundSize: `${(sheet.width / fighter.portrait.width) * 100}% ${(sheet.height / fighter.portrait.height) * 100}%`,
-        ...style
-      }}
-    />
-  );
 }
 
 function LessonPanel({
@@ -1134,4 +1241,33 @@ function playCue(audioRef: RefObject<Partial<Record<GameAudioCueId, HTMLAudioEle
   void element.play().catch(() => {
     // Browsers may block audio until a user gesture; gameplay continues without sound.
   });
+}
+
+function readGameSession() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.sessionStorage.getItem(GAME_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as {mode?: GameMode; selectedFighterId?: GameFighterId};
+    if (!parsed.mode || !["select", "arena", "lesson"].includes(parsed.mode)) {
+      return null;
+    }
+    return {
+      mode: parsed.mode,
+      selectedFighterId: getFighter(parsed.selectedFighterId).id
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeGameSession(session: {mode: GameMode; selectedFighterId: GameFighterId}) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(GAME_SESSION_KEY, JSON.stringify(session));
 }

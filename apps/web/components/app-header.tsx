@@ -14,12 +14,14 @@ export type BuildInfo = {
 export function AppHeader({
   buildInfo,
   loginError,
+  returnTo = "/",
   usageEvents,
   usageSummary,
   user
 }: {
   buildInfo: BuildInfo;
   loginError: string | null;
+  returnTo?: string;
   usageEvents: UsageEventItem[];
   usageSummary: UsageSummary | null;
   user: CurrentUser | null;
@@ -39,7 +41,7 @@ export function AppHeader({
         >
           <GithubIcon />
         </a>
-        <AccountMenu loginError={loginError} user={user} />
+        <AccountMenu loginError={loginError} returnTo={returnTo} user={user} />
       </div>
     </header>
   );
@@ -101,9 +103,11 @@ function BuildInfoIcon() {
 
 function AccountMenu({
   loginError,
+  returnTo,
   user
 }: {
   loginError: string | null;
+  returnTo: string;
   user: CurrentUser | null;
 }) {
   const label = accountLabel(user);
@@ -128,6 +132,7 @@ function AccountMenu({
           </form>
         ) : (
           <form action={signIn} className="grid gap-3 pt-3">
+            <input name="returnTo" type="hidden" value={returnTo} />
             <label className="grid gap-1.5">
               <span className="font-mono text-xs uppercase tracking-wide text-zinc-500">Username</span>
               <input

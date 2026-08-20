@@ -71,6 +71,7 @@ export default async function AppPage({
       <AppHeader
         buildInfo={buildInfo}
         loginError={loginError}
+        returnTo="/"
         usageEvents={usageEvents}
         usageSummary={usageSummary}
         user={user}
