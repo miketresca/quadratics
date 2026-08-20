@@ -105,7 +105,7 @@ describe("GameShell", () => {
     await act(async () => {
       start?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
-    const locked = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Check locked lesson"));
+    const locked = Array.from(container.querySelectorAll("button")).find((button) => button.getAttribute("aria-label")?.toLowerCase().includes(", locked"));
     await act(async () => {
       locked?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });

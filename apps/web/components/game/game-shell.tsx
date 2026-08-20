@@ -1,7 +1,7 @@
 "use client";
 
 import type {CurrentUser, GameFighterId, GameLessonId, GameProgress} from "@quadratics/types";
-import type {Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction} from "react";
+import type {KeyboardEvent as ReactKeyboardEvent, RefObject} from "react";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import type {Group, Material, Object3D, PerspectiveCamera, Scene, WebGLRenderer} from "three";
 import type {OrbitControls as OrbitControlsType} from "three/examples/jsm/controls/OrbitControls.js";
@@ -390,7 +390,6 @@ export function GameShell({
             onActivateLesson={activateLesson}
             player={player}
             selectedFighter={selectedFighter}
-            setPlayer={setPlayer}
           />
         ) : null}
 
@@ -538,7 +537,11 @@ function FighterModelPreview({fighter}: {fighter: GameFighter}) {
       camera.position.set(0, 0.35, 6.8);
       camera.lookAt(0, 0, 0);
 
-      renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+      try {
+        renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+      } catch {
+        return;
+      }
       renderer.setClearColor(0x000000, 0);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(mount.clientWidth, mount.clientHeight, false);
@@ -623,31 +626,19 @@ function Arena({
   completedLessonIds,
   onActivateLesson,
   player,
-  selectedFighter,
-  setPlayer
+  selectedFighter
 }: {
   completedLessonIds: Set<GameLessonId>;
   onActivateLesson: (lessonId: GameLessonId) => void;
   player: PlayerState;
   selectedFighter: GameFighter;
-  setPlayer: Dispatch<SetStateAction<PlayerState>>;
 }) {
-  function nudgePlayer(direction: 1 | -1) {
-    setPlayer((current) => ({
-      ...current,
-      x: direction === -1 ? Math.max(PLAYER_MIN_X, current.x - 80) : Math.min(PLAYER_MAX_X, current.x + 80),
-      facing: direction,
-      moving: true
-    }));
-    window.setTimeout(() => {
-      setPlayer((current) => ({...current, moving: false}));
-    }, 180);
-  }
+  const [zoomLevel, setZoomLevel] = useState(36);
 
   return (
     <div className="p-4">
       <div className="relative mx-auto h-[min(74vh,820px)] min-h-[560px] overflow-hidden rounded border border-zinc-700 bg-black">
-        <ThreeArenaScene player={player} selectedFighter={selectedFighter} />
+        <ThreeArenaScene onZoomChange={setZoomLevel} player={player} selectedFighter={selectedFighter} />
         {ORBS.map((orb) => {
           const lesson = getGameLesson(orb.lessonId);
           return (
@@ -678,34 +669,40 @@ function Arena({
         <div className="absolute bottom-3 left-4 rounded border border-zinc-700 bg-black/55 px-3 py-2 font-mono text-xs uppercase text-zinc-300">
           {selectedFighter.name} / WASD or arrows / Space jump
         </div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => nudgePlayer(-1)} type="button">
-          Left
-        </button>
-        <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => nudgePlayer(1)} type="button">
-          Right
-        </button>
-        <button className="rounded border border-zinc-700 px-3 py-2 text-sm text-zinc-200" onClick={() => setPlayer((current) => current.grounded ? {...current, vy: JUMP_VELOCITY, grounded: false} : current)} type="button">
-          Jump
-        </button>
-        {GAME_LESSONS.map((lesson) => (
-          <button className="rounded border border-emerald-400/40 px-3 py-2 text-sm text-emerald-200" key={lesson.id} onClick={() => onActivateLesson(lesson.id)} type="button">
-            {lesson.status === "locked" ? "Check locked lesson" : "Open lesson"}
-          </button>
-        ))}
+        <div className="absolute bottom-3 right-4 w-40 rounded border border-zinc-700 bg-black/55 px-3 py-2">
+          <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-wide text-zinc-400">
+            <span>Zoom</span>
+            <span>{zoomLevel}%</span>
+          </div>
+          <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+            <div className="h-full rounded-full bg-emerald-300 shadow-[0_0_10px_rgba(110,231,183,0.65)]" style={{width: `${zoomLevel}%`}} />
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; selectedFighter: GameFighter}) {
+function ThreeArenaScene({
+  onZoomChange,
+  player,
+  selectedFighter
+}: {
+  onZoomChange: (zoomLevel: number) => void;
+  player: PlayerState;
+  selectedFighter: GameFighter;
+}) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const playerStateRef = useRef(player);
+  const onZoomChangeRef = useRef(onZoomChange);
 
   useEffect(() => {
     playerStateRef.current = player;
   }, [player]);
+
+  useEffect(() => {
+    onZoomChangeRef.current = onZoomChange;
+  }, [onZoomChange]);
 
   useEffect(() => {
     let disposed = false;
@@ -739,7 +736,11 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       camera.position.set(0, 3.2, 23.5);
       camera.lookAt(0, 0.15, 0);
 
-      renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+      try {
+        renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+      } catch {
+        return;
+      }
       renderer.setClearColor(0x000000, 0);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.domElement.className = "absolute inset-0 h-full w-full";
@@ -858,6 +859,9 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
           studentModel.rotation.y = selectedFighter.model.rotationY + playerFacingRotation(current);
         }
         controls?.update();
+        if (controls) {
+          onZoomChangeRef.current(cameraDistanceToZoom(camera.position.distanceTo(controls.target), controls.minDistance, controls.maxDistance));
+        }
         renderer.render(scene, camera);
         animationFrame = requestAnimationFrame(animate);
       };
@@ -1043,6 +1047,12 @@ function playerFacingRotation(player: PlayerState) {
     return 0;
   }
   return player.facing === -1 ? -Math.PI / 2 : Math.PI / 2;
+}
+
+function cameraDistanceToZoom(distance: number, minDistance: number, maxDistance: number) {
+  const range = Math.max(maxDistance - minDistance, 0.001);
+  const normalized = 1 - (distance - minDistance) / range;
+  return Math.max(0, Math.min(100, Math.round(normalized * 100)));
 }
 
 function supportsWebGl() {
