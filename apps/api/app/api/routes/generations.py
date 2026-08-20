@@ -14,7 +14,13 @@ from app.providers.openai.real_world_context_provider import OpenAIRealWorldCont
 from app.providers.openai.script_provider import OpenAIScriptProvider
 from app.providers.openai.speech_markup_provider import OpenAISpeechMarkupProvider
 from app.schemas.equation import SolveEquationRequest
-from app.schemas.generation import GenerationSnapshot, GenerationStageRunRequest
+from app.schemas.generation import (
+    GenerationSnapshot,
+    GenerationStageRunRequest,
+    LatestGenerationVideo,
+    LatestGenerationVideos,
+    PublicLatestRenderVideos,
+)
 from app.services.animation.base import AnimationPlanProvider
 from app.services.animation.development import DevelopmentAnimationPlanProvider
 from app.services.artifacts import InMemoryArtifactRepository, SupabaseArtifactRepository
@@ -66,6 +72,32 @@ async def get_latest_generation(
 ) -> GenerationSnapshot | None:
     service, _media_store_for_request = _generation_services(settings)
     return service.get_latest_snapshot(user_id=current_user.id)
+
+
+@router.get("/latest/video", response_model=LatestGenerationVideo | None)
+async def get_latest_generation_video(
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> LatestGenerationVideo | None:
+    service, _media_store_for_request = _generation_services(settings)
+    return service.get_latest_video(user_id=current_user.id)
+
+
+@router.get("/latest/videos", response_model=LatestGenerationVideos)
+async def get_latest_generation_videos(
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> LatestGenerationVideos:
+    service, _media_store_for_request = _generation_services(settings)
+    return service.get_latest_render_videos(user_id=current_user.id, limit=3)
+
+
+@router.get("/public/latest-renders", response_model=PublicLatestRenderVideos)
+async def get_public_latest_render_videos(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PublicLatestRenderVideos:
+    service, _media_store_for_request = _generation_services(settings)
+    return service.get_public_latest_render_videos(limit=3)
 
 
 @router.get("/{generation_id}", response_model=GenerationSnapshot)

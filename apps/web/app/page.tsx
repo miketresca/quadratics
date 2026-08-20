@@ -8,7 +8,7 @@ import {AppModeShell} from "@/components/app-mode-shell";
 import {ApiKeysDialog} from "@/components/api-keys-dialog";
 import {OutsideCloseDetails} from "@/components/outside-close-details";
 import {UsageCostChip} from "@/components/usage-cost-chip";
-import {getMe, getUsageEvents, getUsageSummary} from "@/lib/api";
+import {getMe, getPublicLatestRenderVideos, getUsageEvents, getUsageSummary} from "@/lib/api";
 import {createClient} from "@/lib/supabase/server";
 
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -52,12 +52,16 @@ export default async function AppPage({
     sessionToken !== null
       ? await getUsageEvents(sessionToken).then((response) => response.events).catch(() => [])
       : [];
+  const publicLatestRenderVideos =
+    sessionToken === null
+      ? await getPublicLatestRenderVideos().then((response) => response.videos).catch(() => [])
+      : [];
   const readmeMarkdown = await readFile(readmePath, "utf8");
   const buildInfo = getBuildInfo();
 
   return (
     <main className="quadratics-app-bg min-h-screen bg-black text-zinc-100">
-      <header className="fixed left-0 top-0 z-10 flex w-full items-center justify-between px-5 py-5 sm:px-8">
+      <header className="fixed left-0 top-0 z-[400] flex w-full items-center justify-between px-5 py-5 sm:px-8">
         <Logo />
         <UsageCostChip events={usageEvents} signedIn={user !== null} summary={usageSummary} />
         <div className="flex items-center gap-2">
@@ -74,26 +78,31 @@ export default async function AppPage({
           <AccountMenu loginError={loginError} user={user} />
         </div>
       </header>
-      <AppModeShell initialUser={user} readmeMarkdown={readmeMarkdown} />
+      <AppModeShell
+        initialPublicLatestRenderVideos={publicLatestRenderVideos}
+        initialUser={user}
+        readmeMarkdown={readmeMarkdown}
+      />
     </main>
   );
 }
 
 type BuildInfo = {
   commit: string;
+  committedAt: string | null;
   subject: string;
 };
 
 function getBuildInfo(): BuildInfo {
   try {
-    const output = execSync("git log -1 --format=%h%x00%s", {
+    const output = execSync("git log -1 --format=%h%x00%s%x00%cI", {
       cwd: process.cwd(),
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
     }).trim();
-    const [commit, subject] = output.split("\0");
+    const [commit, subject, committedAt] = output.split("\0");
     if (commit && subject) {
-      return {commit, subject};
+      return {commit, committedAt: committedAt ?? null, subject};
     }
   } catch {
     // Deployment environments do not always expose the .git directory.
@@ -103,6 +112,7 @@ function getBuildInfo(): BuildInfo {
   const subject = process.env.VERCEL_GIT_COMMIT_MESSAGE ?? process.env.GIT_COMMIT_MESSAGE;
   return {
     commit: sha ? sha.slice(0, 7) : "local",
+    committedAt: null,
     subject: subject ?? (sha ? "deployed build" : "local build")
   };
 }
@@ -124,13 +134,31 @@ function BuildChip({buildInfo}: {buildInfo: BuildInfo}) {
         >
           <BuildInfoIcon />
         </span>
-        <span className="pointer-events-none absolute right-0 top-7 z-30 hidden w-72 rounded border border-zinc-700 bg-[#090d14] p-3 text-left text-xs normal-case leading-5 tracking-normal text-zinc-200 shadow-2xl shadow-black/60 group-hover/build:block group-focus-within/build:block">
+        <span className="pointer-events-none absolute right-0 top-7 z-[320] hidden w-72 rounded border border-zinc-700 bg-[#090d14] p-3 text-left text-xs normal-case leading-5 tracking-normal text-zinc-200 shadow-2xl shadow-black/60 group-hover/build:block group-focus-within/build:block">
           <span className="block font-mono text-[11px] uppercase tracking-wide text-emerald-300">{buildInfo.commit}</span>
           <span className="mt-1 block font-sans text-zinc-300">{buildInfo.subject}</span>
+          <span className="mt-2 block font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+            {buildInfo.committedAt ? formatBuildTime(buildInfo.committedAt) : "Commit time unavailable"}
+          </span>
         </span>
       </span>
     </div>
   );
+}
+
+function formatBuildTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short"
+  }).format(date);
 }
 
 function BuildInfoIcon() {
@@ -159,7 +187,7 @@ function AccountMenu({
         <span className="max-w-36 truncate">{label}</span>
         <span className="text-zinc-500 transition group-open:rotate-180">⌄</span>
       </summary>
-      <div className="absolute right-0 mt-2 w-72 rounded border border-zinc-700/70 bg-[#090d13]/88 p-2 shadow-[0_22px_70px_rgba(0,0,0,0.62),0_0_34px_rgba(16,185,129,0.08)] backdrop-blur-md">
+      <div className="absolute right-0 z-[300] mt-2 w-72 rounded border border-zinc-700/70 bg-[#090d13]/88 p-2 shadow-[0_22px_70px_rgba(0,0,0,0.62),0_0_34px_rgba(16,185,129,0.08)] backdrop-blur-md">
         {user !== null ? (
           <ApiKeysDialog />
         ) : null}

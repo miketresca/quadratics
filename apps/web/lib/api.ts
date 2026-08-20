@@ -1,6 +1,7 @@
 import type {
   CreateGenerationResponse,
   GenerationSnapshot,
+  GenerationArtifact,
   Instructor,
   MeResponse,
   NarrationEquationResponse,
@@ -78,6 +79,52 @@ export async function getLatestGeneration(accessToken: string): Promise<Generati
     throw new Error(body?.detail ?? "Could not load the latest generation");
   }
   return response.json() as Promise<GenerationSnapshot | null>;
+}
+
+export type LatestGenerationVideo = {
+  job: GenerationSnapshot["job"];
+  artifact: GenerationArtifact | null;
+};
+
+export type LatestGenerationVideosResponse = {
+  videos: LatestGenerationVideo[];
+};
+
+export type PublicLatestRenderVideo = {
+  generationId: string;
+  equationInput: string;
+  stage: GenerationArtifact["stage"];
+  status: GenerationArtifact["status"];
+  storageObjects: NonNullable<GenerationArtifact["storageObjects"]>;
+  createdAt: string;
+  completedAt?: string | null;
+};
+
+export type PublicLatestRenderVideosResponse = {
+  videos: PublicLatestRenderVideo[];
+};
+
+export async function getLatestGenerationVideos(accessToken: string): Promise<LatestGenerationVideosResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/generations/latest/videos`, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load the latest video generations");
+  }
+  return response.json() as Promise<LatestGenerationVideosResponse>;
+}
+
+export async function getPublicLatestRenderVideos(): Promise<PublicLatestRenderVideosResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/generations/public/latest-renders`, {
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load the latest render demos");
+  }
+  return response.json() as Promise<PublicLatestRenderVideosResponse>;
 }
 
 export async function runGenerationStage(params: {

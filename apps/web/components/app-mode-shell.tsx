@@ -4,13 +4,16 @@ import type {CurrentUser} from "@quadratics/types";
 import {useMemo, useState, type ReactNode} from "react";
 
 import {EquationForm} from "@/components/equation-form";
+import type {PublicLatestRenderVideo} from "@/lib/api";
 
 type AppMode = "app" | "notes";
 
 export function AppModeShell({
+  initialPublicLatestRenderVideos,
   initialUser,
   readmeMarkdown
 }: {
+  initialPublicLatestRenderVideos?: PublicLatestRenderVideo[];
   initialUser: CurrentUser | null;
   readmeMarkdown: string;
 }) {
@@ -30,7 +33,7 @@ export function AppModeShell({
             <div className="rounded border border-amber-400/35 bg-amber-400/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-amber-200 shadow-[0_0_24px_rgba(251,191,36,0.08)]">
               HeyGen credits limited
             </div>
-            <div className="pointer-events-none absolute left-1/2 top-8 z-30 hidden w-[min(88vw,31rem)] -translate-x-1/2 pt-2 group-hover/credits:block group-focus-within/credits:block">
+            <div className="pointer-events-none absolute left-1/2 top-8 z-[300] hidden w-[min(88vw,31rem)] -translate-x-1/2 pt-2 group-hover/credits:block group-focus-within/credits:block">
               <div className="rounded-md border border-amber-400/35 bg-[#090a0c]/95 p-4 text-sm leading-6 text-zinc-200 shadow-[0_24px_70px_rgba(0,0,0,0.7)] backdrop-blur">
                 <p className="font-mono text-[11px] uppercase tracking-wide text-amber-300">Out of HeyGen credits</p>
                 <p className="mt-2">
@@ -64,7 +67,10 @@ export function AppModeShell({
       </div>
 
       <div className={mode === "app" ? "block" : "hidden"} aria-hidden={mode !== "app"}>
-        <EquationForm initialUser={initialUser} />
+        <EquationForm
+          initialPublicLatestRenderVideos={initialPublicLatestRenderVideos ?? []}
+          initialUser={initialUser}
+        />
       </div>
       {demoMounted ? (
         <div className={mode === "notes" ? "block" : "hidden"} aria-hidden={mode !== "notes"}>
@@ -124,7 +130,7 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
               >
                 <TocIcon />
               </button>
-              <div className="absolute right-0 top-9 z-20 hidden w-72 pt-2 group-focus-within/toc:block group-hover/toc:block">
+              <div className="absolute right-0 top-9 z-[300] hidden w-72 pt-2 group-focus-within/toc:block group-hover/toc:block">
                 <div className="rounded-md border border-zinc-700 bg-[#080c12]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.68)] backdrop-blur">
                   <label className="flex h-10 items-center gap-2 rounded border border-emerald-400/45 bg-black/30 px-3 text-sm text-zinc-300">
                     <FilterIcon />

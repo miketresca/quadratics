@@ -64,7 +64,7 @@ export function UsageCostChip({
         <span className="text-pink-200/80">hgn {formatCurrency(avatarAverage)}</span>
       </div>
       {open ? (
-        <div className="absolute left-1/2 top-10 z-30 w-96 -translate-x-1/2 pt-2">
+        <div className="absolute left-1/2 top-10 z-[300] w-96 -translate-x-1/2 pt-2">
           <div className="rounded border border-zinc-700/80 bg-[#090d13]/92 p-3 text-xs text-zinc-300 shadow-[0_22px_70px_rgba(0,0,0,0.62),0_0_34px_rgba(16,185,129,0.08)] backdrop-blur-md">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
               <span className="font-mono uppercase tracking-wide text-zinc-500">Spend</span>

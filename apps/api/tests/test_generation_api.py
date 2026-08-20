@@ -115,6 +115,80 @@ async def test_latest_generation_returns_newest_user_snapshot(authenticated_clie
 
 
 @pytest.mark.asyncio
+async def test_latest_generation_videos_returns_compact_render_artifacts(
+    authenticated_client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+        await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/run-all",
+            json={},
+        )
+
+        response = await authenticated_client.get("/api/v1/generations/latest/videos")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["videos"]) == 1
+    assert body["videos"][0]["job"]["id"] == generation_id
+    assert body["videos"][0]["artifact"]["stage"] == "base_video"
+    assert body["videos"][0]["artifact"]["storageObjects"]
+
+
+@pytest.mark.asyncio
+async def test_public_latest_renders_returns_sanitized_render_videos(
+    authenticated_client,
+    client,
+    app,
+    monkeypatch,
+):
+    provider = CountingNarrationProvider()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        script_generation_enabled=False,
+        elevenlabs_api_key="test-key",
+    )
+    monkeypatch.setattr(generations, "_narration_provider", lambda _settings: provider)
+    try:
+        created = await authenticated_client.post(
+            "/api/v1/generations",
+            json={"equation": "x^2 + 5*x + 6 = 0"},
+        )
+        generation_id = created.json()["job"]["id"]
+        await authenticated_client.post(
+            f"/api/v1/generations/{generation_id}/run-all",
+            json={},
+        )
+
+        response = await client.get("/api/v1/generations/public/latest-renders")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["videos"]) == 1
+    assert body["videos"][0]["generationId"] == generation_id
+    assert body["videos"][0]["equationInput"] == "x^2 + 5*x + 6 = 0"
+    assert body["videos"][0]["stage"] == "base_video"
+    assert body["videos"][0]["storageObjects"]
+    assert "userId" not in body["videos"][0]
+    assert "artifact" not in body["videos"][0]
+
+
+@pytest.mark.asyncio
 async def test_generation_stage_can_create_script_artifact(authenticated_client, app):
     app.dependency_overrides[get_settings] = lambda: Settings(script_generation_enabled=False)
     try:

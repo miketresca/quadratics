@@ -1,7 +1,14 @@
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from app.schemas.artifact import GenerationArtifact, GenerationArtifactDependency
+from app.schemas.artifact import (
+    ArtifactStage,
+    ArtifactStatus,
+    ArtifactStorageObject,
+    GenerationArtifact,
+    GenerationArtifactDependency,
+)
 from app.schemas.common import ApiModel
 from app.schemas.lesson import LessonResponse
 
@@ -24,6 +31,29 @@ class GenerationSnapshot(ApiModel):
     lesson: LessonResponse
     artifacts: list[GenerationArtifact]
     dependencies: list[GenerationArtifactDependency] = []
+
+
+class LatestGenerationVideo(ApiModel):
+    job: GenerationJob
+    artifact: GenerationArtifact | None = None
+
+
+class LatestGenerationVideos(ApiModel):
+    videos: list[LatestGenerationVideo]
+
+
+class PublicLatestRenderVideo(ApiModel):
+    generation_id: UUID
+    equation_input: str
+    stage: ArtifactStage
+    status: ArtifactStatus
+    storage_objects: list[ArtifactStorageObject]
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class PublicLatestRenderVideos(ApiModel):
+    videos: list[PublicLatestRenderVideo]
 
 
 class GenerationStageRunRequest(ApiModel):

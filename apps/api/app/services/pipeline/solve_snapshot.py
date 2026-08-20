@@ -11,7 +11,14 @@ from app.schemas.artifact import (
     GenerationArtifact,
     GenerationArtifactDependency,
 )
-from app.schemas.generation import GenerationJob, GenerationSnapshot
+from app.schemas.generation import (
+    GenerationJob,
+    GenerationSnapshot,
+    LatestGenerationVideo,
+    LatestGenerationVideos,
+    PublicLatestRenderVideo,
+    PublicLatestRenderVideos,
+)
 from app.schemas.lesson import LessonResponse
 from app.schemas.narration import LessonNarration
 from app.schemas.script import LessonScript, OutputMode
@@ -142,6 +149,44 @@ class SolveGenerationService:
         if job is None:
             return None
         return self.get_snapshot(generation_job_id=job.id, user_id=user_id)
+
+    def get_latest_video(self, *, user_id: str) -> LatestGenerationVideo | None:
+        job = self._jobs.latest_for_user(user_id=user_id)
+        if job is None:
+            return None
+        artifacts = self._artifacts.list_for_generation(job.id)
+        artifact = _latest_video_artifact(artifacts)
+        return LatestGenerationVideo(
+            job=_job_schema(job),
+            artifact=_artifact_schema(artifact) if artifact is not None else None,
+        )
+
+    def get_latest_render_videos(self, *, user_id: str, limit: int = 3) -> LatestGenerationVideos:
+        videos: list[LatestGenerationVideo] = []
+        for job in self._jobs.latest_for_user_many(user_id=user_id, limit=25):
+            artifact = _latest_render_artifact(self._artifacts.list_for_generation(job.id))
+            if artifact is None:
+                continue
+            videos.append(
+                LatestGenerationVideo(
+                    job=_job_schema(job),
+                    artifact=_artifact_schema(artifact),
+                )
+            )
+            if len(videos) >= limit:
+                break
+        return LatestGenerationVideos(videos=videos)
+
+    def get_public_latest_render_videos(self, *, limit: int = 3) -> PublicLatestRenderVideos:
+        videos: list[PublicLatestRenderVideo] = []
+        for job in self._jobs.latest_many(limit=25):
+            artifact = _latest_render_artifact(self._artifacts.list_for_generation(job.id))
+            if artifact is None:
+                continue
+            videos.append(_public_latest_render_video_schema(job=job, artifact=artifact))
+            if len(videos) >= limit:
+                break
+        return PublicLatestRenderVideos(videos=videos)
 
     async def run_teacher_script(
         self,
@@ -872,6 +917,58 @@ def _dependency_schema(dependency: ArtifactDependencyRecord) -> GenerationArtifa
         metadata=dependency.metadata,
         created_at=dependency.created_at,
     )
+
+
+def _public_latest_render_video_schema(
+    *,
+    job: GenerationJobRecord,
+    artifact: ArtifactRecord,
+) -> PublicLatestRenderVideo:
+    return PublicLatestRenderVideo(
+        generation_id=job.id,
+        equation_input=job.equation_input,
+        stage=artifact.stage,
+        status=artifact.status,
+        storage_objects=[
+            ArtifactStorageObject(
+                bucket=storage_reference.bucket,
+                path=storage_reference.path,
+                signed_url=storage_reference.signed_url,
+                content_type=storage_reference.content_type,
+                size_bytes=storage_reference.size_bytes,
+                checksum_sha256=storage_reference.checksum_sha256,
+                duration_seconds=storage_reference.duration_seconds,
+                metadata=storage_reference.metadata,
+            )
+            for storage_reference in artifact.storage_objects
+        ],
+        created_at=artifact.created_at,
+        completed_at=artifact.completed_at,
+    )
+
+
+def _latest_video_artifact(artifacts: list[ArtifactRecord]) -> ArtifactRecord | None:
+    for stage in ("base_video", "motion_canvas_render", "heygen_avatar"):
+        matches = [
+            artifact
+            for artifact in artifacts
+            if artifact.stage == stage and artifact.status == "completed"
+        ]
+        if matches:
+            return max(matches, key=lambda artifact: artifact.version)
+    return artifacts[-1] if artifacts else None
+
+
+def _latest_render_artifact(artifacts: list[ArtifactRecord]) -> ArtifactRecord | None:
+    for stage in ("base_video", "motion_canvas_render"):
+        matches = [
+            artifact
+            for artifact in artifacts
+            if artifact.stage == stage and artifact.status == "completed"
+        ]
+        if matches:
+            return max(matches, key=lambda artifact: artifact.version)
+    return None
 
 
 def _storage_reference_payload(

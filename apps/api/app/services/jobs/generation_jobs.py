@@ -95,6 +95,15 @@ class InMemoryGenerationJobRepository:
             matches = [job for job in self._jobs.values() if job.user_id == user_id]
             return matches[-1] if matches else None
 
+    def latest_for_user_many(self, *, user_id: str, limit: int) -> list[GenerationJobRecord]:
+        with self._lock:
+            matches = [job for job in self._jobs.values() if job.user_id == user_id]
+            return list(reversed(matches))[:limit]
+
+    def latest_many(self, *, limit: int) -> list[GenerationJobRecord]:
+        with self._lock:
+            return list(reversed(list(self._jobs.values())))[:limit]
+
 
 class SupabaseGenerationJobRepository:
     def __init__(self, settings: Settings) -> None:
@@ -197,6 +206,35 @@ class SupabaseGenerationJobRepository:
         _raise_for_job_storage_error(response)
         rows = response.json()
         return _job_from_row(rows[0]) if rows else None
+
+    def latest_for_user_many(self, *, user_id: str, limit: int) -> list[GenerationJobRecord]:
+        with httpx.Client() as client:
+            response = client.get(
+                f"{self._base_url}/rest/v1/generation_jobs",
+                headers=self._headers,
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "select": _JOB_COLUMNS,
+                    "order": "created_at.desc",
+                    "limit": str(limit),
+                },
+            )
+        _raise_for_job_storage_error(response)
+        return [_job_from_row(row) for row in response.json()]
+
+    def latest_many(self, *, limit: int) -> list[GenerationJobRecord]:
+        with httpx.Client() as client:
+            response = client.get(
+                f"{self._base_url}/rest/v1/generation_jobs",
+                headers=self._headers,
+                params={
+                    "select": _JOB_COLUMNS,
+                    "order": "created_at.desc",
+                    "limit": str(limit),
+                },
+            )
+        _raise_for_job_storage_error(response)
+        return [_job_from_row(row) for row in response.json()]
 
 
 class GenerationJobStorageError(RuntimeError):
