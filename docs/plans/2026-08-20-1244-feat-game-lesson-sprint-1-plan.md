@@ -36,6 +36,7 @@ The first lesson is unlocked and opens the worksheet PDF as-is. The second/futur
 - KD5. **Use actual sprite-style assets locally and optimize for speed** (user-directed plus technical judgment - local static assets give faster first-load/cache behavior than fetching from Supabase for shell UI). Governs R17, R18, U2.
 - KD6. **No paid generation in Sprint 1** (technical judgment - this sprint proves the product shell and interaction model only). Governs R24, R25.
 - KD7. **Redacted logs only** (master-plan decision - raw JSON and private storage refs are not part of public Sprint 1 logs). Governs R31, R33, R35, R36.
+- KD8. **Arena is actually playable in Sprint 1** (user-directed - the selected fighter should walk on the platform and jump into lesson orbs). Governs R10a, R10b, R10c, R43, U4.
 
 ### Requirements
 
@@ -54,6 +55,9 @@ The first lesson is unlocked and opens the worksheet PDF as-is. The second/futur
 - R8. Signed-in users can select one fighter, see the one-player slot populate, and start with Space/Enter or click/tap.
 - R9. The selected fighter persists for the signed-in user.
 - R10. The arena screen shows the selected fighter plus lesson balls/cards.
+- R10a. In the arena, the selected fighter can move left/right on the platform with `ArrowLeft`/`ArrowRight` and `A`/`D`.
+- R10b. In the arena, the selected fighter can jump with `Space`, `ArrowUp`, or `W`; jump should work only from the platform/ground state.
+- R10c. Lesson orbs activate through simple 2D collision: hitting the unlocked orb opens Lesson 1, and hitting the locked orb shows the locked coming-soon message.
 - R11. Lesson 1 is unlocked and opens the worksheet PDF placeholder.
 - R12. Lesson 2 is locked but interactive: hover/focus/click should show a coming-soon message about future generated lessons.
 - R13. Locked lesson interaction must not call generation APIs, providers, or storage mutation endpoints.
@@ -332,6 +336,8 @@ No raw JSON expansion in Sprint 1. Define and render a `PublicGameLogStageSummar
 
 **Keyboard:** Fighter select and lesson balls use the same keyboard contract: Tab enters/exits the interactive region, arrow keys move between available items, Enter/Space activates the focused item, Escape dismisses prompts/drawers, selected items expose `aria-selected`, and locked lesson balls expose an accessible locked label plus a coming-soon description.
 
+**Arena movement:** Once the arena is active, keyboard input switches to lightweight platform controls: `A`/`ArrowLeft` moves left, `D`/`ArrowRight` moves right, and `W`/`ArrowUp`/`Space` jumps. Movement is bounded to the platform, uses minimal gravity/velocity state, respects reduced-motion by reducing flourish rather than disabling control, and exposes non-keyboard fallback actions for touch users.
+
 ### State Coverage Table
 
 | State | Component Surface | User-Facing Behavior | Required Test |
@@ -445,7 +451,7 @@ No raw JSON expansion in Sprint 1. Define and render a `PublicGameLogStageSummar
 
 ### U4: Lesson Catalog, PDF Placeholder, and Arena
 
-**Goal:** Provide one unlocked PDF lesson and one locked future lesson.
+**Goal:** Provide one unlocked PDF lesson, one locked future lesson, and a playable arena where the selected fighter jumps into lesson orbs.
 
 **Likely Files**
 
@@ -464,12 +470,20 @@ No raw JSON expansion in Sprint 1. Define and render a `PublicGameLogStageSummar
 - Define `volume-cubes-lesson-1` as unlocked with `kind: "pdf_placeholder"`.
 - Define `dynamic-lesson-locked` as locked with `kind: "future_dynamic"`.
 - Arena shows both as interactive lesson balls/cards.
+- Add lightweight platform movement with bounded left/right position, jump velocity, gravity, and ground collision.
+- Map movement to `ArrowLeft`/`ArrowRight`/`A`/`D`, jump to `Space`/`ArrowUp`/`W`, and keep controls active only while the arena has focus or is the current game mode.
+- Add orb hitboxes. Collision with `volume-cubes-lesson-1` opens the PDF lesson panel and starts progress; collision with `dynamic-lesson-locked` opens the locked message and performs no mutation.
+- Add touch/non-keyboard fallback controls so the lesson can still be opened without physical keyboard movement.
 - Lesson 1 opens a PDF embed/object with loading, fallback link, and error state.
 - Lesson 2 shows a locked message and does nothing else.
 
 **Tests**
 
 - Unlocked lesson opens PDF panel.
+- Moving into the unlocked orb opens the PDF panel.
+- Jumping into the locked orb shows the locked message.
+- Movement stays inside platform bounds.
+- Jump cannot stack infinitely while airborne.
 - PDF fallback link exists.
 - Locked lesson shows coming-soon message.
 - Locked lesson does not call any progress mutation.
