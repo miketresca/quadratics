@@ -24,7 +24,25 @@ export function AppModeShell({
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-6xl px-4 pb-24 pt-28 sm:px-6 sm:pt-32">
-      <div className="mb-7 flex justify-center">
+      <div className="mb-7 flex flex-col items-center gap-3">
+        {initialUser ? (
+          <div className="group/credits relative">
+            <div className="rounded border border-amber-400/35 bg-amber-400/10 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wide text-amber-200 shadow-[0_0_24px_rgba(251,191,36,0.08)]">
+              HeyGen credits limited
+            </div>
+            <div className="pointer-events-none absolute left-1/2 top-8 z-30 hidden w-[min(88vw,31rem)] -translate-x-1/2 pt-2 group-hover/credits:block group-focus-within/credits:block">
+              <div className="rounded-md border border-amber-400/35 bg-[#090a0c]/95 p-4 text-sm leading-6 text-zinc-200 shadow-[0_24px_70px_rgba(0,0,0,0.7)] backdrop-blur">
+                <p className="font-mono text-[11px] uppercase tracking-wide text-amber-300">Out of HeyGen credits</p>
+                <p className="mt-2">
+                  Try one of the pre-built equations if you want a completed avatar demo: use Male Instructor for `x^2 + 5x + 6`, and Female Instructor for `2x^2 - 7x + 3`.
+                </p>
+                <p className="mt-2 text-zinc-400">
+                  You can still run the full non-avatar pipeline with ElevenLabs for any supported equation; only new HeyGen avatar generation is unavailable.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="grid w-56 grid-cols-2 rounded border border-zinc-800 bg-zinc-950/70 p-1 text-sm shadow-xl shadow-black/30">
           <button
             aria-pressed={mode === "app"}
