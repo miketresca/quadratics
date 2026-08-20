@@ -23,6 +23,9 @@ const PLAYER_HEIGHT = 92;
 const SPEED = 5.6;
 const GRAVITY = 0.72;
 const JUMP_VELOCITY = -14;
+const PLATFORM_TOP_Y = -0.95;
+const PLAYER_MODEL_BASE_Y = PLATFORM_TOP_Y + 0.7;
+const ORB_MODEL_Y = PLATFORM_TOP_Y + 2.3;
 const ORBS = [
   {lessonId: "volume-cubes-lesson-1" as const, x: 360, y: 150},
   {lessonId: "dynamic-lesson-locked" as const, x: 600, y: 150}
@@ -90,16 +93,6 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
         element?.pause();
       }
       audioRef.current = {};
-    };
-  }, []);
-
-  useEffect(() => {
-    const playIntro = () => playCue(audioRef, "choose");
-    window.addEventListener("pointerdown", playIntro, {once: true});
-    window.addEventListener("keydown", playIntro, {once: true});
-    return () => {
-      window.removeEventListener("pointerdown", playIntro);
-      window.removeEventListener("keydown", playIntro);
     };
   }, []);
 
@@ -322,7 +315,7 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
           <div>
             <p className="font-mono text-xs uppercase tracking-wide text-emerald-300">Quadratics Game Lab</p>
             <h1 className="font-mono text-xl font-bold tracking-wide text-zinc-100 sm:text-2xl">
-              {mode === "select" ? "Choose your student" : "Select your lesson"}
+              {mode === "select" ? "Choose your character" : "Select your lesson"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -457,29 +450,18 @@ function CharacterSelect({
                 tabIndex={index === focusedIndex ? 0 : -1}
                 type="button"
               >
-                <div className="flex aspect-[1.07] items-end justify-center overflow-hidden rounded bg-black/50">
-                  <SheetPortrait className="h-full w-full" fighter={fighter} />
+                <div className="relative flex aspect-[1.07] items-end justify-center overflow-hidden rounded bg-black/50">
+                  <FighterModelPreview fighter={fighter} />
                 </div>
                 <p className="mt-2 truncate font-mono text-sm font-bold uppercase" style={{color: fighter.color}}>
                   {fighter.name}
                 </p>
-                <p className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">student slot</p>
               </button>
             );
           })}
         </div>
       </div>
-      <div className="grid gap-4 rounded border border-zinc-800 bg-black/45 p-4 md:grid-cols-[1fr_auto] md:items-center">
-        <div className="grid gap-3 sm:grid-cols-[auto_1fr] sm:items-center">
-          <p className="font-mono text-xs uppercase text-zinc-500">1P slot</p>
-          <div className="flex min-h-24 items-center gap-4 rounded border border-zinc-700 bg-zinc-950/80 p-3">
-            <SheetPortrait className="h-20 w-24 rounded" fighter={selectedFighter} />
-            <div>
-              <p className="font-mono text-xl font-bold uppercase text-zinc-100">{selectedFighter.shortName}</p>
-              <p className="font-mono text-xs uppercase text-emerald-300">ready for lesson</p>
-            </div>
-          </div>
-        </div>
+      <div className="flex justify-end rounded border border-zinc-800 bg-black/45 p-4">
         <button
           className="rounded border border-emerald-300/70 bg-emerald-400/15 px-5 py-3 font-mono text-sm font-bold uppercase text-emerald-100 hover:bg-emerald-400/25 disabled:opacity-50"
           disabled={startBusy}
@@ -489,6 +471,97 @@ function CharacterSelect({
           {startBusy ? "Loading" : "Start lesson"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function FighterModelPreview({fighter}: {fighter: GameFighter}) {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    let renderer: WebGLRenderer | null = null;
+    let scene: Scene | null = null;
+    let camera: PerspectiveCamera | null = null;
+    let model: Group | null = null;
+
+    async function setupPreview() {
+      const mount = mountRef.current;
+      if (!mount || !supportsWebGl()) {
+        return;
+      }
+      const [THREE, {MTLLoader}, {OBJLoader}] = await Promise.all([
+        import("three"),
+        import("three/examples/jsm/loaders/MTLLoader.js"),
+        import("three/examples/jsm/loaders/OBJLoader.js")
+      ]);
+      if (disposed || !mountRef.current) {
+        return;
+      }
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(28, 1.1, 0.1, 40);
+      camera.position.set(0, 0.45, 6.2);
+      camera.lookAt(0, 0.1, 0);
+
+      renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+      renderer.setClearColor(0x000000, 0);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(mount.clientWidth, mount.clientHeight, false);
+      renderer.domElement.className = "absolute inset-0 h-full w-full";
+      mount.append(renderer.domElement);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 2.4);
+      const key = new THREE.DirectionalLight(0xffffff, 2.7);
+      key.position.set(-2, 4, 5);
+      scene.add(ambient, key);
+
+      model = await loadObjModel({
+        directory: fighter.model.directory,
+        mtl: fighter.model.mtl,
+        obj: fighter.model.obj,
+        MTLLoader,
+        OBJLoader
+      });
+      if (disposed || !scene || !model || !renderer || !camera) {
+        return;
+      }
+      removeModelHelpers(model);
+      normalizeObject(THREE, model, 2.1);
+      model.position.set(0, -0.15, 0);
+      model.rotation.y = fighter.model.rotationY + 0.12;
+      scene.add(model);
+      renderer.render(scene, camera);
+    }
+
+    void setupPreview();
+
+    return () => {
+      disposed = true;
+      if (renderer) {
+        renderer.dispose();
+        renderer.domElement.remove();
+      }
+      scene?.traverse((child) => {
+        const mesh = child as Object3D & {
+          geometry?: {dispose: () => void};
+          material?: {dispose?: () => void} | Array<{dispose?: () => void}>;
+        };
+        mesh.geometry?.dispose();
+        if (Array.isArray(mesh.material)) {
+          for (const material of mesh.material) {
+            material.dispose?.();
+          }
+        } else {
+          mesh.material?.dispose?.();
+        }
+      });
+    };
+  }, [fighter]);
+
+  return (
+    <div className="absolute inset-0" ref={mountRef}>
+      <SheetPortrait className="h-full w-full opacity-35" fighter={fighter} />
     </div>
   );
 }
@@ -597,9 +670,9 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       }
 
       scene = new THREE.Scene();
-      camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.1, 160);
-      camera.position.set(0, 2.2, 9.8);
-      camera.lookAt(0, -0.45, 0);
+      camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.1, 160);
+      camera.position.set(0, 1.35, 10.4);
+      camera.lookAt(0, -0.35, 0);
 
       renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
       renderer.setClearColor(0x000000, 0);
@@ -609,12 +682,15 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
 
       controls = new OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
-      controls.enablePan = false;
-      controls.minDistance = 7.4;
-      controls.maxDistance = 14;
+      controls.enablePan = true;
+      controls.enableRotate = false;
+      controls.minDistance = 8.2;
+      controls.maxDistance = 13.5;
       controls.minPolarAngle = Math.PI * 0.2;
       controls.maxPolarAngle = Math.PI * 0.48;
-      controls.target.set(0, -0.65, 0);
+      controls.minAzimuthAngle = -Math.PI * 0.16;
+      controls.maxAzimuthAngle = Math.PI * 0.16;
+      controls.target.set(0, -0.35, 0);
 
       const ambient = new THREE.AmbientLight(0xffffff, 2.3);
       const key = new THREE.DirectionalLight(0xffffff, 2.6);
@@ -634,9 +710,10 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       if (disposed || !scene) {
         return;
       }
-      normalizeObject(THREE, platform, 6.6);
-      platform.position.set(0, -1.95, 0);
-      platform.rotation.set(0.12, 0, 0);
+      normalizeObject(THREE, platform, 8.4);
+      platform.scale.y *= 0.32;
+      platform.position.set(0, -1.62, 0);
+      platform.rotation.set(0.1, 0, 0);
       scene.add(platform);
 
       unlockedOrb = await loadObjModel({
@@ -649,12 +726,12 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
       if (disposed || !scene || !unlockedOrb) {
         return;
       }
-      normalizeObject(THREE, unlockedOrb, 0.58);
-      unlockedOrb.position.set(screenXToWorld(ORBS[0].x), 1.35, 0.25);
+      normalizeObject(THREE, unlockedOrb, 0.5);
+      unlockedOrb.position.set(screenXToWorld(ORBS[0].x), ORB_MODEL_Y, 0.18);
       scene.add(unlockedOrb);
 
       lockedOrb = unlockedOrb.clone();
-      lockedOrb.position.set(screenXToWorld(ORBS[1].x), 1.35, 0.25);
+      lockedOrb.position.set(screenXToWorld(ORBS[1].x), ORB_MODEL_Y, 0.18);
       lockedOrb.traverse((child) => {
         const mesh = child as Object3D & {material?: Material | Material[]};
         if (!mesh.material) {
@@ -687,8 +764,8 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
         return;
       }
       removeModelHelpers(studentModel);
-      normalizeObject(THREE, studentModel, selectedFighter.model.scale * 22);
-      studentModel.position.y = selectedFighter.model.yOffset - 0.45;
+      normalizeObject(THREE, studentModel, selectedFighter.model.scale * 13);
+      studentModel.position.y = PLAYER_MODEL_BASE_Y + selectedFighter.model.yOffset * 0.15;
       scene.add(studentModel);
 
       const resize = () => {
@@ -711,7 +788,7 @@ function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; select
         if (studentModel) {
           const current = playerStateRef.current;
           studentModel.position.x = screenXToWorld(current.x);
-          studentModel.position.y = selectedFighter.model.yOffset - 0.45 + ((GROUND_Y - current.y) / GROUND_Y) * 2.2;
+          studentModel.position.y = PLAYER_MODEL_BASE_Y + selectedFighter.model.yOffset * 0.15 + ((GROUND_Y - current.y) / GROUND_Y) * 2.2;
           studentModel.rotation.y = selectedFighter.model.rotationY + (current.facing === -1 ? Math.PI : 0);
         }
         if (unlockedOrb) {
@@ -804,8 +881,8 @@ function normalizeObject(THREE: typeof import("three"), object: Object3D, target
 function createSpaceBackdrop(THREE: typeof import("three")) {
   const group = new THREE.Group();
   const starVertices: number[] = [];
-  for (let index = 0; index < 900; index += 1) {
-    starVertices.push(THREE.MathUtils.randFloatSpread(70), THREE.MathUtils.randFloatSpread(42), -20 - Math.random() * 60);
+  for (let index = 0; index < 1200; index += 1) {
+    starVertices.push(THREE.MathUtils.randFloatSpread(80), THREE.MathUtils.randFloatSpread(48), -18 - Math.random() * 70);
   }
   const starGeometry = new THREE.BufferGeometry();
   starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starVertices, 3));
@@ -814,13 +891,6 @@ function createSpaceBackdrop(THREE: typeof import("three")) {
     new THREE.PointsMaterial({color: 0xdbeafe, opacity: 0.82, size: 0.055, transparent: true})
   );
   group.add(stars);
-
-  const nebulaGeometry = new THREE.PlaneGeometry(36, 18);
-  const nebulaMaterial = new THREE.MeshBasicMaterial({color: 0x3b1a7a, opacity: 0.38, transparent: true, depthWrite: false});
-  const nebula = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
-  nebula.position.set(3, -1, -24);
-  nebula.rotation.z = -0.08;
-  group.add(nebula);
   return group;
 }
 
@@ -840,6 +910,14 @@ function removeModelHelpers(model: Object3D) {
 
 function screenXToWorld(x: number) {
   return (x / ARENA_WIDTH - 0.5) * 7.4;
+}
+
+function supportsWebGl() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+  const canvas = document.createElement("canvas");
+  return Boolean(canvas.getContext("webgl") ?? canvas.getContext("experimental-webgl"));
 }
 
 function SheetPortrait({
