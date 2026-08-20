@@ -8,7 +8,15 @@ import {AppModeShell} from "@/components/app-mode-shell";
 import {ApiKeysDialog} from "@/components/api-keys-dialog";
 import {OutsideCloseDetails} from "@/components/outside-close-details";
 import {UsageCostChip} from "@/components/usage-cost-chip";
-import {getMe, getPublicLatestRenderVideos, getUsageEvents, getUsageSummary} from "@/lib/api";
+import {
+  getLatestGenerationVideos,
+  getMe,
+  getPublicLatestRenderVideos,
+  getUsageEvents,
+  getUsageSummary,
+  type LatestGenerationVideo,
+  type PublicLatestRenderVideo
+} from "@/lib/api";
 import {createClient} from "@/lib/supabase/server";
 
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -52,10 +60,12 @@ export default async function AppPage({
     sessionToken !== null
       ? await getUsageEvents(sessionToken).then((response) => response.events).catch(() => [])
       : [];
-  const publicLatestRenderVideos =
-    sessionToken === null
-      ? await getPublicLatestRenderVideos().then((response) => response.videos).catch(() => [])
-      : [];
+  const latestRenderVideos =
+    sessionToken !== null
+      ? await getLatestGenerationVideos(sessionToken)
+          .then((response) => response.videos.map(latestGenerationVideoToPublicRenderVideo).filter(isPublicLatestRenderVideo))
+          .catch(() => [])
+      : await getPublicLatestRenderVideos().then((response) => response.videos).catch(() => []);
   const readmeMarkdown = await readFile(readmePath, "utf8");
   const buildInfo = getBuildInfo();
 
@@ -79,12 +89,31 @@ export default async function AppPage({
         </div>
       </header>
       <AppModeShell
-        initialPublicLatestRenderVideos={publicLatestRenderVideos}
+        initialLatestRenderVideos={latestRenderVideos}
         initialUser={user}
         readmeMarkdown={readmeMarkdown}
       />
     </main>
   );
+}
+
+function latestGenerationVideoToPublicRenderVideo(video: LatestGenerationVideo): PublicLatestRenderVideo | null {
+  if (!video.artifact) {
+    return null;
+  }
+  return {
+    generationId: video.job.id,
+    equationInput: video.job.equationInput,
+    stage: video.artifact.stage,
+    status: video.artifact.status,
+    storageObjects: video.artifact.storageObjects ?? [],
+    createdAt: video.artifact.createdAt,
+    completedAt: video.artifact.completedAt
+  };
+}
+
+function isPublicLatestRenderVideo(value: PublicLatestRenderVideo | null): value is PublicLatestRenderVideo {
+  return value !== null;
 }
 
 type BuildInfo = {

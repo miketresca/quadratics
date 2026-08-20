@@ -89,7 +89,7 @@ async def get_latest_generation_videos(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> LatestGenerationVideos:
     service, _media_store_for_request = _generation_services(settings)
-    return service.get_latest_render_videos(user_id=current_user.id, limit=3)
+    return service.get_latest_render_videos(user_id=current_user.id, limit=1)
 
 
 @router.get("/public/latest-renders", response_model=PublicLatestRenderVideos)
@@ -97,7 +97,7 @@ async def get_public_latest_render_videos(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> PublicLatestRenderVideos:
     service, _media_store_for_request = _generation_services(settings)
-    return service.get_public_latest_render_videos(limit=3)
+    return service.get_public_latest_render_videos(limit=1)
 
 
 @router.get("/{generation_id}", response_model=GenerationSnapshot)

@@ -9,11 +9,11 @@ import type {PublicLatestRenderVideo} from "@/lib/api";
 type AppMode = "app" | "notes";
 
 export function AppModeShell({
-  initialPublicLatestRenderVideos,
+  initialLatestRenderVideos,
   initialUser,
   readmeMarkdown
 }: {
-  initialPublicLatestRenderVideos?: PublicLatestRenderVideo[];
+  initialLatestRenderVideos?: PublicLatestRenderVideo[];
   initialUser: CurrentUser | null;
   readmeMarkdown: string;
 }) {
@@ -68,7 +68,7 @@ export function AppModeShell({
 
       <div className={mode === "app" ? "block" : "hidden"} aria-hidden={mode !== "app"}>
         <EquationForm
-          initialPublicLatestRenderVideos={initialPublicLatestRenderVideos ?? []}
+          initialLatestRenderVideos={initialLatestRenderVideos ?? []}
           initialUser={initialUser}
         />
       </div>
