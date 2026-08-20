@@ -34,7 +34,6 @@ class Settings(BaseSettings):
         ]
     )
     app_environment: str = "production"
-    golden_checkpoint_reuse_enabled: bool = False
     openai_api_key: str = ""
     openai_script_model: str = "gpt-5-mini"
     script_generation_enabled: bool = False

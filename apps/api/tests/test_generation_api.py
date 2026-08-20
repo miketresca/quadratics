@@ -5,9 +5,12 @@ from app.core.config import Settings, get_settings
 from app.providers.heygen.avatar_provider import HeyGenAvatarVideoProvider
 from app.schemas.narration import AudioAlignment
 from app.services.animation.base import AnimationPlanningRequest, AnimationPlanProvider
+from app.services.artifacts import InMemoryArtifactRepository
 from app.services.avatars.development import DevelopmentAvatarVideoProvider
 from app.services.context.base import RealWorldContextProvider, RealWorldContextRequest
+from app.services.jobs.generation_jobs import InMemoryGenerationJobRepository
 from app.services.narration.base import NarrationProvider, NarrationRequest, NarrationResult
+from app.services.pipeline.solve_snapshot import SolveGenerationService
 from app.services.storage.media_store import MediaStore
 
 
@@ -566,14 +569,14 @@ async def test_render_stage_records_media_storage_failure(
 
 
 @pytest.mark.asyncio
-async def test_development_golden_equation_reuses_latest_generation_checkpoint(
+async def test_generation_create_reuses_latest_matching_user_equation_and_instructor(
     authenticated_client,
     app,
     monkeypatch,
 ):
-    monkeypatch.setenv("APP_ENVIRONMENT", "development")
+    monkeypatch.setenv("APP_ENVIRONMENT", "production")
     app.dependency_overrides[get_settings] = lambda: Settings(
-        app_environment="development",
+        app_environment="production",
         script_generation_enabled=False,
         supabase_url="",
         supabase_service_role_key="",
@@ -584,7 +587,7 @@ async def test_development_golden_equation_reuses_latest_generation_checkpoint(
     try:
         first = await authenticated_client.post(
             "/api/v1/generations",
-            json={"equation": "x^2 + 5*x + 6 = 0", "instructorId": "male"},
+            json={"equation": "2*x^2 - 7*x + 3 = 0", "instructorId": "male"},
         )
         generation_id = first.json()["job"]["id"]
         scripted = await authenticated_client.post(
@@ -594,7 +597,7 @@ async def test_development_golden_equation_reuses_latest_generation_checkpoint(
 
         second = await authenticated_client.post(
             "/api/v1/generations",
-            json={"equation": "x^2 + 5*x + 6", "instructorId": "male"},
+            json={"equation": "2*x^2 - 7*x + 3", "instructorId": "male"},
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
@@ -611,13 +614,12 @@ async def test_development_golden_equation_reuses_latest_generation_checkpoint(
 
 
 @pytest.mark.asyncio
-async def test_golden_equation_checkpoint_reuse_can_be_enabled_outside_development(
+async def test_generation_reuse_is_scoped_to_instructor(
     authenticated_client,
     app,
 ):
     app.dependency_overrides[get_settings] = lambda: Settings(
         app_environment="production",
-        golden_checkpoint_reuse_enabled=True,
         script_generation_enabled=False,
         supabase_url="",
         supabase_service_role_key="",
@@ -630,54 +632,9 @@ async def test_golden_equation_checkpoint_reuse_can_be_enabled_outside_developme
             "/api/v1/generations",
             json={"equation": "x^2 + 5*x + 6 = 0", "instructorId": "male"},
         )
-        generation_id = first.json()["job"]["id"]
-        scripted = await authenticated_client.post(
-            f"/api/v1/generations/{generation_id}/stages/teacher_script",
-            json={},
-        )
-
         second = await authenticated_client.post(
             "/api/v1/generations",
-            json={"equation": "x^2 + 5*x + 6", "instructorId": "male"},
-        )
-    finally:
-        app.dependency_overrides.pop(get_settings, None)
-
-    assert first.status_code == 200
-    assert scripted.status_code == 200
-    assert second.status_code == 200
-    assert second.json()["job"]["id"] == generation_id
-    assert [artifact["stage"] for artifact in second.json()["artifacts"]] == [
-        "solution",
-        "lesson",
-        "teacher_script",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_development_checkpoint_reuse_is_limited_to_golden_equation(
-    authenticated_client,
-    app,
-    monkeypatch,
-):
-    monkeypatch.setenv("APP_ENVIRONMENT", "development")
-    app.dependency_overrides[get_settings] = lambda: Settings(
-        app_environment="development",
-        script_generation_enabled=False,
-        supabase_url="",
-        supabase_service_role_key="",
-        supabase_anon_key="",
-        supabase_jwt_secret="test-secret",
-        supabase_jwks_url="",
-    )
-    try:
-        first = await authenticated_client.post(
-            "/api/v1/generations",
-            json={"equation": "x^2 - x = 0", "instructorId": "male"},
-        )
-        second = await authenticated_client.post(
-            "/api/v1/generations",
-            json={"equation": "x^2 - x = 0", "instructorId": "male"},
+            json={"equation": "x^2 + 5*x + 6", "instructorId": "female"},
         )
     finally:
         app.dependency_overrides.pop(get_settings, None)
@@ -685,3 +642,27 @@ async def test_development_checkpoint_reuse_is_limited_to_golden_equation(
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json()["job"]["id"] != first.json()["job"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_generation_reuse_is_not_shared_between_users(
+    monkeypatch,
+):
+    monkeypatch.setenv("APP_ENVIRONMENT", "production")
+    service = SolveGenerationService(
+        jobs=InMemoryGenerationJobRepository(),
+        artifacts=InMemoryArtifactRepository(),
+    )
+
+    first = service.create_generation(
+        user_id="00000000-0000-0000-0000-000000000001",
+        equation="x^2 - x = 0",
+        instructor_id="male",
+    )
+    second = service.create_generation(
+        user_id="00000000-0000-0000-0000-000000000002",
+        equation="x^2 - x = 0",
+        instructor_id="male",
+    )
+
+    assert second.job.id != first.job.id

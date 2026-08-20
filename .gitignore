@@ -16,3 +16,7 @@ __pycache__/
 apps/video/output/
 infra/supabase/.temp/
 .worktrees/
+
+# Local demo prep artifacts
+demo_yap.m4a
+docs/local-demo-plan.md

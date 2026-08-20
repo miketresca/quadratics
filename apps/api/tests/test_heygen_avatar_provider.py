@@ -11,8 +11,18 @@ from app.services.avatars.base import AvatarVideoRequest
 @pytest.mark.asyncio
 async def test_heygen_provider_downloads_completed_webm_video():
     create_payloads = []
+    asset_uploads = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and str(request.url) == "https://audio.example/segment.mp3":
+            return httpx.Response(
+                200,
+                content=b"fake-mp3-bytes",
+                headers={"content-type": "audio/mpeg"},
+            )
+        if request.method == "POST" and str(request.url) == "https://api.heygen.com/v3/assets":
+            asset_uploads.append(request.read())
+            return httpx.Response(200, json={"data": {"asset_id": "asset-audio-1"}})
         if request.method == "POST" and str(request.url) == "https://api.heygen.com/v3/videos":
             create_payloads.append(request.read())
             return httpx.Response(200, json={"data": {"video_id": "video-1"}})
@@ -54,14 +64,26 @@ async def test_heygen_provider_downloads_completed_webm_video():
 
     assert result.content_type == "video/webm"
     assert result.content.startswith(b"\x1a\x45\xdf\xa3")
+    assert asset_uploads
     assert b'"engine":{"type":"avatar_iii"}' in create_payloads[0]
+    assert b'"audio_asset_id":"asset-audio-1"' in create_payloads[0]
+    assert b"audio_url" not in create_payloads[0]
     assert result.provider_metadata["avatarModel"] == "avatar_iii"
+    assert result.provider_metadata["audioAssetId"] == "asset-audio-1"
     assert result.provider_metadata["downloadSizeBytes"] == len(result.content)
 
 
 @pytest.mark.asyncio
 async def test_heygen_provider_rejects_non_video_download():
     async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and str(request.url) == "https://audio.example/segment.mp3":
+            return httpx.Response(
+                200,
+                content=b"fake-mp3-bytes",
+                headers={"content-type": "audio/mpeg"},
+            )
+        if request.method == "POST" and str(request.url) == "https://api.heygen.com/v3/assets":
+            return httpx.Response(200, json={"data": {"asset_id": "asset-audio-1"}})
         if request.method == "POST" and str(request.url) == "https://api.heygen.com/v3/videos":
             return httpx.Response(200, json={"data": {"video_id": "video-1"}})
         if request.method == "GET" and str(request.url) == "https://api.heygen.com/v3/videos/video-1":
@@ -98,3 +120,34 @@ async def test_heygen_provider_rejects_non_video_download():
                 title="Segment 1",
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_heygen_provider_reports_source_audio_download_failure_before_create():
+    create_requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET" and str(request.url) == "https://audio.example/segment.mp3":
+            return httpx.Response(405, json={"detail": "Method Not Allowed"})
+        if str(request.url) == "https://api.heygen.com/v3/videos":
+            create_requests.append(request)
+        return httpx.Response(404)
+
+    provider = HeyGenAvatarVideoProvider(
+        api_key="test-key",
+        poll_interval_seconds=0,
+        timeout_seconds=5,
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(HeyGenProviderError, match="download source audio failed: 405"):
+        await provider.generate(
+            AvatarVideoRequest(
+                generation_job_id="generation-1",
+                avatar_id="avatar-1",
+                audio_url="https://audio.example/segment.mp3",
+                title="Segment 1",
+            )
+        )
+
+    assert create_requests == []

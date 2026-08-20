@@ -6,12 +6,16 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.api.dependencies.auth import get_current_user
-from app.api.routes import instructors, usage_costs
+from app.api.routes import generations, instructors, usage_costs
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
 from app.main import create_app
 from app.schemas.instructor import Instructor
+from app.services.artifacts import InMemoryArtifactRepository
 from app.services.instructors.repository import InMemoryInstructorRepository
+from app.services.jobs.generation_jobs import InMemoryGenerationJobRepository
+from app.services.pipeline.solve_snapshot import SolveGenerationService
+from app.services.storage.media_store import InMemoryMediaStore
 from app.services.usage.costs import InMemoryUsageCostRepository
 
 
@@ -23,6 +27,13 @@ def test_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def app() -> FastAPI:
     get_settings.cache_clear()
+    generations._jobs = InMemoryGenerationJobRepository()
+    generations._artifacts = InMemoryArtifactRepository()
+    generations._media_store = InMemoryMediaStore(bucket="generated-media")
+    generations._solve_generations = SolveGenerationService(
+        jobs=generations._jobs,
+        artifacts=generations._artifacts,
+    )
     instructors._instructors = InMemoryInstructorRepository(
         [
             Instructor(id="male", display_name="Male Instructor", voice_id="male-voice"),

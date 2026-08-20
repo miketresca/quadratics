@@ -38,7 +38,7 @@ Use shared contracts from `@quadratics/types` instead of duplicating backend sha
 
 The standard path expects animation planning, Motion Canvas rendering, and a playable base video. Optional HeyGen avatar generation is a separate paid stage, not a separate app mode.
 
-For the golden equation `x^2 + 5x + 6 = 0`, the UI may receive already completed artifacts after refresh. Treat those as resumable checkpoints, not as a reason to regenerate from scratch.
+The UI may receive already completed artifacts when a signed-in user resubmits an equation they have generated before with the same instructor. Treat those as resumable checkpoints, not as a reason to regenerate from scratch.
 
 Stale artifacts should remain inspectable with subtle stale styling. Failed artifacts should remain distinct from stale artifacts.
 

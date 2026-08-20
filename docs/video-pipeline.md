@@ -72,6 +72,12 @@ The command receives `QUADRATICS_RENDER_INPUT_PATH` and `QUADRATICS_RENDER_OUTPU
 
 Chalk SFX windows are part of the resolved timeline contract. Actual chalk-audio mixing should use a licensed local asset from `apps/video/public/audio/chalk-write.mp3`; the repository does not commit third-party samples.
 
+## Generation Reuse
+
+Submitting an equation reopens the latest matching generation for the same authenticated user, normalized equation, and instructor. This is the account-scoped persistence model for all supported equations, not only the development fixture.
+
+Stage-level cache reuse still applies inside a generation. Normal stage reruns reuse completed artifacts with matching input hashes, while force reruns create a new artifact version and stale affected downstream artifacts.
+
 ## Development Fixture
 
 Use the golden fixture workflow when iterating on Motion Canvas or timing behavior:
@@ -81,8 +87,6 @@ pnpm video:fixture
 ```
 
 The fixture covers `x^2 + 5x + 6 = 0` and includes lesson, script, narration-shaped metadata, animation plan, and resolved timeline data. It is designed to run without OpenAI or ElevenLabs credentials.
-
-In `APP_ENVIRONMENT=development`, submitting the normalized equation `x**2 + 5*x + 6 = 0` reopens the latest matching generation for the same user and instructor instead of creating a fresh generation. Set `GOLDEN_CHECKPOINT_REUSE_ENABLED=true` to enable the same hidden checkpoint behavior outside development, such as on Railway. This is scoped to the golden equation only: refresh the page, submit the same equation, and continue from the artifacts already created.
 
 ## Current Limits
 

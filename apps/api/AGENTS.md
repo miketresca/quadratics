@@ -43,7 +43,7 @@ The animation planner creates semantic cues only. The resolver maps narration tr
 
 The render stage is command-backed when `MOTION_CANVAS_RENDER_COMMAND` is configured. Use `MOTION_CANVAS_RENDER_CWD` when the API process does not run from the monorepo root.
 
-The golden equation `x^2 + 5x + 6 = 0` can reopen existing checkpoints for the same user/instructor in development, and outside development when `GOLDEN_CHECKPOINT_REUSE_ENABLED=true`.
+Submitting an equation should reopen the latest matching generation for the same user, normalized equation, and instructor. Preserve this account-scoped reuse behavior so repeated homework problems do not spend provider credits again.
 
 ## Validation
 

@@ -20,7 +20,7 @@ The project exists to make educational video generation inspectable and repeatab
 - Supabase Auth, Postgres-backed generation records, and private Supabase Storage media
 - Global Supabase-backed instructors with voice IDs, avatar IDs, and reference images
 - Provider usage cost logging for signed-in users
-- A golden checkpoint workflow for `x^2 + 5x + 6 = 0` so video work can iterate without provider calls
+- Account-scoped generation reuse so repeated equations reopen saved artifacts instead of spending provider credits again
 
 ## Repository Structure
 
@@ -124,12 +124,6 @@ MOTION_CANVAS_RENDER_TIMEOUT_SECONDS=120
 
 The render command receives `QUADRATICS_RENDER_INPUT_PATH` and `QUADRATICS_RENDER_OUTPUT_PATH`, downloads signed narration segment URLs when present, renders the scene, and assembles the MP4 with `ffmpeg`. If the API process does not run from the monorepo root, set `MOTION_CANVAS_RENDER_CWD` to the deployed monorepo root.
 
-The golden checkpoint can be reused outside development with:
-
-```env
-GOLDEN_CHECKPOINT_REUSE_ENABLED=true
-```
-
 HeyGen credentials are normally stored as encrypted user-provided provider keys. `HEYGEN_API_KEY` is an API-server fallback for local/internal testing when no user key is stored. Set the encryption key before enabling in-app key saves:
 
 ```env
@@ -144,6 +138,8 @@ Generate a key with:
 ```sh
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
+
+For avatar generation, the API downloads the completed narration audio from private storage, uploads it to HeyGen as an audio asset, and then creates the avatar video with `audio_asset_id`. This avoids giving HeyGen private Supabase signed URLs directly.
 
 ## Local Development
 
@@ -197,7 +193,7 @@ The `real_world_context` log generates the IRL Example copy shown under the Less
 
 The `real_world_context` and `heygen_avatar` stages are optional and paid. Context generation contributes to the base and avatar average video cost because it is part of the lesson experience. The UI estimates HeyGen cost from completed narration duration before running it.
 
-For the golden equation `x^2 + 5x + 6 = 0`, the app can reopen the existing checkpoint for the same user and instructor so refreshes do not throw away completed stages.
+Submitting an equation reopens the latest matching generation for the same authenticated user, normalized equation, and instructor. This preserves completed artifacts across sessions and avoids repeated provider calls for problems a user has already generated.
 
 ## Deployment
 

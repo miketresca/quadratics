@@ -9,7 +9,7 @@ This repository builds an internal, artifact-backed video generation pipeline fo
 - [CONCEPTS.md](CONCEPTS.md) - shared domain vocabulary for project-specific entities, stages, and status concepts
 - [docs/architecture.md](docs/architecture.md) - system boundaries and data flow
 - [docs/domain-model.md](docs/domain-model.md) - shared vocabulary and artifact concepts
-- [docs/video-pipeline.md](docs/video-pipeline.md) - generation stages, reruns, storage, rendering, and golden checkpoint behavior
+- [docs/video-pipeline.md](docs/video-pipeline.md) - generation stages, reruns, storage, rendering, and account-scoped reuse behavior
 - [docs/auth-and-usage.md](docs/auth-and-usage.md) - auth, ownership, provider keys, and Supabase expectations
 - [docs/decisions](docs/decisions) - accepted architectural decisions
 - [docs/solutions](docs/solutions) - durable notes from solved issues

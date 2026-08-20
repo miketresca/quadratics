@@ -67,17 +67,15 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
 
   return (
     <section className="mx-auto grid max-w-5xl gap-6" aria-label="Demo">
-      <div
-        aria-label="Loom video embed placeholder"
-        className="group relative aspect-video overflow-hidden rounded-md border border-zinc-800 bg-[#080c12] shadow-2xl shadow-black/40"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(52,211,153,0.12),transparent_34%),linear-gradient(180deg,rgba(24,32,43,0.76),rgba(7,9,13,0.94))]" />
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.026)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.026)_1px,transparent_1px)] bg-[size:56px_56px]" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-full border border-emerald-300/35 bg-zinc-950/70 shadow-[0_0_40px_rgba(52,211,153,0.18)] transition group-hover:border-emerald-300/70 group-hover:shadow-[0_0_52px_rgba(52,211,153,0.28)] sm:h-20 sm:w-20">
-            <span className="ml-1 block h-0 w-0 border-y-[12px] border-l-[18px] border-y-transparent border-l-emerald-200 sm:border-y-[15px] sm:border-l-[24px]" />
-          </span>
-        </div>
+      <div className="overflow-hidden rounded-md border border-zinc-800 bg-[#080c12] shadow-2xl shadow-black/40">
+        <iframe
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+          className="aspect-video w-full"
+          referrerPolicy="strict-origin-when-cross-origin"
+          src="https://www.youtube-nocookie.com/embed/rOgAuzpOOgE?rel=0"
+          title="Quadratics demo video"
+        />
       </div>
 
       <div className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950/55 shadow-2xl shadow-black/25">

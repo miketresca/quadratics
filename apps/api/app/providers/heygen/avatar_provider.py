@@ -34,13 +34,13 @@ class HeyGenAvatarVideoProvider(AvatarVideoProvider):
             "x-api-key": self._api_key,
             "Content-Type": "application/json",
         }
+        asset_headers = {"x-api-key": self._api_key}
         payload = {
             "type": "avatar",
             "avatar_id": request.avatar_id,
             "title": request.title,
             "resolution": "720p",
             "aspect_ratio": "16:9",
-            "audio_url": request.audio_url,
             "output_format": request.output_format,
             "engine": {"type": request.avatar_model},
         }
@@ -48,6 +48,13 @@ class HeyGenAvatarVideoProvider(AvatarVideoProvider):
             payload["remove_background"] = True
 
         async with _client_context(self._client, timeout=self._timeout_seconds) as client:
+            audio_asset_id = await _upload_audio_asset(
+                client,
+                headers=asset_headers,
+                audio_url=request.audio_url,
+                title=request.title,
+            )
+            payload["audio_asset_id"] = audio_asset_id
             create_response = await client.post(
                 "https://api.heygen.com/v3/videos",
                 headers=headers,
@@ -88,6 +95,7 @@ class HeyGenAvatarVideoProvider(AvatarVideoProvider):
                 "downloadContentType": content_type,
                 "downloadSizeBytes": len(download_response.content),
                 "avatarModel": request.avatar_model,
+                "audioAssetId": audio_asset_id,
             },
         )
 
@@ -130,6 +138,40 @@ def _raise_for_heygen_error(response: httpx.Response, *, action: str) -> None:
     if detail:
         raise HeyGenProviderError(f"HeyGen {action} failed: {response.status_code}: {detail}")
     raise HeyGenProviderError(f"HeyGen {action} failed: {response.status_code}")
+
+
+async def _upload_audio_asset(
+    client: httpx.AsyncClient,
+    *,
+    headers: dict[str, str],
+    audio_url: str,
+    title: str,
+) -> str:
+    audio_response = await client.get(audio_url)
+    _raise_for_heygen_error(audio_response, action="download source audio")
+    content_type = audio_response.headers.get("content-type", "audio/mpeg").split(";")[0]
+    extension = "wav" if content_type == "audio/wav" else "mp3"
+    upload_response = await client.post(
+        "https://api.heygen.com/v3/assets",
+        headers=headers,
+        files={
+            "file": (
+                f"{_safe_filename(title)}.{extension}",
+                audio_response.content,
+                content_type,
+            )
+        },
+    )
+    _raise_for_heygen_error(upload_response, action="upload audio asset")
+    data = upload_response.json().get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("asset_id"), str):
+        raise HeyGenProviderError("HeyGen did not return an audio asset_id")
+    return data["asset_id"]
+
+
+def _safe_filename(value: str) -> str:
+    safe = "".join(character if character.isalnum() else "-" for character in value.lower())
+    return "-".join(part for part in safe.split("-") if part)[:80] or "quadratics-audio"
 
 
 def _content_type(response: httpx.Response, output_format: str) -> str:
