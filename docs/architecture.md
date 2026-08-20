@@ -28,11 +28,11 @@ FastAPI protects API routes with Supabase bearer-token verification. Next.js ren
 
 ## Game Route Boundary
 
-The `/game` route is a separate product surface inside the same Next.js app. It reuses shared header/auth chrome and typed API-client patterns, but it does not import the quadratic equation form, lesson result, or pipeline log components for core rendering.
+The `/game` route is a separate product surface inside the same Next.js app. It does not import the quadratic equation form, lesson result, or pipeline log components for core rendering.
 
-Sprint 1 game code is intentionally a UI/progress shell. The web app serves optimized local prototype assets from `apps/web/public/game`, renders character select and arena interactions in the browser, and opens a public PDF placeholder lesson. The API only persists authenticated user progress for selected fighter and lesson status; it does not run paid providers or worksheet generation stages for the game route yet.
+The current game prototype is a full-screen POV worksheet scene rather than a normal app page. Three.js owns the interactive surface: a camera looks down at a desk and paper, pointer raycasting moves a stylized pen/hand over the worksheet plane, and the generated paper texture acts as the in-world lesson menu. Lesson 1 opens the copied PDF placeholder; Lesson 2 is a locked future worksheet-generation path.
 
-Game progress is account-scoped and isolated from quadratic generation jobs. Public visitors can view the shell and redacted logs, but progress reads and mutations still require Supabase auth. Future worksheet generation should use a game/worksheet artifact namespace rather than overloading the quadratic generation pipeline before the contracts are proven.
+The game prototype is intentionally a UI/composition shell. It does not run paid providers, storage generation, or Motion Canvas stages. Future worksheet generation should use a game/worksheet artifact namespace rather than overloading the quadratic generation pipeline before the contracts are proven.
 
 ## Pipeline Boundary
 

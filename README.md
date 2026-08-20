@@ -21,7 +21,7 @@ The project exists to make educational video generation inspectable and repeatab
 - Global Supabase-backed instructors with voice IDs, avatar IDs, and reference images
 - Provider usage cost logging for signed-in users
 - Account-scoped generation reuse so repeated equations reopen saved artifacts instead of spending provider credits again
-- `/game` prototype route with a game-style character select, WebGL lesson arena, local static prototype assets, account-scoped progress, a redacted logs drawer, and one PDF-backed placeholder lesson
+- `/game` prototype route with a full-screen POV worksheet desk scene, mouse-controlled pen/hand interaction, paper-based lesson selection, and one PDF-backed placeholder lesson
 
 ## Repository Structure
 
@@ -144,9 +144,9 @@ For avatar generation, the API downloads the completed narration audio from priv
 
 ## Game Prototype
 
-The `/game` route is an isolated prototype for the worksheet/game lesson direction. It keeps the normal Quadratics header, then renders a game-style character selection screen and arena. Sprint 1 uses local static prototype assets under `apps/web/public/game`, one unlocked PDF-backed lesson, one locked future lesson orb, account-scoped progress, and a redacted logs drawer.
+The `/game` route is an isolated prototype for the worksheet lesson direction. It intentionally drops the standard app header and fills the viewport with a POV desk scene: the camera looks down at a worksheet, a stylized hand holds a pen, and pointer movement moves the pen over the paper. The paper acts as the first menu surface with an unlocked PDF-backed lesson and a locked future worksheet-generation lesson.
 
-The game prototype does not call OpenAI, ElevenLabs, HeyGen, Motion Canvas, or storage generation APIs. It is a UI/progress shell for the next worksheet-video work. Runtime game assets are served from the web app for speed; raw downloaded source ZIPs and local asset-ingestion folders should stay out of git unless an explicit asset-publishing task promotes optimized files into `apps/web/public/game`.
+The game prototype does not call OpenAI, ElevenLabs, HeyGen, Motion Canvas, or storage generation APIs. It is a UI/composition shell for the next worksheet-video work. The first implementation uses Three.js directly because the scene needs one controlled 3D canvas, pointer raycasting against the worksheet plane, and deterministic generated textures that can later become worksheet regions and timestamped handwriting.
 
 ## Local Development
 
@@ -170,7 +170,7 @@ Useful commands:
 - `pnpm video:dev` - Run the Motion Canvas editor at `http://localhost:9000`
 - `pnpm video:fixture` - Validate/load the golden fixture without OpenAI or ElevenLabs calls
 - `pnpm --filter @quadratics/video render` - Render from `QUADRATICS_RENDER_INPUT_PATH` to `QUADRATICS_RENDER_OUTPUT_PATH`
-- `/game?preview=arena&fighter=mario` - Development-only shortcut for visually checking the game arena with a selected fighter
+- `/game` - Open the full-screen worksheet POV prototype
 - `pnpm sb:link` - Link `infra/supabase` to the configured Supabase project
 - `pnpm sb:push:dry` - Preview Supabase migration changes
 - `pnpm sb:push` - Push Supabase migrations
