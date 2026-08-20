@@ -15,6 +15,7 @@ import {
   updateInstructor,
   runGenerationStage
 } from "@/lib/api";
+import {equationSubmitErrorMessage} from "@/lib/equation-errors";
 import {stateForLesson, type SolveViewState} from "@/lib/lesson-view";
 import {createClient} from "@/lib/supabase/client";
 
@@ -206,7 +207,7 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
   const narrationLoading =
     viewState.kind === "submitting" &&
     viewState.narrationLoading === true;
-  const inlineError = viewState.kind === "error" ? "This is not a valid quadratic equation." : null;
+  const inlineError = viewState.kind === "error" ? equationSubmitErrorMessage(viewState.message) : null;
 
   function updateEquationValue(nextValue: string) {
     setEquationValue(nextValue);
