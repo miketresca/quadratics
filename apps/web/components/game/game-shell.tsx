@@ -17,6 +17,14 @@ type LessonChoice = {
 
 type SceneTunableName = "laptop" | "clock" | "coffee" | "paper";
 
+type VisitorLocation = {
+  city: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  region: string | null;
+};
+
 const PAPER_WIDTH = 2.68;
 const PAPER_HEIGHT = 3.9;
 const DESK_SURFACE_Y = 1.08;
@@ -77,6 +85,7 @@ export function GameShell() {
     let paperTexture: Texture | null = null;
     let penGroup: Group | null = null;
     let steamGroup: Group | null = null;
+    let rainStreaks: Mesh[] = [];
     let clockTexture: Texture | null = null;
     let lofiIframe: HTMLIFrameElement | null = null;
     let lofiPlaying = true;
@@ -195,7 +204,16 @@ export function GameShell() {
       neonFill.position.set(3.7, 2.4, -3.8);
       scene.add(neonFill);
 
-      scene.add(createOfficeBackdrop(THREE));
+      const backdrop = createOfficeBackdrop(THREE);
+      rainStreaks = backdrop.rainStreaks;
+      scene.add(backdrop.group);
+      void loadVisitorLocation().then((location) => {
+        if (disposed) {
+          return;
+        }
+        updateWorldMapTexture(backdrop.mapTexture, location);
+        positionMapDart(backdrop.mapDart, location);
+      });
       scene.add(createDeskSurface(THREE));
       const supplies = createDeskSupplies(THREE);
       steamGroup = supplies.steamGroup;
@@ -475,6 +493,13 @@ export function GameShell() {
             child.rotation.y = Math.sin(elapsed * 0.8 + index * 0.7) * 0.28;
           }
         }
+        for (const [index, rain] of rainStreaks.entries()) {
+          const speed = typeof rain.userData.speed === "number" ? rain.userData.speed : 0.018;
+          rain.position.y -= speed;
+          if (rain.position.y < 0.9) {
+            rain.position.y = ROOM.height - 0.35 - (index % 8) * 0.05;
+          }
+        }
         renderer.render(scene, camera);
         cssRenderer?.render(scene, camera);
         animationFrame = requestAnimationFrame(animate);
@@ -605,6 +630,18 @@ export function GameShell() {
   );
 }
 
+async function loadVisitorLocation(): Promise<VisitorLocation | null> {
+  try {
+    const response = await fetch("/api/visitor-location", {cache: "no-store"});
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json() as VisitorLocation;
+  } catch {
+    return null;
+  }
+}
+
 function createDeskSurface(THREE: typeof import("three")) {
   const group = new THREE.Group();
   const deskTexture = createWoodTexture(THREE, 0x82512b, 0x3f2518);
@@ -641,9 +678,10 @@ function createDeskSurface(THREE: typeof import("three")) {
 
 function createOfficeBackdrop(THREE: typeof import("three")) {
   const group = new THREE.Group();
+  const rainStreaks: Mesh[] = [];
   const wallMaterial = new THREE.MeshStandardMaterial({color: 0x111319, roughness: 0.92});
-  const floorTexture = createWoodTexture(THREE, 0x5d3f27, 0x2c1b14);
-  const floorMaterial = new THREE.MeshStandardMaterial({map: floorTexture, roughness: 0.82, metalness: 0.02});
+  const floorTexture = createConcreteTexture(THREE);
+  const floorMaterial = new THREE.MeshStandardMaterial({map: floorTexture, color: 0x7a7c7d, roughness: 0.9, metalness: 0.02, bumpMap: floorTexture, bumpScale: 0.025});
   const ceilingMaterial = new THREE.MeshStandardMaterial({color: 0x080a0f, roughness: 0.9});
 
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.width, ROOM.depth), floorMaterial);
@@ -668,7 +706,7 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
     opacity: 0.78
   });
 
-  const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.depth, ROOM.height - 0.6), sideGlassMaterial.clone());
+  const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.depth, ROOM.height), sideGlassMaterial.clone());
   sideWall.position.set(ROOM.leftWindowX, ROOM.height / 2, -0.05);
   sideWall.rotation.y = Math.PI / 2;
   sideWall.receiveShadow = true;
@@ -689,7 +727,7 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   group.add(rightWallGlow);
 
   const glass = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROOM.width, ROOM.height - 0.6),
+    new THREE.PlaneGeometry(ROOM.width, ROOM.height),
     new THREE.MeshStandardMaterial({
       color: 0x1a2a34,
       emissive: 0x0b1c2e,
@@ -703,8 +741,11 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   glass.position.set(0, ROOM.height / 2, ROOM.backWindowZ);
   group.add(glass);
 
-  group.add(createCityView(THREE, "back"));
-  group.add(createCityView(THREE, "left"));
+  const backCity = createCityView(THREE, "back");
+  const leftCity = createCityView(THREE, "left");
+  rainStreaks.push(...backCity.rainStreaks, ...leftCity.rainStreaks);
+  group.add(backCity.group);
+  group.add(leftCity.group);
 
   for (const x of [-4.25, -3.1, 3.35, 4.4]) {
     const sign = new THREE.Mesh(
@@ -717,13 +758,13 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
 
   const frameMaterial = new THREE.MeshStandardMaterial({color: 0x242a2e, roughness: 0.44, metalness: 0.22});
   for (const [x, y, width, height] of [
-    [0, ROOM.height - 0.1, ROOM.width, 0.16],
-    [0, 0.92, ROOM.width, 0.16],
-    [-ROOM.width / 2, ROOM.height / 2, 0.16, ROOM.height - 0.75],
-    [ROOM.width / 2, ROOM.height / 2, 0.16, ROOM.height - 0.75],
-    [0, ROOM.height / 2, 0.11, ROOM.height - 0.9],
-    [-2.65, ROOM.height / 2, 0.075, ROOM.height - 1],
-    [2.65, ROOM.height / 2, 0.075, ROOM.height - 1]
+    [0, ROOM.height, ROOM.width, 0.16],
+    [0, 0, ROOM.width, 0.16],
+    [-ROOM.width / 2, ROOM.height / 2, 0.16, ROOM.height],
+    [ROOM.width / 2, ROOM.height / 2, 0.16, ROOM.height],
+    [0, ROOM.height / 2, 0.11, ROOM.height],
+    [-2.65, ROOM.height / 2, 0.075, ROOM.height],
+    [2.65, ROOM.height / 2, 0.075, ROOM.height]
   ] as const) {
     const rail = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.1), frameMaterial);
     rail.position.set(x, y, ROOM.backWindowZ + 0.18);
@@ -734,12 +775,12 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   const sideFrameMaterial = new THREE.MeshStandardMaterial({color: 0x1a1d22, roughness: 0.45, metalness: 0.25});
   for (const side of [-1]) {
     for (const [z, y, width, height] of [
-      [-0.05, ROOM.height - 0.1, ROOM.depth, 0.11],
-      [-0.05, 0.92, ROOM.depth, 0.11],
-      [-ROOM.depth / 2, ROOM.height / 2, 0.09, ROOM.height - 0.9],
-      [ROOM.depth / 2, ROOM.height / 2, 0.09, ROOM.height - 0.9],
-      [-1.65, ROOM.height / 2, 0.075, ROOM.height - 1],
-      [1.65, ROOM.height / 2, 0.075, ROOM.height - 1]
+      [-0.05, ROOM.height, ROOM.depth, 0.11],
+      [-0.05, 0, ROOM.depth, 0.11],
+      [-ROOM.depth / 2, ROOM.height / 2, 0.09, ROOM.height],
+      [ROOM.depth / 2, ROOM.height / 2, 0.09, ROOM.height],
+      [-1.65, ROOM.height / 2, 0.075, ROOM.height],
+      [1.65, ROOM.height / 2, 0.075, ROOM.height]
     ] as const) {
       const frame = new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.08), sideFrameMaterial);
       frame.position.set(side * (ROOM.width / 2 - 0.08), y, z);
@@ -748,11 +789,15 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
     }
   }
 
-  return group;
+  const mapPanel = createRightWallMap(THREE);
+  group.add(mapPanel.group);
+
+  return {group, rainStreaks, mapTexture: mapPanel.texture, mapDart: mapPanel.dart};
 }
 
 function createCityView(THREE: typeof import("three"), side: "back" | "left") {
   const group = new THREE.Group();
+  const rainStreaks: Mesh[] = [];
   const skylineMaterial = new THREE.MeshStandardMaterial({color: 0x172030, emissive: 0x101c31, emissiveIntensity: 0.72, roughness: 0.8});
   const rainMaterial = new THREE.MeshBasicMaterial({color: 0xa9d8ff, transparent: true, opacity: 0.35});
   const buildingBaseY = 0.92;
@@ -798,10 +843,170 @@ function createCityView(THREE: typeof import("three"), side: "back" | "left") {
     if (side === "left") {
       rain.rotation.y = Math.PI / 2;
     }
+    rain.userData.speed = 0.012 + Math.random() * 0.018;
+    rainStreaks.push(rain);
     group.add(rain);
   }
 
-  return group;
+  return {group, rainStreaks};
+}
+
+function createRightWallMap(THREE: typeof import("three")) {
+  const group = new THREE.Group();
+  const texture = createWorldMapTexture(THREE, null);
+  const frameMaterial = new THREE.MeshStandardMaterial({color: 0x1d2025, roughness: 0.55, metalness: 0.18});
+  const mapMaterial = new THREE.MeshStandardMaterial({map: texture, color: 0xffffff, roughness: 0.72, metalness: 0.02});
+
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.72, 3.16), frameMaterial);
+  backing.castShadow = true;
+  backing.receiveShadow = true;
+  group.add(backing);
+
+  const map = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.42), mapMaterial);
+  map.position.x = -0.046;
+  map.rotation.y = -Math.PI / 2;
+  group.add(map);
+
+  const dart = new THREE.Group();
+  const red = new THREE.MeshStandardMaterial({color: 0xf04444, emissive: 0x5f0808, emissiveIntensity: 0.45, roughness: 0.38, metalness: 0.08});
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.38, 12), red);
+  shaft.rotation.z = Math.PI / 2;
+  shaft.position.x = -0.22;
+  shaft.castShadow = true;
+  dart.add(shaft);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 16), red);
+  head.rotation.z = Math.PI / 2;
+  head.position.x = -0.02;
+  head.castShadow = true;
+  dart.add(head);
+  dart.visible = false;
+  group.add(dart);
+
+  group.name = "visitor-world-map";
+  group.position.set(ROOM.rightWallX - 0.045, 3.12, -1.65);
+  group.rotation.y = -Math.PI / 2;
+  return {group, texture, dart};
+}
+
+function createWorldMapTexture(THREE: typeof import("three"), location: VisitorLocation | null) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1400;
+  canvas.height = 720;
+  drawWorldMap(canvas, location);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function updateWorldMapTexture(texture: Texture, location: VisitorLocation | null) {
+  if (!(texture.image instanceof HTMLCanvasElement)) {
+    return;
+  }
+  drawWorldMap(texture.image, location);
+  texture.needsUpdate = true;
+}
+
+function positionMapDart(dart: Object3D, location: VisitorLocation | null) {
+  if (!location || location.latitude === null || location.longitude === null) {
+    dart.visible = false;
+    return;
+  }
+  const {x, y} = projectLocationToMap(location.latitude, location.longitude);
+  dart.position.set(-0.14, y * 1.42, x * 2.9);
+  dart.visible = true;
+}
+
+function drawWorldMap(canvas: HTMLCanvasElement, location: VisitorLocation | null) {
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return;
+  }
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  const background = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+  background.addColorStop(0, "#0f1724");
+  background.addColorStop(1, "#070b12");
+  context.fillStyle = background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.strokeStyle = "rgba(127,255,230,0.08)";
+  context.lineWidth = 1;
+  for (let x = 100; x < canvas.width; x += 100) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x, canvas.height);
+    context.stroke();
+  }
+  for (let y = 90; y < canvas.height; y += 90) {
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(canvas.width, y);
+    context.stroke();
+  }
+
+  const landColor = "#25394f";
+  const edgeColor = "rgba(159, 226, 255, 0.45)";
+  const continents = [
+    [[0.12, 0.31], [0.2, 0.2], [0.31, 0.24], [0.34, 0.36], [0.27, 0.48], [0.19, 0.45]],
+    [[0.27, 0.5], [0.33, 0.57], [0.31, 0.73], [0.25, 0.84], [0.21, 0.66]],
+    [[0.43, 0.29], [0.53, 0.22], [0.64, 0.29], [0.61, 0.42], [0.49, 0.43]],
+    [[0.52, 0.45], [0.62, 0.49], [0.64, 0.67], [0.55, 0.78], [0.49, 0.62]],
+    [[0.63, 0.33], [0.76, 0.25], [0.87, 0.37], [0.82, 0.56], [0.68, 0.51]],
+    [[0.78, 0.68], [0.89, 0.65], [0.93, 0.78], [0.84, 0.84]]
+  ];
+  for (const continent of continents) {
+    context.beginPath();
+    for (const [index, point] of continent.entries()) {
+      const px = point[0] * canvas.width;
+      const py = point[1] * canvas.height;
+      if (index === 0) {
+        context.moveTo(px, py);
+      } else {
+        context.lineTo(px, py);
+      }
+    }
+    context.closePath();
+    context.fillStyle = landColor;
+    context.fill();
+    context.strokeStyle = edgeColor;
+    context.lineWidth = 4;
+    context.stroke();
+  }
+
+  context.fillStyle = "#dbeafe";
+  context.font = "700 34px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillText("VISITOR MAP", 54, 68);
+  context.font = "500 24px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillStyle = "rgba(219,234,254,0.62)";
+  context.fillText(locationLabel(location), 54, 106);
+
+  if (location !== null && location.latitude !== null && location.longitude !== null) {
+    const {x, y} = projectLocationToMap(location.latitude, location.longitude);
+    const px = canvas.width / 2 + x * canvas.width;
+    const py = canvas.height / 2 - y * canvas.height;
+    context.fillStyle = "rgba(255,68,68,0.25)";
+    context.beginPath();
+    context.arc(px, py, 36, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#ff4545";
+    context.beginPath();
+    context.arc(px, py, 12, 0, Math.PI * 2);
+    context.fill();
+  }
+}
+
+function projectLocationToMap(latitude: number, longitude: number) {
+  return {
+    x: Math.max(-0.46, Math.min(0.46, longitude / 360)),
+    y: Math.max(-0.42, Math.min(0.42, latitude / 180))
+  };
+}
+
+function locationLabel(location: VisitorLocation | null) {
+  if (!location || location.latitude === null || location.longitude === null) {
+    return "LOCATION PENDING";
+  }
+  return [location.city, location.region, location.country].filter(Boolean).join(" / ") || "VISITOR LOCATION";
 }
 
 function createDeskSupplies(THREE: typeof import("three")) {
@@ -930,6 +1135,40 @@ function createLeatherTexture(THREE: typeof import("three")) {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(5, 4);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createConcreteTexture(THREE: typeof import("three")) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 768;
+  canvas.height = 768;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.fillStyle = "#777a7c";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    for (let index = 0; index < 14_000; index += 1) {
+      const shade = 86 + Math.floor(Math.random() * 68);
+      context.fillStyle = `rgba(${shade}, ${shade}, ${shade}, ${0.08 + Math.random() * 0.16})`;
+      context.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1 + Math.random() * 2.5, 1 + Math.random() * 2.5);
+    }
+    context.strokeStyle = "rgba(40, 42, 45, 0.18)";
+    context.lineWidth = 2;
+    for (let index = 0; index < 18; index += 1) {
+      context.beginPath();
+      const y = Math.random() * canvas.height;
+      context.moveTo(0, y);
+      for (let x = 0; x <= canvas.width; x += 96) {
+        context.lineTo(x, y + Math.sin(index + x * 0.01) * 10);
+      }
+      context.stroke();
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
