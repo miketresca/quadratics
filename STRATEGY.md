@@ -29,6 +29,8 @@ quadratic input
 
 The final video belongs in the Lesson view. Pipeline logs exist to show how the lesson was produced and to make each stage rerunnable.
 
+The `/game` route is a separate prototype surface for a future worksheet-based lesson experience. It currently proves the game shell, character selection, arena interaction, progress persistence, placeholder lesson, and redacted logs without introducing paid generation into that path.
+
 ## Strategic Principles
 
 - Mathematical truth is deterministic. SymPy and domain code solve equations; LLMs explain and plan visuals only after the lesson exists.
@@ -47,12 +49,13 @@ The final video belongs in the Lesson view. Pipeline logs exist to show how the 
 4. Separate `elevenlabs_request` and `elevenlabs_audio` internally if request-only regeneration becomes useful; the UI already treats them as visible stages.
 5. Expand blackboard primitives carefully: better final-answer boxing, term-level highlights, layout safeguards, and captions that do not cover math.
 6. Add additional quadratic teaching methods only after factoring is dependable.
+7. Keep `/game` isolated while planning the worksheet-video pipeline; reuse platform primitives, but do not let prototype game mechanics destabilize the quadratic generator.
 
 ## Non-Goals
 
 - Do not broaden beyond quadratics without an explicit product decision.
 - Do not let an LLM solve math or invent deterministic transformations.
-- Do not implement HeyGen/avatar composition until the base educational video path is stable.
+- Do not make optional avatar work required for the base educational video path.
 - Do not rebuild credit or billing systems for the current internal workflow.
 - Do not make Motion Canvas lesson-specific; it should stay a data-driven renderer.
 

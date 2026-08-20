@@ -21,11 +21,12 @@ The project exists to make educational video generation inspectable and repeatab
 - Global Supabase-backed instructors with voice IDs, avatar IDs, and reference images
 - Provider usage cost logging for signed-in users
 - Account-scoped generation reuse so repeated equations reopen saved artifacts instead of spending provider credits again
+- `/game` prototype route with a game-style character select, WebGL lesson arena, local static prototype assets, account-scoped progress, a redacted logs drawer, and one PDF-backed placeholder lesson
 
 ## Repository Structure
 
-- `apps/web` - Next.js App Router application, auth shell, equation input, lesson preview, and pipeline logs
-- `apps/api` - FastAPI service, deterministic math, lesson/script/narration/animation orchestration, provider adapters, Supabase repositories, and render boundary
+- `apps/web` - Next.js App Router application, shared auth shell, equation input, lesson preview, pipeline logs, and `/game` prototype UI
+- `apps/api` - FastAPI service, deterministic math, lesson/script/narration/animation orchestration, game progress persistence, provider adapters, Supabase repositories, and render boundary
 - `apps/video` - Motion Canvas renderer and command-line render adapter
 - `packages/types` - Shared TypeScript contracts for lessons, scripts, artifacts, animation plans, and timelines
 - `packages/config` - Shared app configuration such as instructor placeholders
@@ -141,6 +142,12 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 For avatar generation, the API downloads the completed narration audio from private storage, uploads it to HeyGen as an audio asset, and then creates the avatar video with `audio_asset_id`. This avoids giving HeyGen private Supabase signed URLs directly.
 
+## Game Prototype
+
+The `/game` route is an isolated prototype for the worksheet/game lesson direction. It keeps the normal Quadratics header, then renders a game-style character selection screen and arena. Sprint 1 uses local static prototype assets under `apps/web/public/game`, one unlocked PDF-backed lesson, one locked future lesson orb, account-scoped progress, and a redacted logs drawer.
+
+The game prototype does not call OpenAI, ElevenLabs, HeyGen, Motion Canvas, or storage generation APIs. It is a UI/progress shell for the next worksheet-video work. Runtime game assets are served from the web app for speed; raw downloaded source ZIPs and local asset-ingestion folders should stay out of git unless an explicit asset-publishing task promotes optimized files into `apps/web/public/game`.
+
 ## Local Development
 
 Install dependencies:
@@ -163,6 +170,7 @@ Useful commands:
 - `pnpm video:dev` - Run the Motion Canvas editor at `http://localhost:9000`
 - `pnpm video:fixture` - Validate/load the golden fixture without OpenAI or ElevenLabs calls
 - `pnpm --filter @quadratics/video render` - Render from `QUADRATICS_RENDER_INPUT_PATH` to `QUADRATICS_RENDER_OUTPUT_PATH`
+- `/game?preview=arena&fighter=mario` - Development-only shortcut for visually checking the game arena with a selected fighter
 - `pnpm sb:link` - Link `infra/supabase` to the configured Supabase project
 - `pnpm sb:push:dry` - Preview Supabase migration changes
 - `pnpm sb:push` - Push Supabase migrations

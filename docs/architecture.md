@@ -26,6 +26,14 @@ The LLM is not part of the mathematical truth path. SymPy validates equations, e
 
 FastAPI protects API routes with Supabase bearer-token verification. Next.js renders the root `/` app shell and never exposes service-role credentials; authenticated actions still require Supabase session context.
 
+## Game Route Boundary
+
+The `/game` route is a separate product surface inside the same Next.js app. It reuses shared header/auth chrome and typed API-client patterns, but it does not import the quadratic equation form, lesson result, or pipeline log components for core rendering.
+
+Sprint 1 game code is intentionally a UI/progress shell. The web app serves optimized local prototype assets from `apps/web/public/game`, renders character select and arena interactions in the browser, and opens a public PDF placeholder lesson. The API only persists authenticated user progress for selected fighter and lesson status; it does not run paid providers or worksheet generation stages for the game route yet.
+
+Game progress is account-scoped and isolated from quadratic generation jobs. Public visitors can view the shell and redacted logs, but progress reads and mutations still require Supabase auth. Future worksheet generation should use a game/worksheet artifact namespace rather than overloading the quadratic generation pipeline before the contracts are proven.
+
 ## Pipeline Boundary
 
 Generation orchestration is artifact-backed. Each stage reads persisted upstream artifacts, computes an input hash from material inputs and configuration, and either reuses a matching completed artifact or writes a new attempt. Rerunning a stage marks dependent current downstream artifacts stale without deleting them.

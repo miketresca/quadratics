@@ -7,6 +7,16 @@ execution: code
 
 # Game Lesson Sprint 1 Plan
 
+## Implementation Status
+
+Status: completed on `feat/game-lesson-sprint-1`.
+
+Sprint 1 shipped the planned `/game` vertical slice: shared Quadratics header chrome, public signed-out game shell, authenticated fighter/progress persistence, one unlocked PDF-backed placeholder lesson, one locked future lesson interaction, reset behavior, redacted game logs, Supabase progress migration, local static runtime assets, and focused web/API tests.
+
+The implementation also went beyond the original shell plan by replacing flat character cards with WebGL character model previews, adding a WebGL arena with the Final Destination-style platform and lesson orbs, supporting keyboard movement/jump/collision in the arena, preserving the game route state across refreshes, and adding a camera zoom indicator.
+
+Review cleanup: raw source/download assets under root `assets/screens` and `assets/sprites` were removed from git tracking and ignored. Runtime assets remain under `apps/web/public/game`, with attribution in `apps/web/public/game/attribution.md`.
+
 ## Goal Capsule
 
 | Field | Value |
