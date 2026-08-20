@@ -68,12 +68,26 @@ function NotesMode({readmeMarkdown}: {readmeMarkdown: string}) {
   return (
     <section className="mx-auto grid max-w-5xl gap-6" aria-label="Demo">
       <div className="overflow-hidden rounded-md border border-zinc-800 bg-[#080c12] shadow-2xl shadow-black/40">
+        <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+          <div>
+            <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Demo Video</h2>
+            <p className="mt-1 text-xs text-zinc-500">11-minute walkthrough of the Quadratics pipeline.</p>
+          </div>
+          <a
+            className="rounded border border-emerald-400/35 bg-emerald-400/10 px-3 py-2 text-sm font-medium text-emerald-100 transition hover:border-emerald-300/70 hover:bg-emerald-400/15"
+            href="https://www.youtube.com/watch?v=rOgAuzpOOgE"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open YouTube
+          </a>
+        </div>
         <iframe
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
           className="aspect-video w-full"
           referrerPolicy="strict-origin-when-cross-origin"
-          src="https://www.youtube-nocookie.com/embed/rOgAuzpOOgE?rel=0"
+          src="https://www.youtube.com/embed/rOgAuzpOOgE?rel=0"
           title="Quadratics demo video"
         />
       </div>
