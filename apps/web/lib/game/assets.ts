@@ -21,6 +21,15 @@ export type GameFighter = {
   shortName: string;
   color: string;
   voiceCue: GameAudioCueId;
+  jumpCue: GameAudioCueId;
+  model: {
+    directory: string;
+    obj: string;
+    mtl: string;
+    scale: number;
+    yOffset: number;
+    rotationY: number;
+  };
   portrait: {
     x: number;
     y: number;
@@ -42,6 +51,18 @@ export type GameAudioCueId =
   | "pikachu"
   | "jigglypuff"
   | "luigi"
+  | "mario-jump"
+  | "donkey-kong-jump"
+  | "link-jump"
+  | "samus-jump"
+  | "captain-falcon-jump"
+  | "ness-jump"
+  | "yoshi-jump"
+  | "kirby-jump"
+  | "fox-jump"
+  | "pikachu-jump"
+  | "luigi-jump"
+  | "jigglypuff-jump"
   | "choose"
   | "start"
   | "select"
@@ -99,10 +120,10 @@ export const GAME_ASSETS: GameAsset[] = [
     id: "final-destination-bg",
     displayName: "Final Destination Background",
     role: "background",
-    src: "/game/assets/backgrounds/final-destination.svg",
+    src: "/game/assets/screens/background.jpg",
     width: 1280,
-    height: 720,
-    sourceUrl: "https://models.spriters-resource.com/nintendo_64/ssb/",
+    height: 960,
+    sourceUrl: "assets/screens/background.jpg",
     legalStatus: "prototype_reference",
     preload: false
   },
@@ -165,6 +186,18 @@ export const GAME_AUDIO_CUES: Record<GameAudioCueId, string> = {
   pikachu: "/game/assets/audio/pikachu.wav",
   luigi: "/game/assets/audio/luigi.wav",
   jigglypuff: "/game/assets/audio/jigglypuff.wav",
+  "mario-jump": "/game/assets/audio/mario-jump.wav",
+  "donkey-kong-jump": "/game/assets/audio/donkey-kong-jump.wav",
+  "link-jump": "/game/assets/audio/link-jump.wav",
+  "samus-jump": "/game/assets/audio/samus-jump.wav",
+  "captain-falcon-jump": "/game/assets/audio/captain-falcon-jump.wav",
+  "ness-jump": "/game/assets/audio/ness-jump.wav",
+  "yoshi-jump": "/game/assets/audio/yoshi-jump.wav",
+  "kirby-jump": "/game/assets/audio/kirby-jump.wav",
+  "fox-jump": "/game/assets/audio/fox-jump.wav",
+  "pikachu-jump": "/game/assets/audio/pikachu-jump.wav",
+  "luigi-jump": "/game/assets/audio/luigi-jump.wav",
+  "jigglypuff-jump": "/game/assets/audio/jigglypuff-jump.wav",
   choose: "/game/assets/audio/choose-your-character.wav",
   start: "/game/assets/audio/start.wav",
   select: "/game/assets/audio/select.wav",
@@ -174,6 +207,8 @@ export const GAME_AUDIO_CUES: Record<GameAudioCueId, string> = {
   complete: "/game/assets/audio/complete.wav"
 };
 
+const modelDirectory = (id: GameFighterId) => `/game/assets/models/characters/${id}/`;
+
 export const GAME_FIGHTERS: GameFighter[] = [
   {
     id: "mario",
@@ -181,6 +216,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "MARIO",
     color: "#ef4444",
     voiceCue: "mario",
+    jumpCue: "mario-jump",
+    model: {directory: modelDirectory("mario"), obj: "mario.obj", mtl: "mario.mtl", scale: 0.09, yOffset: -0.35, rotationY: 0.15},
     portrait: {x: 1, y: 10, width: 42, height: 32}
   },
   {
@@ -189,6 +226,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "DK",
     color: "#f97316",
     voiceCue: "donkey-kong",
+    jumpCue: "donkey-kong-jump",
+    model: {directory: modelDirectory("donkey-kong"), obj: "donkey.obj", mtl: "donkey.mtl", scale: 0.075, yOffset: -0.42, rotationY: 0.15},
     portrait: {x: 93, y: 10, width: 42, height: 32}
   },
   {
@@ -197,6 +236,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "LINK",
     color: "#86efac",
     voiceCue: "link",
+    jumpCue: "link-jump",
+    model: {directory: modelDirectory("link"), obj: "link.obj", mtl: "link.mtl", scale: 0.09, yOffset: -0.35, rotationY: 0.15},
     portrait: {x: 231, y: 10, width: 42, height: 32}
   },
   {
@@ -205,6 +246,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "SAMUS",
     color: "#fb923c",
     voiceCue: "samus",
+    jumpCue: "samus-jump",
+    model: {directory: modelDirectory("samus"), obj: "samus.obj", mtl: "samus.mtl", scale: 0.09, yOffset: -0.35, rotationY: 0.15},
     portrait: {x: 323, y: 10, width: 42, height: 32}
   },
   {
@@ -213,6 +256,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "FALCON",
     color: "#facc15",
     voiceCue: "captain-falcon",
+    jumpCue: "captain-falcon-jump",
+    model: {directory: modelDirectory("captain-falcon"), obj: "cf.obj", mtl: "cf.mtl", scale: 0.09, yOffset: -0.35, rotationY: 0.15},
     portrait: {x: 139, y: 96, width: 42, height: 32}
   },
   {
@@ -221,6 +266,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "NESS",
     color: "#f43f5e",
     voiceCue: "ness",
+    jumpCue: "ness-jump",
+    model: {directory: modelDirectory("ness"), obj: "ness.obj", mtl: "ness.mtl", scale: 0.09, yOffset: -0.3, rotationY: 0.15},
     portrait: {x: 277, y: 96, width: 42, height: 32}
   },
   {
@@ -229,6 +276,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "YOSHI",
     color: "#4ade80",
     voiceCue: "yoshi",
+    jumpCue: "yoshi-jump",
+    model: {directory: modelDirectory("yoshi"), obj: "Yoshi.obj", mtl: "Yoshi.mtl", scale: 0.085, yOffset: -0.36, rotationY: 0.15},
     portrait: {x: 47, y: 53, width: 42, height: 32}
   },
   {
@@ -237,6 +286,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "KIRBY",
     color: "#f9a8d4",
     voiceCue: "kirby",
+    jumpCue: "kirby-jump",
+    model: {directory: modelDirectory("kirby"), obj: "kirby.obj", mtl: "kirby.mtl", scale: 0.11, yOffset: -0.28, rotationY: 0.15},
     portrait: {x: 139, y: 53, width: 42, height: 32}
   },
   {
@@ -245,6 +296,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "FOX",
     color: "#f59e0b",
     voiceCue: "fox",
+    jumpCue: "fox-jump",
+    model: {directory: modelDirectory("fox"), obj: "fox.obj", mtl: "fox.mtl", scale: 0.09, yOffset: -0.35, rotationY: 0.15},
     portrait: {x: 231, y: 53, width: 42, height: 32}
   },
   {
@@ -253,6 +306,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "PIKA",
     color: "#fde047",
     voiceCue: "pikachu",
+    jumpCue: "pikachu-jump",
+    model: {directory: modelDirectory("pikachu"), obj: "pika.obj", mtl: "pika.mtl", scale: 0.12, yOffset: -0.25, rotationY: 0.15},
     portrait: {x: 323, y: 53, width: 42, height: 32}
   },
   {
@@ -261,6 +316,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "LUIGI",
     color: "#22c55e",
     voiceCue: "luigi",
+    jumpCue: "luigi-jump",
+    model: {directory: modelDirectory("luigi"), obj: "luigi.obj", mtl: "luigi.mtl", scale: 0.09, yOffset: -0.35, rotationY: 0.15},
     portrait: {x: 47, y: 96, width: 42, height: 32}
   },
   {
@@ -269,6 +326,8 @@ export const GAME_FIGHTERS: GameFighter[] = [
     shortName: "PUFF",
     color: "#f0abfc",
     voiceCue: "jigglypuff",
+    jumpCue: "jigglypuff-jump",
+    model: {directory: modelDirectory("jigglypuff"), obj: "jiggly.obj", mtl: "jiggly.mtl", scale: 0.13, yOffset: -0.24, rotationY: 0.15},
     portrait: {x: 47, y: 139, width: 42, height: 32}
   }
 ];

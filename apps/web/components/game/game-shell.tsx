@@ -3,6 +3,8 @@
 import type {CurrentUser, GameFighterId, GameLessonId, GameProgress} from "@quadratics/types";
 import type {CSSProperties, Dispatch, KeyboardEvent as ReactKeyboardEvent, RefObject, SetStateAction} from "react";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import type {Group, Material, Object3D, PerspectiveCamera, Scene, WebGLRenderer} from "three";
+import type {OrbitControls as OrbitControlsType} from "three/examples/jsm/controls/OrbitControls.js";
 
 import {GAME_AUDIO_CUES, GAME_FIGHTERS, getAsset, getFighter, type GameAudioCueId, type GameFighter} from "@/lib/game/assets";
 import {GAME_LESSONS, getGameLesson, type GameLesson} from "@/lib/game/lessons";
@@ -102,20 +104,6 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
   }, []);
 
   useEffect(() => {
-    if (mode !== "select") {
-      return;
-    }
-    function startOnSpace(event: KeyboardEvent) {
-      if (event.key === " " && !event.repeat && !prompt && !isEditableOrControlTarget(event.target)) {
-        event.preventDefault();
-        void startGame();
-      }
-    }
-    window.addEventListener("keydown", startOnSpace);
-    return () => window.removeEventListener("keydown", startOnSpace);
-  }, [mode, prompt, selectedFighterId, signedIn]);
-
-  useEffect(() => {
     playerRef.current = player;
   }, [player]);
 
@@ -176,35 +164,35 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
     }
     const tick = () => {
       const current = playerRef.current;
-        const keys = keysRef.current;
-        let nextX = current.x;
-        let nextVy = current.vy;
-        let facing = current.facing;
-        if (keys.has("arrowleft") || keys.has("a")) {
-          nextX -= SPEED;
-          facing = -1;
-        }
-        if (keys.has("arrowright") || keys.has("d")) {
-          nextX += SPEED;
-          facing = 1;
-        }
-        if ((keys.has(" ") || keys.has("arrowup") || keys.has("w")) && current.grounded) {
-          nextVy = JUMP_VELOCITY;
-          playCue(audioRef, "jump");
-        }
-        const nextY = current.y + nextVy;
-        nextVy += GRAVITY;
-        const grounded = nextY >= GROUND_Y;
-        const boundedX = Math.max(130, Math.min(ARENA_WIDTH - 130 - PLAYER_WIDTH, nextX));
-        const resolvedY = grounded ? GROUND_Y : nextY;
-        const next = {x: boundedX, y: resolvedY, vy: grounded ? 0 : nextVy, grounded, facing};
+      const keys = keysRef.current;
+      let nextX = current.x;
+      let nextVy = current.vy;
+      let facing = current.facing;
+      if (keys.has("arrowleft") || keys.has("a")) {
+        nextX -= SPEED;
+        facing = -1;
+      }
+      if (keys.has("arrowright") || keys.has("d")) {
+        nextX += SPEED;
+        facing = 1;
+      }
+      if ((keys.has(" ") || keys.has("arrowup") || keys.has("w")) && current.grounded) {
+        nextVy = JUMP_VELOCITY;
+        playCue(audioRef, selectedFighter.jumpCue);
+      }
+      const nextY = current.y + nextVy;
+      nextVy += GRAVITY;
+      const grounded = nextY >= GROUND_Y;
+      const boundedX = Math.max(130, Math.min(ARENA_WIDTH - 130 - PLAYER_WIDTH, nextX));
+      const resolvedY = grounded ? GROUND_Y : nextY;
+      const next = {x: boundedX, y: resolvedY, vy: grounded ? 0 : nextVy, grounded, facing};
       playerRef.current = next;
       setPlayer(next);
-        const hitOrb = ORBS.find((orb) => intersectsOrb(next, orb));
-        if (hitOrb && collisionLessonRef.current !== hitOrb.lessonId) {
-          collisionLessonRef.current = hitOrb.lessonId;
+      const hitOrb = ORBS.find((orb) => intersectsOrb(next, orb));
+      if (hitOrb && collisionLessonRef.current !== hitOrb.lessonId) {
+        collisionLessonRef.current = hitOrb.lessonId;
         activateLesson(hitOrb.lessonId);
-        }
+      }
       frameRef.current = requestAnimationFrame(tick);
     };
     frameRef.current = requestAnimationFrame(tick);
@@ -214,7 +202,7 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
       }
       frameRef.current = null;
     };
-  }, [mode]);
+  }, [mode, selectedFighter.jumpCue]);
 
   const completedLessonIds = useMemo(
     () => new Set(progress.lessons.filter((lesson) => lesson.status === "completed").map((lesson) => lesson.lessonId)),
@@ -328,12 +316,14 @@ export function GameShell({initialUser}: {initialUser: CurrentUser | null}) {
   }
 
   return (
-    <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-16 pt-28 sm:px-6">
-      <div className="game-stage-shell relative overflow-hidden rounded border border-zinc-800 bg-[#030508]/86 shadow-[0_0_40px_rgba(16,185,129,0.08)]">
+    <section className="mx-auto flex min-h-screen w-full max-w-[min(1680px,calc(100vw-1.5rem))] flex-col px-3 pb-8 pt-24 sm:px-4">
+      <div className="game-stage-shell relative min-h-[calc(100vh-7rem)] overflow-hidden rounded border border-zinc-800 bg-[#030508]/86 shadow-[0_0_40px_rgba(16,185,129,0.08)]">
         <div className="flex items-center justify-between border-b border-zinc-800/80 px-4 py-3">
           <div>
             <p className="font-mono text-xs uppercase tracking-wide text-emerald-300">Quadratics Game Lab</p>
-            <h1 className="font-mono text-xl font-bold tracking-wide text-zinc-100 sm:text-2xl">Choose your student</h1>
+            <h1 className="font-mono text-xl font-bold tracking-wide text-zinc-100 sm:text-2xl">
+              {mode === "select" ? "Choose your student" : "Select your lesson"}
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             {signedIn ? (
@@ -496,7 +486,7 @@ function CharacterSelect({
           onClick={() => void onStart()}
           type="button"
         >
-          {startBusy ? "Loading" : "Press Space"}
+          {startBusy ? "Loading" : "Start lesson"}
         </button>
       </div>
     </div>
@@ -518,15 +508,14 @@ function Arena({
 }) {
   return (
     <div className="p-4">
-      <div className="relative mx-auto aspect-video max-h-[70vh] overflow-hidden rounded border border-zinc-700 bg-black">
-        <img alt="" className="absolute inset-0 h-full w-full object-cover" src="/game/assets/backgrounds/final-destination.svg" />
+      <div className="relative mx-auto h-[min(74vh,820px)] min-h-[560px] overflow-hidden rounded border border-zinc-700 bg-black">
+        <ThreeArenaScene player={player} selectedFighter={selectedFighter} />
         {ORBS.map((orb) => {
           const lesson = getGameLesson(orb.lessonId);
-          const asset = getAsset(lesson.orbAssetId);
           return (
             <button
               aria-label={`${lesson.title}, ${lesson.status}`}
-              className="absolute h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              className="absolute h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-300"
               key={lesson.id}
               onClick={() => onActivateLesson(lesson.id)}
               onFocus={() => {
@@ -542,22 +531,12 @@ function Arena({
               style={{left: `${(orb.x / ARENA_WIDTH) * 100}%`, top: `${(orb.y / ARENA_HEIGHT) * 100}%`}}
               type="button"
             >
-              <img alt="" className="h-full w-full animate-pulse object-contain" src={asset.src} />
-              <span className="absolute -bottom-5 left-1/2 w-36 -translate-x-1/2 font-mono text-[10px] uppercase text-zinc-300">
+              <span className="absolute top-[72%] left-1/2 w-36 -translate-x-1/2 font-mono text-[10px] uppercase text-zinc-300">
                 {completedLessonIds.has(lesson.id) ? "complete" : lesson.status}
               </span>
             </button>
           );
         })}
-        <SheetPortrait
-          className="absolute h-[17%] w-[13%]"
-          fighter={selectedFighter}
-          style={{
-            left: `${(player.x / ARENA_WIDTH) * 100}%`,
-            top: `${(player.y / ARENA_HEIGHT) * 100}%`,
-            transform: `translate(-50%, -100%) scaleX(${player.facing})`
-          }}
-        />
         <div className="absolute bottom-3 left-4 rounded border border-zinc-700 bg-black/55 px-3 py-2 font-mono text-xs uppercase text-zinc-300">
           {selectedFighter.name} / WASD or arrows / Space jump
         </div>
@@ -580,6 +559,287 @@ function Arena({
       </div>
     </div>
   );
+}
+
+function ThreeArenaScene({player, selectedFighter}: {player: PlayerState; selectedFighter: GameFighter}) {
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  const playerStateRef = useRef(player);
+
+  useEffect(() => {
+    playerStateRef.current = player;
+  }, [player]);
+
+  useEffect(() => {
+    let disposed = false;
+    let renderer: WebGLRenderer | null = null;
+    let scene: Scene | null = null;
+    let camera: PerspectiveCamera | null = null;
+    let animationFrame: number | null = null;
+    let resizeObserver: ResizeObserver | null = null;
+    let studentModel: Group | null = null;
+    let unlockedOrb: Group | null = null;
+    let lockedOrb: Group | null = null;
+    let controls: OrbitControlsType | null = null;
+
+    async function setupScene() {
+      const mount = mountRef.current;
+      if (!mount) {
+        return;
+      }
+      const [THREE, {MTLLoader}, {OBJLoader}, {OrbitControls}] = await Promise.all([
+        import("three"),
+        import("three/examples/jsm/loaders/MTLLoader.js"),
+        import("three/examples/jsm/loaders/OBJLoader.js"),
+        import("three/examples/jsm/controls/OrbitControls.js")
+      ]);
+      if (disposed || !mountRef.current) {
+        return;
+      }
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(38, 16 / 9, 0.1, 160);
+      camera.position.set(0, 2.2, 9.8);
+      camera.lookAt(0, -0.45, 0);
+
+      renderer = new THREE.WebGLRenderer({alpha: true, antialias: true});
+      renderer.setClearColor(0x000000, 0);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.domElement.className = "absolute inset-0 h-full w-full";
+      mount.append(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.enablePan = false;
+      controls.minDistance = 7.4;
+      controls.maxDistance = 14;
+      controls.minPolarAngle = Math.PI * 0.2;
+      controls.maxPolarAngle = Math.PI * 0.48;
+      controls.target.set(0, -0.65, 0);
+
+      const ambient = new THREE.AmbientLight(0xffffff, 2.3);
+      const key = new THREE.DirectionalLight(0xffffff, 2.6);
+      key.position.set(-4, 6, 7);
+      const rim = new THREE.DirectionalLight(0x86efac, 1.2);
+      rim.position.set(4, 2, -4);
+      scene.add(ambient, key, rim);
+      scene.add(createSpaceBackdrop(THREE));
+
+      const platform = await loadObjModel({
+        directory: "/game/assets/models/objects/platform/",
+        mtl: "final_destination.mtl",
+        obj: "final_destination.obj",
+        MTLLoader,
+        OBJLoader
+      });
+      if (disposed || !scene) {
+        return;
+      }
+      normalizeObject(THREE, platform, 6.6);
+      platform.position.set(0, -1.95, 0);
+      platform.rotation.set(0.12, 0, 0);
+      scene.add(platform);
+
+      unlockedOrb = await loadObjModel({
+        directory: "/game/assets/models/objects/smash-ball/",
+        mtl: "ItmSmashBall.mtl",
+        obj: "ItmSmashBall.obj",
+        MTLLoader,
+        OBJLoader
+      });
+      if (disposed || !scene || !unlockedOrb) {
+        return;
+      }
+      normalizeObject(THREE, unlockedOrb, 0.58);
+      unlockedOrb.position.set(screenXToWorld(ORBS[0].x), 1.35, 0.25);
+      scene.add(unlockedOrb);
+
+      lockedOrb = unlockedOrb.clone();
+      lockedOrb.position.set(screenXToWorld(ORBS[1].x), 1.35, 0.25);
+      lockedOrb.traverse((child) => {
+        const mesh = child as Object3D & {material?: Material | Material[]};
+        if (!mesh.material) {
+          return;
+        }
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const tinted = materials.map((original) => {
+          const material = original.clone() as Material & {color?: {set: (color: number) => void}};
+          material.color?.set(0x9ca3af);
+          material.opacity = 0.45;
+          material.transparent = true;
+          return material;
+        });
+        if (Array.isArray(mesh.material)) {
+          mesh.material = tinted;
+        } else {
+          mesh.material = tinted[0];
+        }
+      });
+      scene.add(lockedOrb);
+
+      studentModel = await loadObjModel({
+        directory: selectedFighter.model.directory,
+        mtl: selectedFighter.model.mtl,
+        obj: selectedFighter.model.obj,
+        MTLLoader,
+        OBJLoader
+      });
+      if (disposed || !scene || !studentModel) {
+        return;
+      }
+      removeModelHelpers(studentModel);
+      normalizeObject(THREE, studentModel, selectedFighter.model.scale * 22);
+      studentModel.position.y = selectedFighter.model.yOffset - 0.45;
+      scene.add(studentModel);
+
+      const resize = () => {
+        if (!mountRef.current || !renderer || !camera) {
+          return;
+        }
+        const rect = mountRef.current.getBoundingClientRect();
+        renderer.setSize(rect.width, rect.height, false);
+        camera.aspect = rect.width / Math.max(1, rect.height);
+        camera.updateProjectionMatrix();
+      };
+      resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(mount);
+      resize();
+
+      const animate = () => {
+        if (!renderer || !scene || !camera) {
+          return;
+        }
+        if (studentModel) {
+          const current = playerStateRef.current;
+          studentModel.position.x = screenXToWorld(current.x);
+          studentModel.position.y = selectedFighter.model.yOffset - 0.45 + ((GROUND_Y - current.y) / GROUND_Y) * 2.2;
+          studentModel.rotation.y = selectedFighter.model.rotationY + (current.facing === -1 ? Math.PI : 0);
+        }
+        if (unlockedOrb) {
+          unlockedOrb.rotation.y += 0.018;
+          unlockedOrb.rotation.z += 0.008;
+        }
+        if (lockedOrb) {
+          lockedOrb.rotation.y -= 0.014;
+          lockedOrb.rotation.z += 0.006;
+        }
+        controls?.update();
+        renderer.render(scene, camera);
+        animationFrame = requestAnimationFrame(animate);
+      };
+      animate();
+    }
+
+    void setupScene();
+
+    return () => {
+      disposed = true;
+      if (animationFrame !== null) {
+        cancelAnimationFrame(animationFrame);
+      }
+      resizeObserver?.disconnect();
+      if (renderer) {
+        renderer.dispose();
+        renderer.domElement.remove();
+      }
+      controls?.dispose();
+      scene?.traverse((child) => {
+        const mesh = child as Object3D & {
+          geometry?: {dispose: () => void};
+          material?: {dispose?: () => void} | Array<{dispose?: () => void}>;
+        };
+        mesh.geometry?.dispose();
+        if (Array.isArray(mesh.material)) {
+          for (const material of mesh.material) {
+            material.dispose?.();
+          }
+        } else {
+          mesh.material?.dispose?.();
+        }
+      });
+    };
+  }, [selectedFighter]);
+
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute inset-0 overflow-hidden bg-black"
+      ref={mountRef}
+    />
+  );
+}
+
+async function loadObjModel({
+  directory,
+  MTLLoader,
+  mtl,
+  obj,
+  OBJLoader
+}: {
+  directory: string;
+  MTLLoader: typeof import("three/examples/jsm/loaders/MTLLoader.js").MTLLoader;
+  mtl: string;
+  obj: string;
+  OBJLoader: typeof import("three/examples/jsm/loaders/OBJLoader.js").OBJLoader;
+}) {
+  const materialLoader = new MTLLoader();
+  materialLoader.setPath(directory);
+  const materials = await materialLoader.loadAsync(mtl);
+  materials.preload();
+
+  const objectLoader = new OBJLoader();
+  objectLoader.setPath(directory);
+  objectLoader.setMaterials(materials);
+  return objectLoader.loadAsync(obj);
+}
+
+function normalizeObject(THREE: typeof import("three"), object: Object3D, targetHeight: number) {
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const scale = targetHeight / Math.max(size.x, size.y, size.z, 0.001);
+  object.scale.setScalar(scale);
+  object.position.sub(center.multiplyScalar(scale));
+}
+
+function createSpaceBackdrop(THREE: typeof import("three")) {
+  const group = new THREE.Group();
+  const starVertices: number[] = [];
+  for (let index = 0; index < 900; index += 1) {
+    starVertices.push(THREE.MathUtils.randFloatSpread(70), THREE.MathUtils.randFloatSpread(42), -20 - Math.random() * 60);
+  }
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starVertices, 3));
+  const stars = new THREE.Points(
+    starGeometry,
+    new THREE.PointsMaterial({color: 0xdbeafe, opacity: 0.82, size: 0.055, transparent: true})
+  );
+  group.add(stars);
+
+  const nebulaGeometry = new THREE.PlaneGeometry(36, 18);
+  const nebulaMaterial = new THREE.MeshBasicMaterial({color: 0x3b1a7a, opacity: 0.38, transparent: true, depthWrite: false});
+  const nebula = new THREE.Mesh(nebulaGeometry, nebulaMaterial);
+  nebula.position.set(3, -1, -24);
+  nebula.rotation.z = -0.08;
+  group.add(nebula);
+  return group;
+}
+
+function removeModelHelpers(model: Object3D) {
+  const helperNames = ["pipe", "fireball", "egg", "tounge", "tongue"];
+  const removable: Object3D[] = [];
+  model.traverse((child) => {
+    const name = child.name.toLowerCase();
+    if (helperNames.some((helperName) => name.includes(helperName))) {
+      removable.push(child);
+    }
+  });
+  for (const child of removable) {
+    child.parent?.remove(child);
+  }
+}
+
+function screenXToWorld(x: number) {
+  return (x / ARENA_WIDTH - 0.5) * 7.4;
 }
 
 function SheetPortrait({
@@ -796,11 +1056,4 @@ function playCue(audioRef: RefObject<Partial<Record<GameAudioCueId, HTMLAudioEle
   void element.play().catch(() => {
     // Browsers may block audio until a user gesture; gameplay continues without sound.
   });
-}
-
-function isEditableOrControlTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  return Boolean(target.closest("button, input, textarea, select, summary, a, [contenteditable='true']"));
 }

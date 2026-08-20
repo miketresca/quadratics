@@ -81,7 +81,7 @@ describe("GameShell", () => {
       root.render(<GameShell initialUser={{id: "1", email: "student@example.com", displayName: null, creditBalance: 0}} />);
     });
 
-    const start = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Press Space"));
+    const start = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Start lesson"));
     await act(async () => {
       start?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
@@ -101,7 +101,7 @@ describe("GameShell", () => {
     await act(async () => {
       root.render(<GameShell initialUser={{id: "1", email: "student@example.com", displayName: null, creditBalance: 0}} />);
     });
-    const start = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Press Space"));
+    const start = Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes("Start lesson"));
     await act(async () => {
       start?.dispatchEvent(new MouseEvent("click", {bubbles: true}));
     });
