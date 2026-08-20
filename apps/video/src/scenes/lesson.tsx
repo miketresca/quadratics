@@ -2,7 +2,7 @@ import {Layout, Rect, Txt, makeScene2D} from "@motion-canvas/2d";
 import {all, createRef, waitFor} from "@motion-canvas/core";
 
 import {showVisualAction} from "../actions/highlight";
-import {assertSupportedCue, durationForCue, isRenderableAction} from "../actions/dispatcher";
+import {assertSupportedCue, durationForCue, isRenderableAction, overlayActionFor} from "../actions/dispatcher";
 import {writeMath} from "../actions/writeMath";
 import {chalkSfxTracksForTimeline} from "../audio/chalkEffects";
 import {captionGroupsForNarration, captionWordSlots} from "../captions/captions";
@@ -78,13 +78,13 @@ export default makeScene2D(function* (view) {
             chalkCursorRef(),
             linesById.get(lineId)!.y,
           );
-        } else if (
-          lineId &&
-          lineIndex !== undefined &&
-          isRenderableAction(cue.animation.action) &&
-          ["highlight", "emphasize", "circle", "underline", "box"].includes(cue.animation.action)
-        ) {
-          yield* showVisualAction(highlightRefs[lineIndex](), cue.animation.action, duration);
+        } else if (lineId && lineIndex !== undefined && isRenderableAction(cue.animation.action)) {
+          const overlayAction = overlayActionFor(cue.animation.action);
+          if (overlayAction) {
+            yield* showVisualAction(highlightRefs[lineIndex](), overlayAction, duration);
+          } else {
+            yield* waitFor(duration);
+          }
         } else {
           yield* waitFor(duration);
         }

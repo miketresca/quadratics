@@ -1695,7 +1695,7 @@ function StageTitle({accent, title}: {accent: Accent; title: string}) {
 
 function StageInfo({title}: {title: string}) {
   const triggerRef = useRef<HTMLSpanElement>(null);
-  const [position, setPosition] = useState<{left: number; top: number} | null>(null);
+  const [position, setPosition] = useState<{left: number; top: number; width: number} | null>(null);
   const details = stageDetails[title] ?? fallbackStageDetails;
   const open = position !== null;
 
@@ -1704,12 +1704,14 @@ function StageInfo({title}: {title: string}) {
     if (!rect) {
       return;
     }
-    const width = Math.min(420, window.innerWidth - 24);
-    const left = Math.max(12, Math.min(rect.left - width - 24, Math.round(window.innerWidth * 0.08)));
+    const width = Math.min(360, window.innerWidth - 24);
+    const left = window.innerWidth >= 1180
+      ? 16
+      : Math.max(12, Math.min(rect.left - width - 20, window.innerWidth - width - 12));
     const preferredTop = rect.top - 12;
     const maxPanelHeight = Math.min(440, window.innerHeight - 24);
     const top = Math.max(12, Math.min(preferredTop, window.innerHeight - maxPanelHeight - 12));
-    setPosition({left, top});
+    setPosition({left, top, width});
   }
 
   return (
@@ -1735,8 +1737,8 @@ function StageInfo({title}: {title: string}) {
       </span>
       {position ? (
         <span
-          className="pointer-events-none fixed z-[120] max-h-[min(440px,calc(100vh-24px))] w-[min(420px,calc(100vw-24px))] overflow-auto rounded border border-zinc-700 bg-[#090d14]/98 p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/70 backdrop-blur"
-          style={{left: position.left, top: position.top}}
+          className="pointer-events-none fixed z-[240] max-h-[min(440px,calc(100vh-24px))] overflow-auto rounded border border-zinc-700 bg-[#090d14]/98 p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/70 backdrop-blur"
+          style={{left: position.left, top: position.top, width: position.width}}
         >
           <span className="block break-words font-mono text-[11px] uppercase tracking-wide text-emerald-300">{title}</span>
           <span className="mt-2 block break-words text-zinc-200">{details.summary}</span>

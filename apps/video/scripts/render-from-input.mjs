@@ -1,6 +1,6 @@
 import {spawn} from "node:child_process";
 import {cpus, tmpdir} from "node:os";
-import {mkdtemp, readdir, readFile, rm, writeFile} from "node:fs/promises";
+import {mkdtemp, readdir, readFile, rm, stat, writeFile} from "node:fs/promises";
 import {existsSync} from "node:fs";
 import {resolve} from "node:path";
 
@@ -21,7 +21,6 @@ if (!inputPath || !outputPath) {
 
 const generatedInputPath = resolve(videoRoot, "src/data/render-input.generated.json");
 const outputDir = resolve(videoRoot, "output");
-const frameDir = resolve(outputDir, "project");
 
 const originalGeneratedInput = await readFile(generatedInputPath, "utf-8");
 const renderInput = JSON.parse(await readFile(inputPath, "utf-8"));
@@ -57,9 +56,9 @@ try {
     "--window-size=1920,1080",
     `http://127.0.0.1:${address.port}/?render`
   ]);
-  const frameCount = await waitForRenderedFrames(frameDir);
-  if (frameCount === 0) {
-    throw new Error("Motion Canvas did not create an output frame directory");
+  const frameExport = await waitForRenderedFrames(outputDir);
+  if (!frameExport) {
+    throw new Error(`Motion Canvas did not create PNG frames. ${renderInputSummary(renderInput)}`);
   }
   const narrationAudioPath = await prepareNarrationAudio(renderInput, tempDir);
   const chalkAudioPath = await prepareChalkSfxAudio(renderInput, tempDir);
@@ -70,7 +69,7 @@ try {
     "-framerate",
     String(fps),
     "-i",
-    resolve(frameDir, "%06d.png")
+    frameExport.pattern
   ];
   const audioInputs = [];
   if (narrationAudioPath) {
@@ -309,17 +308,44 @@ function virtualTimeBudgetForRender(renderInput) {
 }
 
 async function waitForRenderedFrames(directory) {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (existsSync(directory)) {
-      const files = await readdir(directory);
-      const frameCount = files.filter((file) => file.endsWith(".png")).length;
-      if (frameCount > 0) {
-        return frameCount;
-      }
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    const exportLocation = await findRenderedFrames(directory);
+    if (exportLocation) {
+      return exportLocation;
     }
-    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    await new Promise((resolveWait) => setTimeout(resolveWait, 200));
   }
-  return 0;
+  return null;
+}
+
+async function findRenderedFrames(directory) {
+  if (!existsSync(directory)) {
+    return null;
+  }
+  const entries = await readdir(directory);
+  const directFrames = entries.filter((file) => file.endsWith(".png"));
+  if (directFrames.length > 0) {
+    return {count: directFrames.length, pattern: resolve(directory, "%06d.png")};
+  }
+  for (const entry of entries) {
+    const child = resolve(directory, entry);
+    const childStat = await stat(child);
+    if (!childStat.isDirectory()) {
+      continue;
+    }
+    const childEntries = await readdir(child);
+    const childFrames = childEntries.filter((file) => file.endsWith(".png"));
+    if (childFrames.length > 0) {
+      return {count: childFrames.length, pattern: resolve(child, "%06d.png")};
+    }
+  }
+  return null;
+}
+
+function renderInputSummary(renderInput) {
+  const cues = Array.isArray(renderInput?.timeline?.cues) ? renderInput.timeline.cues : [];
+  const actions = [...new Set(cues.map((cue) => cue?.animation?.action).filter(Boolean))].join(", ") || "none";
+  return `Render input: ${cues.length} cue(s), ${Number(renderInput?.timeline?.durationSeconds ?? 0).toFixed(2)}s, actions: ${actions}.`;
 }
 
 function escapeConcatPath(path) {
