@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Space platform background">
+  <defs>
+    <radialGradient id="space" cx="50%" cy="40%" r="65%">
+      <stop offset="0" stop-color="#312e81"/>
+      <stop offset=".45" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#020617"/>
+    </radialGradient>
+    <linearGradient id="platform" x1="0" x2="1">
+      <stop offset="0" stop-color="#334155"/>
+      <stop offset=".5" stop-color="#111827"/>
+      <stop offset="1" stop-color="#581c87"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#space)"/>
+  <path d="M165 178c170-92 349-95 548-12 195 81 290 60 411-3" stroke="#a78bfa" stroke-opacity=".5" stroke-width="28" fill="none"/>
+  <path d="M145 182c180-100 360-105 568-17 196 83 293 54 420-14" stroke="#22d3ee" stroke-opacity=".35" stroke-width="10" fill="none"/>
+  <g fill="#f8fafc" opacity=".75">
+    <circle cx="120" cy="90" r="2"/><circle cx="260" cy="220" r="1.5"/><circle cx="410" cy="80" r="2"/><circle cx="590" cy="250" r="1.5"/><circle cx="770" cy="110" r="2"/><circle cx="1030" cy="230" r="1.5"/><circle cx="1190" cy="92" r="2"/>
+  </g>
+  <path d="M230 500h820l91 58-120 43H263l-127-45z" fill="url(#platform)" stroke="#94a3b8" stroke-opacity=".55" stroke-width="4"/>
+  <path d="M260 501h763l-66 30H325z" fill="#020617" opacity=".55"/>
+  <path d="M321 559h644l48 38H274z" fill="#0f172a"/>
+</svg>

@@ -44,6 +44,17 @@ async def test_game_progress_rejects_locked_lesson_completion(authenticated_clie
 
 
 @pytest.mark.asyncio
+async def test_game_progress_rejects_lesson_completion_before_start(authenticated_client):
+    response = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "complete_lesson", "lessonId": "volume-cubes-lesson-1"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Lesson has not been started"
+
+
+@pytest.mark.asyncio
 async def test_game_progress_rejects_invalid_fighter(authenticated_client):
     response = await authenticated_client.put(
         "/api/v1/game/me/progress",

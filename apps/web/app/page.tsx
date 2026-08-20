@@ -1,10 +1,9 @@
 import type {CurrentUser} from "@quadratics/types";
-import {execSync} from "node:child_process";
 import {readFile} from "node:fs/promises";
 import path from "node:path";
 
 import {AppModeShell} from "@/components/app-mode-shell";
-import {AppHeader, type BuildInfo} from "@/components/app-header";
+import {AppHeader} from "@/components/app-header";
 import {
   getLatestGenerationVideos,
   getMe,
@@ -14,6 +13,7 @@ import {
   type LatestGenerationVideo,
   type PublicLatestRenderVideo
 } from "@/lib/api";
+import {getBuildInfo} from "@/lib/build-info";
 import {createClient} from "@/lib/supabase/server";
 
 const supabaseConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -101,28 +101,4 @@ function latestGenerationVideoToPublicRenderVideo(video: LatestGenerationVideo):
 
 function isPublicLatestRenderVideo(value: PublicLatestRenderVideo | null): value is PublicLatestRenderVideo {
   return value !== null;
-}
-
-function getBuildInfo(): BuildInfo {
-  try {
-    const output = execSync("git log -1 --format=%h%x00%s%x00%cI", {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"]
-    }).trim();
-    const [commit, subject, committedAt] = output.split("\0");
-    if (commit && subject) {
-      return {commit, committedAt: committedAt ?? null, subject};
-    }
-  } catch {
-    // Deployment environments do not always expose the .git directory.
-  }
-
-  const sha = process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_COMMIT_SHA;
-  const subject = process.env.VERCEL_GIT_COMMIT_MESSAGE ?? process.env.GIT_COMMIT_MESSAGE;
-  return {
-    commit: sha ? sha.slice(0, 7) : "local",
-    committedAt: null,
-    subject: subject ?? (sha ? "deployed build" : "local build")
-  };
 }

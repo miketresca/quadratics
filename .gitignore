@@ -13,6 +13,7 @@ __pycache__/
 .venv/
 *.pyc
 *.tsbuildinfo
+.DS_Store
 apps/video/output/
 infra/supabase/.temp/
 .worktrees/
@@ -20,3 +21,5 @@ infra/supabase/.temp/
 # Local demo prep artifacts
 demo_yap.m4a
 docs/local-demo-plan.md
+sound_effects/
+assets/sound_effects/

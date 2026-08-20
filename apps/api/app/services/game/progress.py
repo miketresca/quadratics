@@ -73,10 +73,12 @@ class InMemoryGameProgressRepository:
         stored = self._users.setdefault(user_id, _StoredProgress(None, {}))
         now = _now()
         current = stored.lessons.get(lesson_id)
+        if current is None:
+            raise InvalidGameProgressAction("Lesson has not been started")
         stored.lessons[lesson_id] = GameLessonProgress(
             lesson_id=lesson_id,
             status="completed",
-            started_at=current.started_at if current else now,
+            started_at=current.started_at,
             completed_at=now,
         )
         return _to_response(stored)
@@ -131,13 +133,15 @@ class SupabaseGameProgressRepository:
     async def complete_lesson(self, user_id: str, lesson_id: str) -> GameProgress:
         _validate_unlocked_lesson(lesson_id)
         current = await self._get_one_lesson_progress(user_id, lesson_id)
+        if current is None:
+            raise InvalidGameProgressAction("Lesson has not been started")
         now = _now()
         await self._upsert_lesson_progress(
             user_id,
             lesson_id,
             {
                 "status": "completed",
-                "started_at": current.started_at if current else now,
+                "started_at": current.started_at,
                 "completed_at": now,
                 "source": "game_sprint_1",
             },

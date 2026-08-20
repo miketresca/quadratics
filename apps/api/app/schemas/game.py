@@ -2,7 +2,20 @@ from typing import Literal
 
 from app.schemas.common import ApiModel
 
-GameFighterId = Literal["captain-falcon", "jigglypuff", "luigi"]
+GameFighterId = Literal[
+    "mario",
+    "donkey-kong",
+    "link",
+    "samus",
+    "captain-falcon",
+    "ness",
+    "yoshi",
+    "kirby",
+    "fox",
+    "pikachu",
+    "luigi",
+    "jigglypuff",
+]
 GameLessonId = Literal["volume-cubes-lesson-1", "dynamic-lesson-locked"]
 GameLessonProgressStatus = Literal["started", "completed"]
 GameProgressAction = Literal["select_fighter", "start_lesson", "complete_lesson"]

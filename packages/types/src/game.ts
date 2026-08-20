@@ -1,4 +1,16 @@
-export type GameFighterId = "captain-falcon" | "jigglypuff" | "luigi";
+export type GameFighterId =
+  | "mario"
+  | "donkey-kong"
+  | "link"
+  | "samus"
+  | "captain-falcon"
+  | "ness"
+  | "yoshi"
+  | "kirby"
+  | "fox"
+  | "pikachu"
+  | "luigi"
+  | "jigglypuff";
 export type GameLessonId = "volume-cubes-lesson-1" | "dynamic-lesson-locked";
 export type GameLessonProgressStatus = "started" | "completed";
 export type GameProgressAction = "select_fighter" | "start_lesson" | "complete_lesson";

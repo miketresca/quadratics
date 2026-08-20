@@ -3,7 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-ALLOWED_FIGHTER_IDS = frozenset({"captain-falcon", "jigglypuff", "luigi"})
+ALLOWED_FIGHTER_IDS = frozenset(
+    {
+        "mario",
+        "donkey-kong",
+        "link",
+        "samus",
+        "captain-falcon",
+        "ness",
+        "yoshi",
+        "kirby",
+        "fox",
+        "pikachu",
+        "luigi",
+        "jigglypuff",
+    }
+)
 
 
 @dataclass(frozen=True)
