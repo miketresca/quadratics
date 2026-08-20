@@ -87,6 +87,34 @@ def alignment_for(text: str) -> AudioAlignment:
 
 
 @pytest.mark.asyncio
+async def test_latest_generation_returns_none_before_user_has_generations(authenticated_client):
+    response = await authenticated_client.get("/api/v1/generations/latest")
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+@pytest.mark.asyncio
+async def test_latest_generation_returns_newest_user_snapshot(authenticated_client):
+    first = await authenticated_client.post(
+        "/api/v1/generations",
+        json={"equation": "x^2 + 5*x + 6 = 0", "instructorId": "male"},
+    )
+    second = await authenticated_client.post(
+        "/api/v1/generations",
+        json={"equation": "2*x^2 - 7*x + 3 = 0", "instructorId": "female"},
+    )
+
+    response = await authenticated_client.get("/api/v1/generations/latest")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["job"]["id"] == second.json()["job"]["id"]
+    assert body["job"]["id"] != first.json()["job"]["id"]
+    assert body["lesson"]["normalizedEquation"] == "2*x**2 - 7*x + 3 = 0"
+
+
+@pytest.mark.asyncio
 async def test_generation_stage_can_create_script_artifact(authenticated_client, app):
     app.dependency_overrides[get_settings] = lambda: Settings(script_generation_enabled=False)
     try:

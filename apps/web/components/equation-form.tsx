@@ -1,7 +1,7 @@
 "use client";
 
 import {instructors} from "@quadratics/config";
-import type {CurrentUser, Instructor, Lesson} from "@quadratics/types";
+import type {CurrentUser, GenerationSnapshot, Instructor, Lesson} from "@quadratics/types";
 import {useEffect, useMemo, useRef, useState, useTransition} from "react";
 
 import {LessonResult} from "@/components/lesson-result";
@@ -10,6 +10,7 @@ import {
   createInstructor,
   createGeneration,
   deleteInstructor,
+  getLatestGeneration,
   listInstructors,
   listPublicInstructors,
   updateInstructor,
@@ -53,6 +54,8 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
   const [instructorDraft, setInstructorDraft] = useState<InstructorProfile>(defaultInstructorProfiles[0]);
   const [instructorStatus, setInstructorStatus] = useState<string | null>(null);
   const [instructorSaving, setInstructorSaving] = useState(false);
+  const [latestGeneration, setLatestGeneration] = useState<GenerationSnapshot | null>(null);
+  const [latestGenerationLoading, setLatestGenerationLoading] = useState(false);
   const [activePipelineStage, setActivePipelineStage] = useState<string>();
   const [isPending, startTransition] = useTransition();
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -74,6 +77,10 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
 
   useEffect(() => {
     void refreshInstructors();
+  }, [signedIn]);
+
+  useEffect(() => {
+    void refreshLatestGeneration();
   }, [signedIn]);
 
   useEffect(() => {
@@ -117,6 +124,7 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
         }
         const accessToken = session.access_token;
         const generation = await createGeneration({accessToken, equation, instructorId});
+        setLatestGeneration(generation);
         const lesson = generation.lesson as Lesson;
         if (process.env.NODE_ENV === "development") {
           const lineCount = lesson.steps.reduce((count, step) => count + step.mathLines.length, 0);
@@ -168,6 +176,7 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
           generationId: generation.job.id,
           stage: "teacher_script"
         });
+        setLatestGeneration(response);
         setViewState(stateForLesson(response.lesson as Lesson, undefined, undefined, response));
       } catch (scriptError) {
         if (process.env.NODE_ENV === "development") {
@@ -236,6 +245,24 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
       if (process.env.NODE_ENV === "development") {
         console.warn("[quadratics] could not load instructors", error);
       }
+    }
+  }
+
+  async function refreshLatestGeneration() {
+    if (!signedIn || !supabaseConfigured) {
+      setLatestGeneration(null);
+      return;
+    }
+    setLatestGenerationLoading(true);
+    try {
+      setLatestGeneration(await getLatestGeneration(await getAccessToken()));
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[quadratics] could not load latest generation", error);
+      }
+      setLatestGeneration(null);
+    } finally {
+      setLatestGenerationLoading(false);
     }
   }
 
@@ -559,6 +586,14 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
         </form>
       </div>
 
+      {!lesson && viewState.kind !== "submitting" ? (
+        <LatestGenerationCard
+          generation={latestGeneration}
+          loading={latestGenerationLoading}
+          signedIn={signedIn}
+        />
+      ) : null}
+
       {viewState.kind === "submitting" && !lesson ? <LessonResult lesson={null} scriptLoading={scriptLoading} /> : null}
       {lesson ? (
         <LessonResult
@@ -594,6 +629,7 @@ export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
           force: options.force,
           includeAvatar: options.includeAvatar
         });
+        setLatestGeneration(nextGeneration);
         setViewState(stateForLesson(nextGeneration.lesson as Lesson, undefined, undefined, nextGeneration));
       } catch (stageError) {
         if (process.env.NODE_ENV === "development") {
@@ -616,6 +652,129 @@ async function getAccessToken() {
     throw new Error("Sign in to run an equation.");
   }
   return session.access_token;
+}
+
+function LatestGenerationCard({
+  generation,
+  loading,
+  signedIn
+}: {
+  generation: GenerationSnapshot | null;
+  loading: boolean;
+  signedIn: boolean;
+}) {
+  const finalVideo = generationArtifactForStage(generation, "base_video");
+  const render = generationArtifactForStage(generation, "motion_canvas_render");
+  const visibleArtifact = finalVideo ?? render;
+  const storageObject = visibleArtifact?.storageObjects?.[0];
+  const lastArtifact = latestArtifact(generation);
+  const status = visibleArtifact?.status ?? lastArtifact?.status;
+  const stage = visibleArtifact?.stage ?? lastArtifact?.stage;
+
+  return (
+    <section className="mx-auto mt-6 max-w-3xl rounded border border-zinc-800/90 bg-black/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur" aria-label="Latest video generation">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <LatestInfo />
+            <h2 className="font-mono text-sm font-semibold uppercase tracking-wide text-zinc-100">Latest video generation</h2>
+          </div>
+          <p className="mt-2 truncate text-sm text-zinc-400">
+            {generation ? generation.job.equationInput : signedIn ? "No prior generation found for this account." : "Log in to see your most recent output."}
+          </p>
+        </div>
+        <span className={latestStatusClass(status)}>
+          {loading ? "loading" : status ? `${stage} / ${status}` : signedIn ? "empty" : "public"}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="mt-4 flex h-24 items-center justify-center gap-3 rounded border border-zinc-800 bg-zinc-950/45 text-sm text-zinc-300">
+          <LoadingDots />
+          loading latest output
+        </div>
+      ) : storageObject?.signedUrl && visibleArtifact?.status === "completed" ? (
+        <video className="mt-4 aspect-video w-full rounded border border-zinc-800 bg-black" controls src={storageObject.signedUrl}>
+          <track kind="captions" />
+        </video>
+      ) : generation ? (
+        <div className="mt-4 grid gap-3 rounded border border-zinc-800 bg-zinc-950/45 p-3 sm:grid-cols-3">
+          <LatestStat label="Generation" value={shortId(generation.job.id)} />
+          <LatestStat label="Last stage" value={stage ? prettyStage(stage) : "waiting"} />
+          <LatestStat label="Updated" value={formatLatestTime(lastArtifact?.completedAt ?? lastArtifact?.createdAt)} />
+        </div>
+      ) : (
+        <p className="mt-4 rounded border border-zinc-800 bg-zinc-950/45 p-3 text-sm leading-6 text-zinc-400">
+          The current equation will still start from the calculator above. This card is only a quick reference for the latest completed or in-progress render.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function LatestInfo() {
+  return (
+    <span className="group/latest relative inline-flex h-5 w-5 shrink-0 items-center justify-center">
+      <span className="flex h-4 w-4 items-center justify-center rounded-full border border-zinc-700 font-mono text-[10px] font-semibold text-zinc-500 transition group-hover/latest:border-emerald-400/60 group-hover/latest:text-emerald-300">
+        i
+      </span>
+      <span className="pointer-events-none absolute left-0 top-5 z-40 hidden w-[min(84vw,22rem)] pt-2 group-hover/latest:block">
+        <span className="block rounded border border-zinc-700 bg-[#090d14]/98 p-3 text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/70 backdrop-blur">
+          Shows the most recent generation output for the current account so the last rendered video state is visible before starting another equation.
+        </span>
+      </span>
+    </span>
+  );
+}
+
+function LatestStat({label, value}: {label: string; value: string}) {
+  return (
+    <div className="rounded border border-zinc-800 bg-black/25 p-3">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-1 truncate font-mono text-sm text-zinc-100">{value}</p>
+    </div>
+  );
+}
+
+function generationArtifactForStage(generation: GenerationSnapshot | null, stage: string) {
+  const artifacts = generation?.artifacts.filter((artifact) => artifact.stage === stage) ?? [];
+  return artifacts.find((artifact) => artifact.isCurrent !== false) ?? artifacts.at(-1);
+}
+
+function latestArtifact(generation: GenerationSnapshot | null) {
+  return generation?.artifacts.at(-1);
+}
+
+function latestStatusClass(status: string | undefined) {
+  const color =
+    status === "completed"
+      ? "border-emerald-400/30 text-emerald-200"
+      : status === "failed"
+        ? "border-red-400/30 text-red-200"
+        : status === "running"
+          ? "border-amber-400/30 text-amber-200"
+          : "border-zinc-700 text-zinc-400";
+  return `shrink-0 rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-wide ${color}`;
+}
+
+function prettyStage(stage: string) {
+  return stage.replaceAll("_", " ");
+}
+
+function shortId(value: string) {
+  return value.slice(0, 8);
+}
+
+function formatLatestTime(value: string | null | undefined) {
+  if (!value) {
+    return "not run";
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function EnterIcon() {

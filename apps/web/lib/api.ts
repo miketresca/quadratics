@@ -68,6 +68,18 @@ export async function createGeneration(params: {
   return response.json() as Promise<CreateGenerationResponse>;
 }
 
+export async function getLatestGeneration(accessToken: string): Promise<GenerationSnapshot | null> {
+  const response = await fetch(`${apiUrl}/api/v1/generations/latest`, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load the latest generation");
+  }
+  return response.json() as Promise<GenerationSnapshot | null>;
+}
+
 export async function runGenerationStage(params: {
   accessToken: string;
   generationId: string;

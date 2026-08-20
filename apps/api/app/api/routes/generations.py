@@ -59,6 +59,15 @@ async def create_generation(
     )
 
 
+@router.get("/latest", response_model=GenerationSnapshot | None)
+async def get_latest_generation(
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> GenerationSnapshot | None:
+    service, _media_store_for_request = _generation_services(settings)
+    return service.get_latest_snapshot(user_id=current_user.id)
+
+
 @router.get("/{generation_id}", response_model=GenerationSnapshot)
 async def get_generation(
     generation_id: str,

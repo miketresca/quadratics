@@ -137,6 +137,12 @@ class SolveGenerationService:
         lesson = LessonResponse.model_validate(lesson_artifact.payload)
         return self.snapshot_for_job(job=job, lesson=lesson)
 
+    def get_latest_snapshot(self, *, user_id: str) -> GenerationSnapshot | None:
+        job = self._jobs.latest_for_user(user_id=user_id)
+        if job is None:
+            return None
+        return self.get_snapshot(generation_job_id=job.id, user_id=user_id)
+
     async def run_teacher_script(
         self,
         *,

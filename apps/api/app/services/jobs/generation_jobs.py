@@ -90,6 +90,11 @@ class InMemoryGenerationJobRepository:
             ]
             return matches[-1] if matches else None
 
+    def latest_for_user(self, *, user_id: str) -> GenerationJobRecord | None:
+        with self._lock:
+            matches = [job for job in self._jobs.values() if job.user_id == user_id]
+            return matches[-1] if matches else None
+
 
 class SupabaseGenerationJobRepository:
     def __init__(self, settings: Settings) -> None:
@@ -172,6 +177,22 @@ class SupabaseGenerationJobRepository:
                 f"{self._base_url}/rest/v1/generation_jobs",
                 headers=self._headers,
                 params=params,
+            )
+        _raise_for_job_storage_error(response)
+        rows = response.json()
+        return _job_from_row(rows[0]) if rows else None
+
+    def latest_for_user(self, *, user_id: str) -> GenerationJobRecord | None:
+        with httpx.Client() as client:
+            response = client.get(
+                f"{self._base_url}/rest/v1/generation_jobs",
+                headers=self._headers,
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "select": _JOB_COLUMNS,
+                    "order": "created_at.desc",
+                    "limit": "1",
+                },
             )
         _raise_for_job_storage_error(response)
         rows = response.json()
