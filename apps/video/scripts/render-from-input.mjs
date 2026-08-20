@@ -1,6 +1,6 @@
 import {spawn} from "node:child_process";
 import {cpus, tmpdir} from "node:os";
-import {mkdtemp, readFile, rm, writeFile} from "node:fs/promises";
+import {mkdtemp, readdir, readFile, rm, writeFile} from "node:fs/promises";
 import {existsSync} from "node:fs";
 import {resolve} from "node:path";
 
@@ -57,7 +57,8 @@ try {
     "--window-size=1920,1080",
     `http://127.0.0.1:${address.port}/?render`
   ]);
-  if (!existsSync(frameDir)) {
+  const frameCount = await waitForRenderedFrames(frameDir);
+  if (frameCount === 0) {
     throw new Error("Motion Canvas did not create an output frame directory");
   }
   const narrationAudioPath = await prepareNarrationAudio(renderInput, tempDir);
@@ -304,7 +305,21 @@ function virtualTimeBudgetForRender(renderInput) {
     ? renderInput.narration.segments.map((segment) => Number(segment?.endSeconds ?? 0))
     : [];
   const durationSeconds = Math.max(0, timelineDuration, ...cueEnds, ...segmentEnds);
-  return Math.max(30000, Math.ceil(durationSeconds * 1000) + 15000);
+  return Math.max(300000, Math.ceil(durationSeconds * 10000) + 60000);
+}
+
+async function waitForRenderedFrames(directory) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (existsSync(directory)) {
+      const files = await readdir(directory);
+      const frameCount = files.filter((file) => file.endsWith(".png")).length;
+      if (frameCount > 0) {
+        return frameCount;
+      }
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  return 0;
 }
 
 function escapeConcatPath(path) {

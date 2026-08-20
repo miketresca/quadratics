@@ -1705,7 +1705,7 @@ function StageInfo({title}: {title: string}) {
       return;
     }
     const width = Math.min(420, window.innerWidth - 24);
-    const left = Math.max(12, rect.left - width - 16);
+    const left = Math.max(12, Math.min(rect.left - width - 24, Math.round(window.innerWidth * 0.08)));
     const preferredTop = rect.top - 12;
     const maxPanelHeight = Math.min(440, window.innerHeight - 24);
     const top = Math.max(12, Math.min(preferredTop, window.innerHeight - maxPanelHeight - 12));
