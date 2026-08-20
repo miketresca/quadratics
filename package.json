@@ -27,6 +27,7 @@
     "sb:types:prod": "node scripts/supabase-env.mjs types prod"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "supabase": "^2.115.0",
     "turbo": "2.10.10",
     "typescript": "7.0.2"

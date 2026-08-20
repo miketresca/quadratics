@@ -28,6 +28,14 @@ The final rendered video belongs in the Lesson view. Logs may mention render suc
 
 Do not add marketing/landing-page patterns inside the authenticated app. This is an operator tool, not a public homepage.
 
+## Game Frontend Visual QA
+
+The `/game` experience is judged like an interactive video game scene, not a normal web form. After changing game UI, Three.js scene composition, camera behavior, assets, lighting, or controls, run a real rendered-page check and inspect the captured output before calling the work done.
+
+For local QA, use Playwright against `http://localhost:3000/game` so the actual WebGL scene is reviewed through interaction, not just a static first-paint screenshot. Enter the seated look mode, move the mouse left, right, up, and down, and capture representative frames or a short recording before calling the pass complete. Use the Chrome/CDP canvas capture only as a supplemental artifact when checking a specific canvas frame.
+
+During review, explicitly evaluate the scene from a player perspective: Does the scale feel right? Does the camera start where a seated player would expect? Do major objects look intentional and game-quality? Does the result match the user’s reference images closely enough? If an important visual element obviously looks temporary, malformed, occluded, or off-scale, keep iterating or state the gap clearly instead of calling the pass complete.
+
 ## Auth And Security
 
 Keep `/login` public as a redirect-only compatibility route and allow the root `/` shell to render as the main product surface. Gate equation submission, generation access, provider key management, and user-owned data behind Supabase auth. API calls must include the authenticated user context. Never expose service-role keys or provider secrets in client code.

@@ -26,7 +26,7 @@ describe("GameShell", () => {
     });
 
     expect(container.textContent).toContain("Worksheet POV Lab");
-    expect(container.textContent).toContain("Move the pen over the paper");
+    expect(container.textContent).toContain("Click once to enter seated look mode");
     expect(container.textContent).not.toContain("API keys");
     expect(container.textContent).not.toContain("Quadratics Game Lab");
 
