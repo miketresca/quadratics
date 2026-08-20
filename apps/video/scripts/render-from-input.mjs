@@ -25,6 +25,7 @@ const frameDir = resolve(outputDir, "project");
 
 const originalGeneratedInput = await readFile(generatedInputPath, "utf-8");
 const renderInput = JSON.parse(await readFile(inputPath, "utf-8"));
+const virtualTimeBudgetMs = virtualTimeBudgetForRender(renderInput);
 await writeFile(generatedInputPath, JSON.stringify(renderInput), "utf-8");
 await rm(outputDir, {recursive: true, force: true});
 const tempDir = await mkdtemp(resolve(tmpdir(), "quadratics-video-"));
@@ -52,7 +53,7 @@ try {
     "--disable-gpu",
     "--no-first-run",
     "--run-all-compositor-stages-before-draw",
-    "--virtual-time-budget=30000",
+    `--virtual-time-budget=${virtualTimeBudgetMs}`,
     "--window-size=1920,1080",
     `http://127.0.0.1:${address.port}/?render`
   ]);
@@ -288,6 +289,22 @@ function seededNoise(seed) {
 
 function clampInt16(value) {
   return Math.max(-32768, Math.min(32767, Math.round(value)));
+}
+
+function virtualTimeBudgetForRender(renderInput) {
+  const timelineDuration = Number(renderInput?.timeline?.durationSeconds ?? 0);
+  const cueEnds = Array.isArray(renderInput?.timeline?.cues)
+    ? renderInput.timeline.cues.flatMap((cue) => [
+        Number(cue?.animation?.endSeconds ?? 0),
+        Number(cue?.narration?.endSeconds ?? 0),
+        Number(cue?.sfx?.endSeconds ?? 0)
+      ])
+    : [];
+  const segmentEnds = Array.isArray(renderInput?.narration?.segments)
+    ? renderInput.narration.segments.map((segment) => Number(segment?.endSeconds ?? 0))
+    : [];
+  const durationSeconds = Math.max(0, timelineDuration, ...cueEnds, ...segmentEnds);
+  return Math.max(30000, Math.ceil(durationSeconds * 1000) + 15000);
 }
 
 function escapeConcatPath(path) {

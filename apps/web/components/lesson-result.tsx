@@ -1705,13 +1705,10 @@ function StageInfo({title}: {title: string}) {
       return;
     }
     const width = Math.min(420, window.innerWidth - 24);
-    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-    const preferredTop = rect.bottom + 8;
+    const left = Math.max(12, rect.left - width - 16);
+    const preferredTop = rect.top - 12;
     const maxPanelHeight = Math.min(440, window.innerHeight - 24);
-    const top =
-      preferredTop + maxPanelHeight > window.innerHeight
-        ? Math.max(12, rect.top - maxPanelHeight - 8)
-        : preferredTop;
+    const top = Math.max(12, Math.min(preferredTop, window.innerHeight - maxPanelHeight - 12));
     setPosition({left, top});
   }
 
