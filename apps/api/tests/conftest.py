@@ -36,8 +36,20 @@ def app() -> FastAPI:
     )
     instructors._instructors = InMemoryInstructorRepository(
         [
-            Instructor(id="male", display_name="Male Instructor", voice_id="male-voice"),
-            Instructor(id="female", display_name="Female Instructor", voice_id="female-voice"),
+            Instructor(
+                id="male",
+                display_name="Male Instructor",
+                voice_id="male-voice",
+                reference_image_url="https://example.com/male.png",
+                avatar_id="male-avatar",
+            ),
+            Instructor(
+                id="female",
+                display_name="Female Instructor",
+                voice_id="female-voice",
+                reference_image_url="https://example.com/female.png",
+                avatar_id="female-avatar",
+            ),
         ]
     )
     usage_costs._usage_costs = InMemoryUsageCostRepository()

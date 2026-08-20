@@ -2,6 +2,22 @@ import pytest
 
 
 @pytest.mark.asyncio
+async def test_public_instructors_hide_provider_ids(client):
+    response = await client.get("/api/v1/instructors/public")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [instructor["displayName"] for instructor in body] == [
+        "Male Instructor",
+        "Female Instructor",
+    ]
+    assert body[0]["referenceImageUrl"] == "https://example.com/male.png"
+    assert body[1]["referenceImageUrl"] == "https://example.com/female.png"
+    assert "voiceId" not in body[0]
+    assert "avatarId" not in body[0]
+
+
+@pytest.mark.asyncio
 async def test_instructors_can_be_created_updated_and_deleted(authenticated_client):
     created = await authenticated_client.post(
         "/api/v1/instructors",

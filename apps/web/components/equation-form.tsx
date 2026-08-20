@@ -11,6 +11,7 @@ import {
   createGeneration,
   deleteInstructor,
   listInstructors,
+  listPublicInstructors,
   updateInstructor,
   runGenerationStage
 } from "@/lib/api";
@@ -42,7 +43,7 @@ const defaultInstructorProfiles: InstructorProfile[] = instructors.map((instruct
   imageY: 50
 }));
 
-export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentUser | null}) {
+export function EquationForm({initialUser}: {initialUser: CurrentUser | null}) {
   const [viewState, setViewState] = useState<SolveViewState>({kind: "idle"});
   const [equationValue, setEquationValue] = useState("");
   const [instructorProfiles, setInstructorProfiles] = useState<InstructorProfile[]>(defaultInstructorProfiles);
@@ -56,6 +57,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
   const errorRef = useRef<HTMLParagraphElement>(null);
   const instructorEditorRef = useRef<HTMLDivElement>(null);
   const pipelineInFlightRef = useRef(false);
+  const signedIn = initialUser !== null;
   const selectedInstructor = useMemo(
     () => instructorProfiles.find((profile) => profile.id === selectedInstructorId) ?? instructorProfiles[0],
     [instructorProfiles, selectedInstructorId]
@@ -71,7 +73,7 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
 
   useEffect(() => {
     void refreshInstructors();
-  }, []);
+  }, [signedIn]);
 
   useEffect(() => {
     function closeInstructorEditor(event: PointerEvent) {
@@ -218,8 +220,8 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
       return;
     }
     try {
-      const accessToken = await getAccessToken();
-      const nextProfiles = (await listInstructors(accessToken)).map(instructorToProfile);
+      const nextInstructors = signedIn ? await listInstructors(await getAccessToken()) : await listPublicInstructors();
+      const nextProfiles = nextInstructors.map(instructorToProfile);
       if (nextProfiles.length === 0) {
         return;
       }
@@ -240,6 +242,9 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
     setSelectedInstructorId(profile.id);
     setInstructorDraft(profile);
     setInstructorStatus(null);
+    if (!signedIn) {
+      setInstructorEditorOpen(false);
+    }
   }
 
   async function saveInstructorDraft() {
@@ -408,10 +413,12 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                   <InstructorAvatar profile={selectedInstructor} />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-zinc-100">{selectedInstructor?.displayName}</span>
-                    <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-zinc-500">
-                      <ProviderStatus label="11L" ready={Boolean(selectedInstructor?.elevenLabsId)} />
-                      <ProviderStatus label="HGN" ready={Boolean(selectedInstructor?.heygenId)} />
-                    </span>
+                    {signedIn ? (
+                      <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+                        <ProviderStatus label="11L" ready={Boolean(selectedInstructor?.elevenLabsId)} />
+                        <ProviderStatus label="HGN" ready={Boolean(selectedInstructor?.heygenId)} />
+                      </span>
+                    ) : null}
                   </span>
                 </span>
                 <ChevronIcon open={instructorEditorOpen} />
@@ -420,15 +427,19 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
               {instructorEditorOpen ? (
                 <div className="absolute left-0 top-[4.9rem] z-50 w-full min-w-0 max-w-[calc(100vw-2rem)] rounded-md border border-emerald-400/20 bg-[#080c12]/95 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.68),0_0_32px_rgba(16,185,129,0.12)] backdrop-blur sm:min-w-[20rem]">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">Global instructors</span>
-                    <button
-                      className="rounded border border-emerald-400/35 bg-emerald-400/10 px-2.5 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/20 disabled:opacity-50"
-                      disabled={instructorSaving}
-                      onClick={() => void createNewInstructor()}
-                      type="button"
-                    >
-                      New
-                    </button>
+                    <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+                      {signedIn ? "Global instructors" : "Instructors"}
+                    </span>
+                    {signedIn ? (
+                      <button
+                        className="rounded border border-emerald-400/35 bg-emerald-400/10 px-2.5 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/20 disabled:opacity-50"
+                        disabled={instructorSaving}
+                        onClick={() => void createNewInstructor()}
+                        type="button"
+                      >
+                        New
+                      </button>
+                    ) : null}
                   </div>
                   <div className="grid gap-2">
                     {instructorProfiles.map((profile) => (
@@ -445,15 +456,18 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                         <InstructorAvatar profile={profile} small />
                         <span className="min-w-0">
                           <span className="block truncate text-sm">{profile.displayName}</span>
-                          <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-zinc-500">
-                            <ProviderStatus label="11L" ready={Boolean(profile.elevenLabsId)} />
-                            <ProviderStatus label="HGN" ready={Boolean(profile.heygenId)} />
-                          </span>
+                          {signedIn ? (
+                            <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+                              <ProviderStatus label="11L" ready={Boolean(profile.elevenLabsId)} />
+                              <ProviderStatus label="HGN" ready={Boolean(profile.heygenId)} />
+                            </span>
+                          ) : null}
                         </span>
                       </button>
                     ))}
                   </div>
 
+                  {signedIn ? (
                   <div className="mt-3 grid gap-3 border-t border-zinc-800 pt-3">
                     <div className="flex items-center gap-3">
                       <InstructorAvatar editable profile={instructorDraft} />
@@ -529,6 +543,13 @@ export function EquationForm({initialUser: _initialUser}: {initialUser: CurrentU
                       <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">{instructorStatus}</p>
                     ) : null}
                   </div>
+                  ) : (
+                    <div className="mt-3 flex justify-end border-t border-zinc-800 pt-3">
+                      <button className="rounded border border-zinc-800 px-3 py-2 text-sm text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-100" onClick={() => setInstructorEditorOpen(false)} type="button">
+                        Close
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : null}
             </div>

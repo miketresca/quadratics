@@ -133,6 +133,17 @@ export async function listInstructors(accessToken: string): Promise<Instructor[]
   return response.json() as Promise<Instructor[]>;
 }
 
+export async function listPublicInstructors(): Promise<Instructor[]> {
+  const response = await fetch(`${apiUrl}/api/v1/instructors/public`, {
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load instructors");
+  }
+  return response.json() as Promise<Instructor[]>;
+}
+
 export async function getUsageSummary(accessToken: string): Promise<UsageSummary> {
   const response = await fetch(`${apiUrl}/api/v1/usage/summary`, {
     headers: {Authorization: `Bearer ${accessToken}`},

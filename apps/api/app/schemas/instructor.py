@@ -16,6 +16,15 @@ class Instructor(ApiModel):
     avatar_id: str | None = None
 
 
+class PublicInstructor(ApiModel):
+    id: InstructorId
+    display_name: str
+    reference_image_url: str | None = None
+    image_zoom: float = 1
+    image_x: float = 50
+    image_y: float = 50
+
+
 class InstructorCreateRequest(ApiModel):
     display_name: str
     voice_id: str | None = None

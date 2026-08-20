@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.dependencies.auth import get_current_user
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
-from app.schemas.instructor import Instructor, InstructorCreateRequest, InstructorUpdateRequest
+from app.schemas.instructor import (
+    Instructor,
+    InstructorCreateRequest,
+    InstructorUpdateRequest,
+    PublicInstructor,
+)
 from app.services.instructors.repository import (
     InMemoryInstructorRepository,
     InstructorStorageError,
@@ -23,6 +28,19 @@ async def list_instructors(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> list[Instructor]:
     return await _instructor_repository(settings).list()
+
+
+@router.get("/public", response_model=list[PublicInstructor])
+async def list_public_instructors(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> list[PublicInstructor]:
+    instructors = await _instructor_repository(settings).list()
+    public_profiles = [
+        _to_public_instructor(instructor)
+        for instructor in instructors
+        if _is_public_default(instructor)
+    ]
+    return public_profiles
 
 
 @router.post("", response_model=Instructor, status_code=status.HTTP_201_CREATED)
@@ -92,3 +110,22 @@ def _instructor_repository(
     if settings.supabase_url and settings.supabase_service_role_key:
         return SupabaseInstructorRepository(settings)
     return _instructors
+
+
+def _to_public_instructor(instructor: Instructor) -> PublicInstructor:
+    return PublicInstructor(
+        id=instructor.id,
+        display_name=instructor.display_name,
+        reference_image_url=instructor.reference_image_url,
+        image_zoom=instructor.image_zoom,
+        image_x=instructor.image_x,
+        image_y=instructor.image_y,
+    )
+
+
+def _is_public_default(instructor: Instructor) -> bool:
+    display_name = instructor.display_name.lower()
+    return instructor.id in {"male", "female"} or display_name in {
+        "male instructor",
+        "female instructor",
+    }
