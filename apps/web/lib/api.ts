@@ -104,6 +104,194 @@ export type PublicLatestRenderVideosResponse = {
   videos: PublicLatestRenderVideo[];
 };
 
+export type GameLessonStage =
+  | "template"
+  | "section_script"
+  | "speech_markup"
+  | "narration"
+  | "handwriting"
+  | "interactive_bundle";
+
+export type GameLessonArtifactStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "stale"
+  | "awaiting_approval"
+  | "approved"
+  | "rejected";
+
+export type GameLessonArtifact = {
+  id: string;
+  runId: string;
+  stage: GameLessonStage;
+  status: GameLessonArtifactStatus;
+  version: number;
+  payload: Record<string, unknown>;
+  summary: string | null;
+  errorMessage: string | null;
+  isCurrent: boolean;
+  staleReason: string | null;
+  providerName: string | null;
+  modelName: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+export type GameWorksheetRunSnapshot = {
+  id: string;
+  templateId: string;
+  userId: string;
+  selectedInstructorId: string | null;
+  status: "created" | "running" | "completed" | "failed";
+  templateTitle: string;
+  templatePayload: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  artifacts: GameLessonArtifact[];
+};
+
+type ApiGameWorksheetRunSnapshot = {
+  id: string;
+  templateId: string;
+  userId: string;
+  selectedInstructorId: string | null;
+  status: "active" | "completed" | "failed";
+  template: {
+    id: string;
+    title: string;
+    version: number;
+    payload: Record<string, unknown>;
+  };
+  artifacts: ApiGameLessonArtifact[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ApiGameLessonArtifact = {
+  id: string;
+  runId: string;
+  stage: GameLessonStage;
+  version: number;
+  status: GameLessonArtifactStatus | "awaiting_approval";
+  isCurrent: boolean;
+  payload: Record<string, unknown>;
+  storageRefs: Array<Record<string, unknown>>;
+  errorMessage: string | null;
+  staleReason: string | null;
+  configMetadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function normalizeGameLessonRun(snapshot: ApiGameWorksheetRunSnapshot): GameWorksheetRunSnapshot {
+  return {
+    id: snapshot.id,
+    templateId: snapshot.templateId,
+    userId: snapshot.userId,
+    selectedInstructorId: snapshot.selectedInstructorId,
+    status: snapshot.status === "active" ? "running" : snapshot.status,
+    templateTitle: snapshot.template.title,
+    templatePayload: snapshot.template.payload,
+    createdAt: snapshot.createdAt,
+    updatedAt: snapshot.updatedAt,
+    artifacts: snapshot.artifacts.map((artifact) => ({
+      id: artifact.id,
+      runId: artifact.runId,
+      stage: artifact.stage,
+      status: artifact.status,
+      version: artifact.version,
+      payload: artifact.payload,
+      summary: typeof artifact.payload.summary === "string" ? artifact.payload.summary : null,
+      errorMessage: artifact.errorMessage,
+      isCurrent: artifact.isCurrent,
+      staleReason: artifact.staleReason,
+      providerName: typeof artifact.configMetadata.provider === "string" ? artifact.configMetadata.provider : null,
+      modelName: typeof artifact.configMetadata.model === "string" ? artifact.configMetadata.model : null,
+      createdAt: artifact.createdAt,
+      completedAt: artifact.status === "completed" || artifact.status === "approved" ? artifact.updatedAt : null
+    }))
+  };
+}
+
+export async function createGameLessonRun(params: {
+  accessToken: string;
+  selectedInstructorId?: string | null;
+  templateId: string;
+}): Promise<GameWorksheetRunSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/game/lessons/${params.templateId}/runs`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({selectedInstructorId: params.selectedInstructorId ?? null})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not create the worksheet run");
+  }
+  return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
+}
+
+export async function getGameLessonRun(params: {
+  accessToken: string;
+  runId: string;
+}): Promise<GameWorksheetRunSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/game/lesson-runs/${params.runId}`, {
+    headers: {Authorization: `Bearer ${params.accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load the worksheet run");
+  }
+  return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
+}
+
+export async function runGameLessonStage(params: {
+  accessToken: string;
+  force?: boolean;
+  runId: string;
+  stage: GameLessonStage;
+}): Promise<GameWorksheetRunSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/game/lesson-runs/${params.runId}/stages/${params.stage}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({force: params.force ?? false})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? `Could not run ${params.stage}`);
+  }
+  return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
+}
+
+export async function approveGameLessonArtifact(params: {
+  accessToken: string;
+  artifactId: string;
+  decision: "approved" | "rejected";
+  notes?: string | null;
+}): Promise<{decision: "approved" | "rejected"}> {
+  const response = await fetch(`${apiUrl}/api/v1/game/artifacts/${params.artifactId}/approve`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({decision: params.decision, notes: params.notes ?? null})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not approve the worksheet artifact");
+  }
+  return (await response.json()) as {decision: "approved" | "rejected"};
+}
+
 export async function getLatestGenerationVideos(accessToken: string): Promise<LatestGenerationVideosResponse> {
   const response = await fetch(`${apiUrl}/api/v1/generations/latest/videos`, {
     headers: {Authorization: `Bearer ${accessToken}`},
