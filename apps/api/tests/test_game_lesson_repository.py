@@ -76,6 +76,19 @@ async def test_game_lesson_artifacts_version_and_stale_descendants():
     assert stale_scripts[0].status == "stale"
     assert stale_scripts[0].stale_reason == "template was regenerated"
 
+    repaired = await repository.run_stage(
+        "user-a",
+        run.id,
+        "section_script",
+        GameLessonRunStageRequest(),
+    )
+    section_script_versions = [
+        artifact for artifact in repaired.artifacts if artifact.stage == "section_script"
+    ]
+    assert [artifact.version for artifact in section_script_versions] == [1, 2]
+    assert section_script_versions[0].is_current is False
+    assert section_script_versions[1].is_current is True
+
 
 @pytest.mark.asyncio
 async def test_game_lesson_only_current_artifact_can_be_approved():

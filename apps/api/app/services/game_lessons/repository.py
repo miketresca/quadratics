@@ -248,7 +248,7 @@ class InMemoryGameLessonRepository:
     def _create_artifact(self, run: _StoredRun, stage: str) -> _StoredArtifact:
         now = _now()
         current = self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = self._next_artifact_version(run.id, stage)
         if current:
             current.is_current = False
             current.updated_at = now
@@ -278,7 +278,7 @@ class InMemoryGameLessonRepository:
     ) -> _StoredArtifact:
         now = _now()
         current = self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = self._next_artifact_version(run.id, stage)
         if current:
             current.is_current = False
             current.updated_at = now
@@ -393,6 +393,14 @@ class InMemoryGameLessonRepository:
             if artifact.run_id == run_id and artifact.stage == stage and artifact.is_current
         ]
         return max(candidates, key=lambda artifact: artifact.version) if candidates else None
+
+    def _next_artifact_version(self, run_id: str, stage: str) -> int:
+        versions = [
+            artifact.version
+            for artifact in self._artifacts.values()
+            if artifact.run_id == run_id and artifact.stage == stage
+        ]
+        return (max(versions) + 1) if versions else 1
 
     def _validate_stage(self, stage: str) -> None:
         if stage not in STAGE_ORDER:
@@ -630,6 +638,23 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         rows = response.json()
         return _artifact_from_row(rows[0]) if rows else None
 
+    async def _next_artifact_version(self, run_id: str, stage: str) -> int:  # type: ignore[override]
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self._base_url}/rest/v1/game_lesson_artifacts",
+                headers=self._headers,
+                params={
+                    "run_id": f"eq.{run_id}",
+                    "stage": f"eq.{stage}",
+                    "select": "version",
+                    "order": "version.desc",
+                    "limit": "1",
+                },
+            )
+        _raise_for_storage_error(response)
+        rows = response.json()
+        return int(rows[0]["version"]) + 1 if rows else 1
+
     async def _get_artifact_for_user(self, user_id: str, artifact_id: str) -> _StoredArtifact:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -647,7 +672,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
 
     async def _create_artifact(self, run: _StoredRun, stage: str) -> _StoredArtifact:  # type: ignore[override]
         current = await self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = await self._next_artifact_version(run.id, stage)
         generated = await self._generated_stage_from_storage(run, stage)
         async with httpx.AsyncClient() as client:
             if current:
@@ -688,7 +713,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         error: GameLessonProviderRuntimeError,
     ) -> _StoredArtifact:
         current = await self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = await self._next_artifact_version(run.id, stage)
         payload = {
             "summary": f"{stage} failed",
             "provider": error.provider,
@@ -1306,4 +1331,10 @@ def _now() -> str:
 def _raise_for_storage_error(response: httpx.Response) -> None:
     if response.is_success:
         return
-    raise GameLessonStorageError(f"Game lesson storage request failed: {response.status_code}")
+    body = response.text.strip()
+    if len(body) > 500:
+        body = f"{body[:500]}..."
+    detail = f": {body}" if body else ""
+    raise GameLessonStorageError(
+        f"Game lesson storage request failed: {response.status_code}{detail}"
+    )
