@@ -19,6 +19,8 @@ from app.schemas.game_lessons import (
     GameWorksheetRunSnapshot,
     GameWorksheetTemplate,
 )
+from app.services.game_lessons.costs import GameUsageCostRepository
+from app.services.game_lessons.providers import GameLessonProviderResult, GameLessonStageProvider
 from app.services.game_lessons.templates import VOLUME_CUBES_LESSON_1_TEMPLATE
 
 TEMPLATE_ID = "volume-cubes-lesson-1"
@@ -367,7 +369,13 @@ class InMemoryGameLessonRepository:
 
 
 class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        stage_provider: GameLessonStageProvider | None = None,
+        usage_costs: GameUsageCostRepository | None = None,
+    ) -> None:
         if not settings.supabase_url or not settings.supabase_service_role_key:
             raise GameLessonStorageError("Supabase game lesson storage is not configured")
         self._base_url = settings.supabase_url.rstrip("/")
@@ -376,6 +384,8 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             "Authorization": f"Bearer {settings.supabase_service_role_key}",
             "Content-Type": "application/json",
         }
+        self._stage_provider = stage_provider
+        self._usage_costs = usage_costs
 
     async def create_or_get_run(
         self,
@@ -584,7 +594,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
     async def _create_artifact(self, run: _StoredRun, stage: str) -> _StoredArtifact:  # type: ignore[override]
         current = await self._current_artifact(run.id, stage)
         next_version = (current.version + 1) if current else 1
-        payload = await self._payload_for_stage_from_storage(run, stage)
+        generated = await self._generated_stage_from_storage(run, stage)
         async with httpx.AsyncClient() as client:
             if current:
                 current_response = await client.patch(
@@ -604,19 +614,64 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
                     "version": next_version,
                     "status": _status_for_stage(stage),
                     "is_current": True,
-                    "payload": payload,
+                    "payload": generated.payload,
                     "storage_refs": [],
-                    "config_metadata": {
-                        "provider": "deterministic",
-                        "source": "game_lesson_repository",
-                    },
+                    "config_metadata": generated.config_metadata,
                 },
             )
         _raise_for_storage_error(create_response)
         rows = create_response.json()
         if not rows:
             raise GameLessonStorageError("Game lesson artifact was not returned after create")
-        return _artifact_from_row(rows[0])
+        artifact = _artifact_from_row(rows[0])
+        await self._record_usage(run, artifact, generated)
+        return artifact
+
+    async def _generated_stage_from_storage(
+        self,
+        run: _StoredRun,
+        stage: str,
+    ) -> GameLessonProviderResult:
+        template = await self._get_template(run.template_id)
+        if self._stage_provider is not None and stage == "section_script":
+            return await self._stage_provider.generate_section_script(
+                template_payload=template.payload,
+                selected_instructor_id=run.selected_instructor_id,
+            )
+        if self._stage_provider is not None and stage == "speech_markup":
+            section_script = await self._current_artifact(run.id, "section_script")
+            return await self._stage_provider.generate_speech_markup(
+                section_script_payload=section_script.payload if section_script else {},
+            )
+        return GameLessonProviderResult(
+            payload=await self._payload_for_stage_from_storage(run, stage),
+            config_metadata={
+                "provider": "deterministic",
+                "source": "game_lesson_repository",
+            },
+        )
+
+    async def _record_usage(
+        self,
+        run: _StoredRun,
+        artifact: _StoredArtifact,
+        generated: GameLessonProviderResult,
+    ) -> None:
+        if self._usage_costs is None:
+            return
+        for record in generated.usage_records:
+            await self._usage_costs.record(
+                user_id=run.user_id,
+                run_id=run.id,
+                artifact_id=artifact.id,
+                stage=artifact.stage,
+                provider=record.provider,
+                model=record.model,
+                unit_type=record.unit_type,
+                quantity=record.quantity,
+                unit_cost_usd=record.unit_cost_usd,
+                metadata=record.metadata,
+            )
 
     async def _payload_for_stage_from_storage(self, run: _StoredRun, stage: str) -> dict[str, Any]:
         template = await self._get_template(run.template_id)
