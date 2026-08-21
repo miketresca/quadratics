@@ -1710,6 +1710,14 @@ function FocusedPipelinePanel({
               ? `Run ${shortRunId(pipeline.run.id)} is ready for the approval-gated worksheet pipeline.`
               : "Click Lesson 1 on the paper to create the signed-in worksheet run. Script, speech markup, narration, and handwriting artifacts will appear here."}
           </p>
+          <a
+            className="mt-3 inline-flex w-fit rounded border border-cyan-300/30 bg-cyan-950/20 px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-cyan-100 hover:bg-cyan-900/35"
+            href="/game/lessons/volume-cubes/task-lesson.pdf"
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open template PDF
+          </a>
         </div>
         <button
           className="rounded-lg border border-emerald-300/55 bg-emerald-950/45 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/50 disabled:cursor-wait disabled:opacity-60"
@@ -3188,6 +3196,7 @@ function renderLaptopPipeline({
         ? `Run ${escapeHtml(shortRunId(pipeline.run.id))} is ready for approval-gated worksheet generation.`
         : "Click Lesson 1 on the paper to create the signed-in worksheet run."
     }</div>
+    <a href="/game/lessons/volume-cubes/task-lesson.pdf" target="_blank" rel="noreferrer" style="display:inline-flex;margin-top:10px;border:1px solid rgba(103,232,249,.32);background:rgba(8,47,73,.22);border-radius:8px;padding:7px 10px;color:#cffafe;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;text-decoration:none">Open template PDF</a>
   `;
   const action = document.createElement("button");
   action.type = "button";
