@@ -12,6 +12,7 @@ GameLessonStage = Literal[
     "narration",
     "handwriting",
     "interactive_bundle",
+    "lesson_publish",
 ]
 GameLessonArtifactStatus = Literal[
     "pending",

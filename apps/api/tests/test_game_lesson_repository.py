@@ -255,7 +255,7 @@ async def test_game_lesson_builds_preview_narration_handwriting_and_bundle():
     bundle = next(
         artifact for artifact in bundled.artifacts if artifact.stage == "interactive_bundle"
     )
-    assert bundled.status == "completed"
+    assert bundled.status == "active"
     assert bundle.payload["selectedInstructorId"] == "teacher-1"
     assert [section["sectionId"] for section in bundle.payload["sections"]] == [
         "do_now",
@@ -263,3 +263,29 @@ async def test_game_lesson_builds_preview_narration_handwriting_and_bundle():
         "guided_practice",
     ]
     assert bundle.payload["sections"][0]["handwritingActions"]
+
+    published = await repository.run_stage(
+        "user-a", run.id, "lesson_publish", GameLessonRunStageRequest()
+    )
+    publish = next(
+        artifact for artifact in published.artifacts if artifact.stage == "lesson_publish"
+    )
+    assert published.status == "completed"
+    assert publish.payload["published"] is True
+    assert publish.payload["interactiveBundleArtifactId"] == bundle.id
+    assert publish.payload["sectionCount"] == 3
+
+
+@pytest.mark.asyncio
+async def test_game_lesson_publish_requires_interactive_bundle():
+    repository = InMemoryGameLessonRepository()
+    run = await repository.create_or_get_run(
+        "user-a",
+        "volume-cubes-lesson-1",
+        GameWorksheetRunCreateRequest(),
+    )
+
+    with pytest.raises(GameLessonStageBlocked, match="requires completed interactive_bundle"):
+        await repository.run_stage(
+            "user-a", run.id, "lesson_publish", GameLessonRunStageRequest()
+        )

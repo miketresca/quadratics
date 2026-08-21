@@ -37,10 +37,15 @@ type MusicOption = {
 type LaptopScreenApi = {
   setError: (message: string | null) => void;
   setLoading: (loading: boolean) => void;
-  setMusicState: (state: {muted: boolean; selectedMusicId: MusicOptionId}) => void;
+  setMusicState: (state: MusicState) => void;
   setPipelineState: (state: LaptopPipelineState) => void;
   setTab: (tab: LaptopTab) => void;
   updateUser: (user: CurrentUser | null) => void;
+};
+type MusicState = {
+  muted: boolean;
+  selectedMusicId: MusicOptionId;
+  volume: number;
 };
 type LaptopPipelineState = {
   error: string | null;
@@ -185,7 +190,8 @@ const GAME_LESSON_STAGES: Array<{label: string; stage: GameLessonStage}> = [
   {stage: "speech_markup", label: "Speech markup"},
   {stage: "narration", label: "Narration"},
   {stage: "handwriting", label: "Handwriting"},
-  {stage: "interactive_bundle", label: "Interactive bundle"}
+  {stage: "interactive_bundle", label: "Interactive bundle"},
+  {stage: "lesson_publish", label: "Lesson publish"}
 ];
 
 export function GameShell({
@@ -207,6 +213,7 @@ export function GameShell({
   const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
   const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
   const musicMutedRef = useRef(readMusicState().muted);
+  const musicVolumeRef = useRef(readMusicState().volume);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
   const paperTextureRef = useRef<Texture | null>(null);
   const worksheetPlaybackRef = useRef<WorksheetPlaybackState>({activeSectionId: null, completedSectionIds: []});
@@ -227,6 +234,7 @@ export function GameShell({
   const [pomodoroNow, setPomodoroNow] = useState(() => Date.now());
   const [selectedMusicId, setSelectedMusicId] = useState<MusicOptionId>(() => readMusicState().selectedMusicId);
   const [musicMuted, setMusicMuted] = useState(() => readMusicState().muted);
+  const [musicVolume, setMusicVolume] = useState(() => readMusicState().volume);
   const [gameRun, setGameRun] = useState<GameWorksheetRunSnapshot | null>(null);
   const [worksheetPlayback, setWorksheetPlayback] = useState<WorksheetPlaybackState>({activeSectionId: null, completedSectionIds: []});
   const [gamePipelineLoading, setGamePipelineLoading] = useState(false);
@@ -240,6 +248,7 @@ export function GameShell({
   pomodoroRef.current = pomodoro;
   selectedMusicRef.current = selectedMusicId;
   musicMutedRef.current = musicMuted;
+  musicVolumeRef.current = musicVolume;
   gameRunRef.current = gameRun;
   worksheetPlaybackRef.current = worksheetPlayback;
   selectedLessonIdRef.current = selectedLessonId;
@@ -327,15 +336,23 @@ export function GameShell({
   }
 
   function changeMusic(selectedMusicId: MusicOptionId) {
-    const next = {muted: musicMutedRef.current, selectedMusicId};
+    const next = {muted: musicMutedRef.current, selectedMusicId, volume: musicVolumeRef.current};
     setSelectedMusicId(selectedMusicId);
     writeMusicState(next);
     laptopScreenRef.current?.setMusicState(next);
   }
 
   function changeMusicMuted(muted: boolean) {
-    const next = {muted, selectedMusicId: selectedMusicRef.current};
+    const next = {muted, selectedMusicId: selectedMusicRef.current, volume: musicVolumeRef.current};
     setMusicMuted(muted);
+    writeMusicState(next);
+    laptopScreenRef.current?.setMusicState(next);
+  }
+
+  function changeMusicVolume(volume: number) {
+    const clamped = clampMusicVolume(volume);
+    const next = {muted: musicMutedRef.current, selectedMusicId: selectedMusicRef.current, volume: clamped};
+    setMusicVolume(clamped);
     writeMusicState(next);
     laptopScreenRef.current?.setMusicState(next);
   }
@@ -577,11 +594,11 @@ export function GameShell({
     let pointerLockRequestPending = false;
     let lastPointerLockRequestAt = 0;
 
-    function postMusicCommand(command: "mute" | "pauseVideo" | "playVideo" | "unMute") {
-      musicIframe?.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args: []}), "https://www.youtube.com");
+    function postMusicCommand(command: "mute" | "playVideo" | "setVolume" | "unMute", args: unknown[] = []) {
+      musicIframe?.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args}), "https://www.youtube.com");
     }
 
-    function requestScenePointerLock() {
+    function requestScenePointerLock({pauseOnFailure = true}: {pauseOnFailure?: boolean} = {}) {
       if (!renderer?.domElement || document.pointerLockElement === renderer.domElement || pointerLockRequestPending) {
         return document.pointerLockElement === renderer?.domElement;
       }
@@ -598,10 +615,9 @@ export function GameShell({
             if (process.env.NODE_ENV === "development") {
               console.warn("[quadratics] pointer lock request skipped", error);
             }
-            if (startedRef.current && document.pointerLockElement !== renderer?.domElement) {
+            if (pauseOnFailure && startedRef.current && document.pointerLockElement !== renderer?.domElement) {
               startedRef.current = false;
               setStarted(false);
-              postMusicCommand("pauseVideo");
             }
           })
           .finally(() => {
@@ -612,10 +628,9 @@ export function GameShell({
         if (process.env.NODE_ENV === "development") {
           console.warn("[quadratics] pointer lock request skipped", error);
         }
-        if (startedRef.current) {
+        if (pauseOnFailure && startedRef.current) {
           startedRef.current = false;
           setStarted(false);
-          postMusicCommand("pauseVideo");
         }
       }
       return true;
@@ -626,13 +641,13 @@ export function GameShell({
       if (!didRequestPointerLock) {
         startedRef.current = false;
         setStarted(false);
-        postMusicCommand("pauseVideo");
         return;
       }
       startedRef.current = true;
       setStarted(true);
       postMusicCommand("playVideo");
       postMusicCommand(musicMutedRef.current ? "mute" : "unMute");
+      postMusicCommand("setVolume", [musicVolumeRef.current]);
     }
 
     function pauseExperience() {
@@ -640,7 +655,6 @@ export function GameShell({
       setStarted(false);
       setFocusMode("room");
       document.exitPointerLock?.();
-      postMusicCommand("pauseVideo");
     }
 
     function setFocusMode(mode: FocusMode) {
@@ -864,8 +878,10 @@ export function GameShell({
         onSignOut: signOutFromLaptop,
         onMusicChange: changeMusic,
         onMusicMutedChange: changeMusicMuted,
+        onMusicVolumeChange: changeMusicVolume,
         onTabChange: setLaptopTab,
         origin: window.location.origin,
+        musicVolume: musicVolumeRef.current,
         selectedMusicId: selectedMusicRef.current,
         pipeline: {error: gamePipelineError, loading: gamePipelineLoading, run: gameRunRef.current},
         tab: laptopTab,
@@ -1130,6 +1146,7 @@ export function GameShell({
           if (focusModeRef.current !== "room") {
             event.preventDefault();
             setFocusMode("room");
+            requestScenePointerLock({pauseOnFailure: false});
           }
         }
       }
@@ -1413,10 +1430,12 @@ export function GameShell({
           pipeline={{error: gamePipelineError, loading: gamePipelineLoading, run: gameRun}}
           loading={laptopLoginLoading}
           musicMuted={musicMuted}
+          musicVolume={musicVolume}
           onSignIn={handleLaptopLoginSubmit}
           onSignOut={() => void signOutFromLaptop()}
           onMusicChange={changeMusic}
           onMusicMutedChange={changeMusicMuted}
+          onMusicVolumeChange={changeMusicVolume}
           onTabChange={changeLaptopTab}
           selectedMusicId={selectedMusicId}
           tab={laptopTab}
@@ -1492,11 +1511,13 @@ function LaptopFocusPanel({
   onCreateRun,
   onMusicChange,
   onMusicMutedChange,
+  onMusicVolumeChange,
   onRunStage,
   onSignIn,
   onSignOut,
   onTabChange,
   selectedMusicId,
+  musicVolume,
   pipeline,
   tab,
   user
@@ -1508,11 +1529,13 @@ function LaptopFocusPanel({
   onCreateRun: () => void;
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
+  onMusicVolumeChange: (volume: number) => void;
   onRunStage: (stage: GameLessonStage) => void;
   onSignIn: (event: FormEvent<HTMLFormElement>) => void;
   onSignOut: () => void;
   onTabChange: (tab: LaptopTab) => void;
   selectedMusicId: MusicOptionId;
+  musicVolume: number;
   pipeline: LaptopPipelineState;
   tab: LaptopTab;
   user: CurrentUser | null;
@@ -1615,6 +1638,21 @@ function LaptopFocusPanel({
                   >
                     {musicMuted ? "Muted" : "Mute"}
                   </button>
+                  <label className="grid max-w-md gap-2">
+                    <span className="flex justify-between text-[11px] uppercase tracking-[0.22em] text-cyan-100/55">
+                      <span>Volume</span>
+                      <span>{musicVolume}%</span>
+                    </span>
+                    <input
+                      className="accent-cyan-300"
+                      max={100}
+                      min={0}
+                      onChange={(event) => onMusicVolumeChange(Number(event.currentTarget.value))}
+                      step={1}
+                      type="range"
+                      value={musicVolume}
+                    />
+                  </label>
                 </div>
               ) : tab === "pipeline" ? (
                 <FocusedPipelinePanel onApproveArtifact={onApproveArtifact} onCreateRun={onCreateRun} onRunStage={onRunStage} pipeline={pipeline} />
@@ -1685,31 +1723,40 @@ function FocusedPipelinePanel({
       {pipeline.error ? (
         <div className="rounded-lg border border-red-400/40 bg-red-950/35 px-3 py-2 text-sm text-red-100">{pipeline.error}</div>
       ) : null}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid gap-3">
         {GAME_LESSON_STAGES.map(({label, stage}) => {
           const artifact = artifactForStage(pipeline.run, stage);
           const dependencyMessage = pipelineDependencyMessage(pipeline.run, stage);
           const canRun = !pipeline.loading && !dependencyMessage;
+          const palette = stagePalette(stage);
+          const previewRows = artifactPreviewRows(artifact, stage);
+          const previewText = artifactPreviewText(artifact, stage);
           return (
-            <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4" key={stage}>
-              <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
-              <p className={`mt-3 text-sm font-semibold ${statusTextClass(artifact?.status)}`}>{artifact?.status ?? (stage === "template" ? "ready" : "waiting")}</p>
-              {artifact?.summary ? <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{artifact.summary}</p> : null}
-              {dependencyMessage ? <p className="mt-2 text-xs leading-5 text-amber-100/70">{dependencyMessage}</p> : null}
-              {artifact?.status === "completed" && stage === "interactive_bundle" ? (
-                <p className="mt-2 text-xs leading-5 text-emerald-100/75">Paper is using this bundle for the interactive worksheet view.</p>
-              ) : null}
-              <div className="mt-4 flex gap-2">
-                <button
-                  className="rounded border border-cyan-300/35 bg-cyan-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-cyan-100 hover:bg-cyan-900/35 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!canRun}
-                  onClick={() => onRunStage(stage)}
-                  type="button"
-                >
-                  Run
-                </button>
-                {artifact?.status === "awaiting_approval" ? (
+            <div
+              className="rounded border bg-zinc-950/45 p-4 shadow-[inset_0_0_40px_rgba(255,255,255,0.015)]"
+              key={stage}
+              style={{borderColor: palette.border, boxShadow: `inset 0 0 54px ${palette.glow}`}}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-mono text-sm font-black uppercase tracking-wide" style={{color: palette.text}}>
+                    {label}
+                  </p>
+                  <p className="mt-2 font-mono text-[11px] uppercase tracking-wide text-zinc-500">
+                    {artifact?.status ?? (stage === "template" ? "ready" : "waiting")} {artifact ? `/ v${artifact.version}` : ""}
+                  </p>
+                </div>
+                <div className="flex gap-2">
                   <button
+                    className="rounded border border-cyan-300/35 bg-cyan-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-cyan-100 hover:bg-cyan-900/35 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!canRun}
+                    onClick={() => onRunStage(stage)}
+                    type="button"
+                  >
+                    Run
+                  </button>
+                  {artifact?.status === "awaiting_approval" ? (
+                    <button
                     className="rounded border border-emerald-300/45 bg-emerald-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-100 hover:bg-emerald-900/35 disabled:cursor-wait disabled:opacity-50"
                     disabled={pipeline.loading}
                     onClick={() => onApproveArtifact(artifact)}
@@ -1717,9 +1764,22 @@ function FocusedPipelinePanel({
                   >
                     Approve
                   </button>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
-            </div>
+              {dependencyMessage ? <p className="mt-3 text-xs leading-5 text-amber-100/70">{dependencyMessage}</p> : null}
+              {previewRows.length > 0 ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {previewRows.map((row) => (
+                    <div className="rounded border border-white/10 bg-black/25 px-3 py-2" key={`${stage}-${row.label}`}>
+                      <p className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{row.label}</p>
+                      <p className="mt-1 text-sm font-semibold text-zinc-100">{row.value}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {previewText ? <p className="mt-3 text-xs leading-5 text-zinc-400">{previewText}</p> : null}
+              </div>
           );
         })}
       </div>
@@ -1807,6 +1867,19 @@ function statusTextClass(status?: string) {
   return "text-zinc-300";
 }
 
+function stagePalette(stage: GameLessonStage) {
+  const palettes: Record<GameLessonStage, {border: string; glow: string; text: string}> = {
+    template: {border: "rgba(52,211,153,0.42)", glow: "rgba(16,185,129,0.08)", text: "#a7f3d0"},
+    section_script: {border: "rgba(56,189,248,0.46)", glow: "rgba(14,165,233,0.08)", text: "#bae6fd"},
+    speech_markup: {border: "rgba(250,204,21,0.45)", glow: "rgba(234,179,8,0.08)", text: "#fef08a"},
+    narration: {border: "rgba(168,85,247,0.46)", glow: "rgba(147,51,234,0.09)", text: "#e9d5ff"},
+    handwriting: {border: "rgba(244,114,182,0.45)", glow: "rgba(219,39,119,0.08)", text: "#fbcfe8"},
+    interactive_bundle: {border: "rgba(132,204,22,0.48)", glow: "rgba(101,163,13,0.08)", text: "#d9f99d"},
+    lesson_publish: {border: "rgba(52,211,153,0.56)", glow: "rgba(16,185,129,0.12)", text: "#bbf7d0"}
+  };
+  return palettes[stage];
+}
+
 function statusColor(status?: string) {
   if (status === "completed" || status === "approved") {
     return "#a7f3d0";
@@ -1818,12 +1891,100 @@ function statusColor(status?: string) {
     return "#fde68a";
   }
   if (status === "running") {
-    return "#a5f3fc";
+    return "#bae6fd";
   }
   if (status === "awaiting_approval") {
     return "#ddd6fe";
   }
   return "#d4d4d8";
+}
+
+function artifactPayloadRecord(artifact: GameLessonArtifact | null): Record<string, unknown> {
+  return artifact && artifact.payload && typeof artifact.payload === "object" && !Array.isArray(artifact.payload)
+    ? artifact.payload as Record<string, unknown>
+    : {};
+}
+
+function countPayloadArray(payload: Record<string, unknown>, key: string) {
+  return Array.isArray(payload[key]) ? payload[key].length : 0;
+}
+
+function artifactPreviewRows(artifact: GameLessonArtifact | null, stage: GameLessonStage): Array<{label: string; value: string}> {
+  if (!artifact) {
+    return [];
+  }
+  const payload = artifactPayloadRecord(artifact);
+  if (stage === "template") {
+    return [
+      {label: "sections", value: String(countPayloadArray(payload, "sections"))},
+      {label: "questions", value: String(countPayloadArray(payload, "questions"))},
+      {label: "fill targets", value: String(countPayloadArray(payload, "fillTargets"))}
+    ];
+  }
+  if (stage === "section_script") {
+    return [
+      {label: "sections", value: String(countPayloadArray(payload, "sections"))},
+      {label: "approval", value: artifact.status === "approved" ? "approved" : artifact.status === "awaiting_approval" ? "required" : "not ready"}
+    ];
+  }
+  if (stage === "speech_markup") {
+    return [
+      {label: "markup blocks", value: String(countPayloadArray(payload, "sections"))},
+      {label: "approval", value: artifact.status === "approved" ? "approved" : artifact.status === "awaiting_approval" ? "required" : "not ready"}
+    ];
+  }
+  if (stage === "narration") {
+    return [
+      {label: "segments", value: String(countPayloadArray(payload, "segments"))},
+      {label: "provider", value: typeof payload.provider === "string" ? payload.provider : "preview"}
+    ];
+  }
+  if (stage === "handwriting") {
+    return [
+      {label: "actions", value: String(countPayloadArray(payload, "actions"))},
+      {label: "renderer", value: "browser pen"}
+    ];
+  }
+  if (stage === "lesson_publish") {
+    return [
+      {label: "published", value: payload.published === true ? "yes" : "no"},
+      {label: "sections", value: typeof payload.sectionCount === "number" ? String(payload.sectionCount) : "0"},
+      {label: "pages", value: typeof payload.pageCount === "number" ? String(payload.pageCount) : "0"}
+    ];
+  }
+  return [
+    {label: "pages", value: String(countPayloadArray(payload, "pages"))},
+    {label: "sections", value: String(countPayloadArray(payload, "sections"))}
+  ];
+}
+
+function artifactPreviewText(artifact: GameLessonArtifact | null, stage: GameLessonStage) {
+  if (!artifact) {
+    return "";
+  }
+  const payload = artifactPayloadRecord(artifact);
+  const sections = Array.isArray(payload.sections) ? payload.sections : [];
+  if ((stage === "section_script" || stage === "speech_markup") && sections.length > 0) {
+    const firstSection = sections[0];
+    if (firstSection && typeof firstSection === "object") {
+      const record = firstSection as Record<string, unknown>;
+      const text = typeof record.narration === "string" ? record.narration : typeof record.speechText === "string" ? record.speechText : "";
+      return text.length > 180 ? `${text.slice(0, 180)}...` : text;
+    }
+  }
+  if (stage === "handwriting") {
+    const actions = Array.isArray(payload.actions) ? payload.actions : [];
+    const firstAction = actions.find((action) => action && typeof action === "object") as Record<string, unknown> | undefined;
+    const text = typeof firstAction?.text === "string" ? firstAction.text : "";
+    return text ? `First write action: ${text}` : "";
+  }
+  if (stage === "interactive_bundle") {
+    return "Playable browser bundle for click-through worksheet playback.";
+  }
+  if (stage === "lesson_publish") {
+    return "Marks the approved interactive bundle as the canonical Lesson 1 output.";
+  }
+  return artifact.summary ?? "";
 }
 
 function usernameToAuthEmail(username: string) {
@@ -1872,24 +2033,31 @@ function writePomodoroState(state: PomodoroState) {
   window.localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(state));
 }
 
-function readMusicState(): {muted: boolean; selectedMusicId: MusicOptionId} {
+function clampMusicVolume(volume: number) {
+  if (!Number.isFinite(volume)) {
+    return 60;
+  }
+  return Math.max(0, Math.min(100, Math.round(volume)));
+}
+
+function readMusicState(): MusicState {
   if (typeof window === "undefined") {
-    return {muted: false, selectedMusicId: "lofi"};
+    return {muted: false, selectedMusicId: "lofi", volume: 60};
   }
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(MUSIC_STORAGE_KEY) ?? "null") as Partial<{muted: boolean; selectedMusicId: MusicOptionId}> | null;
+    const parsed = JSON.parse(window.localStorage.getItem(MUSIC_STORAGE_KEY) ?? "null") as Partial<MusicState> | null;
     const storedMusicId = parsed?.selectedMusicId;
     let selectedMusicId: MusicOptionId = "lofi";
     if (storedMusicId && MUSIC_OPTIONS.some((option) => option.id === storedMusicId)) {
       selectedMusicId = storedMusicId;
     }
-    return {muted: parsed?.muted === true, selectedMusicId};
+    return {muted: parsed?.muted === true, selectedMusicId, volume: clampMusicVolume(Number(parsed?.volume ?? 60))};
   } catch {
-    return {muted: false, selectedMusicId: "lofi"};
+    return {muted: false, selectedMusicId: "lofi", volume: 60};
   }
 }
 
-function writeMusicState(state: {muted: boolean; selectedMusicId: MusicOptionId}) {
+function writeMusicState(state: MusicState) {
   if (typeof window === "undefined") {
     return;
   }
@@ -2705,9 +2873,11 @@ function createLaptopScreen(
     onSignOut: () => Promise<void>;
     onMusicChange: (selectedMusicId: MusicOptionId) => void;
     onMusicMutedChange: (muted: boolean) => void;
+    onMusicVolumeChange: (volume: number) => void;
     onTabChange: (tab: LaptopTab) => void;
     origin: string;
     pipeline: LaptopPipelineState;
+    musicVolume: number;
     selectedMusicId: MusicOptionId;
     tab: LaptopTab;
     user: CurrentUser | null;
@@ -2722,6 +2892,21 @@ function createLaptopScreen(
   screen.style.boxShadow = "inset 0 0 36px rgba(35, 220, 255, 0.16)";
   screen.style.color = "#d9fff5";
   screen.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
+  screen.style.position = "relative";
+
+  const appRoot = document.createElement("div");
+  appRoot.style.height = "100%";
+  appRoot.style.width = "100%";
+
+  const musicDock = document.createElement("div");
+  musicDock.style.position = "absolute";
+  musicDock.style.left = "-9999px";
+  musicDock.style.top = "-9999px";
+  musicDock.style.width = "1px";
+  musicDock.style.height = "1px";
+  musicDock.style.overflow = "hidden";
+  musicDock.style.opacity = "0";
+  musicDock.style.pointerEvents = "none";
 
   const iframe = document.createElement("iframe");
   iframe.src = musicEmbedUrl(options.selectedMusicId, options.musicMuted, options.origin);
@@ -2739,22 +2924,47 @@ function createLaptopScreen(
   let currentError = options.error;
   let currentMusicId = options.selectedMusicId;
   let currentMusicMuted = options.musicMuted;
+  let currentMusicVolume = options.musicVolume;
   let currentPipeline = options.pipeline;
   let loading = false;
+
+  function postMusicCommand(command: "mute" | "playVideo" | "setVolume" | "unMute", args: unknown[] = []) {
+    iframe.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args}), "https://www.youtube.com");
+  }
+
+  function applyMusicPlaybackState() {
+    postMusicCommand("playVideo");
+    postMusicCommand(currentMusicMuted ? "mute" : "unMute");
+    postMusicCommand("setVolume", [currentMusicVolume]);
+  }
 
   function refreshMusicSource() {
     iframe.src = musicEmbedUrl(currentMusicId, currentMusicMuted, options.origin);
   }
 
+  function keepMusicMounted() {
+    if (iframe.parentElement !== musicDock) {
+      musicDock.append(iframe);
+    }
+  }
+
+  iframe.addEventListener("load", () => {
+    window.setTimeout(applyMusicPlaybackState, 250);
+  });
+  screen.append(appRoot, musicDock);
+  keepMusicMounted();
+
   function render() {
-    screen.replaceChildren();
+    appRoot.replaceChildren();
     if (!currentUser) {
-      screen.append(renderLaptopLogin({error: currentError, loading, onSignIn: options.onSignIn}));
+      keepMusicMounted();
+      appRoot.append(renderLaptopLogin({error: currentError, loading, onSignIn: options.onSignIn}));
       return;
     }
-    screen.append(renderLaptopBrowser({
+    appRoot.append(renderLaptopBrowser({
       iframe,
       musicMuted: currentMusicMuted,
+      musicVolume: currentMusicVolume,
       onSignOut: options.onSignOut,
       onApproveArtifact: options.onApproveArtifact,
       onCreateRun: options.onCreateRun,
@@ -2767,9 +2977,16 @@ function createLaptopScreen(
       },
       onMusicMutedChange: (muted) => {
         currentMusicMuted = muted;
-        iframe.contentWindow?.postMessage(JSON.stringify({event: "command", func: muted ? "mute" : "unMute", args: []}), "https://www.youtube.com");
+        postMusicCommand(muted ? "mute" : "unMute");
+        postMusicCommand("playVideo");
         render();
         options.onMusicMutedChange(muted);
+      },
+      onMusicVolumeChange: (volume) => {
+        currentMusicVolume = clampMusicVolume(volume);
+        postMusicCommand("setVolume", [currentMusicVolume]);
+        render();
+        options.onMusicVolumeChange(currentMusicVolume);
       },
       onTabChange: (tab) => {
         currentTab = tab;
@@ -2781,6 +2998,10 @@ function createLaptopScreen(
       tab: currentTab,
       user: currentUser
     }));
+    if (currentTab !== "music") {
+      keepMusicMounted();
+    }
+    applyMusicPlaybackState();
   }
   render();
 
@@ -2799,10 +3020,16 @@ function createLaptopScreen(
         loading = value;
         render();
       },
-      setMusicState(state: {muted: boolean; selectedMusicId: MusicOptionId}) {
+      setMusicState(state: MusicState) {
+        const musicSourceChanged = currentMusicId !== state.selectedMusicId;
         currentMusicId = state.selectedMusicId;
         currentMusicMuted = state.muted;
-        refreshMusicSource();
+        currentMusicVolume = clampMusicVolume(state.volume);
+        if (musicSourceChanged) {
+          refreshMusicSource();
+        } else {
+          applyMusicPlaybackState();
+        }
         render();
       },
       setPipelineState(state: LaptopPipelineState) {
@@ -2997,26 +3224,32 @@ function renderLaptopPipeline({
 
   const grid = document.createElement("div");
   grid.style.display = "grid";
-  grid.style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
-  grid.style.gap = "10px";
+  grid.style.gap = "12px";
   for (const {label, stage} of GAME_LESSON_STAGES) {
     const artifact = artifactForStage(pipeline.run, stage);
     const dependencyMessage = pipelineDependencyMessage(pipeline.run, stage);
+    const palette = stagePalette(stage);
+    const previewRows = artifactPreviewRows(artifact, stage);
+    const previewText = artifactPreviewText(artifact, stage);
     const card = document.createElement("div");
-    card.style.minHeight = "92px";
-    card.style.border = "1px solid rgba(63,63,70,0.86)";
-    card.style.background = "rgba(2,7,18,0.55)";
-    card.style.borderRadius = "10px";
-    card.style.padding = "12px";
+    card.style.border = `1px solid ${palette.border}`;
+    card.style.background = `linear-gradient(90deg, ${palette.glow}, rgba(2,7,18,0.55))`;
+    card.style.borderRadius = "12px";
+    card.style.padding = "14px";
     const status = artifact?.status ?? (stage === "template" ? "ready" : "waiting");
     card.innerHTML = `
-      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">${escapeHtml(label)}</div>
-      <div style="margin-top:12px;font-size:13px;font-weight:800;color:${statusColor(status)}">${escapeHtml(status)}</div>
+      <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start">
+        <div>
+          <div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:${palette.text};font-weight:900">${escapeHtml(label)}</div>
+          <div style="margin-top:7px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(161,161,170,.7)">${escapeHtml(status)}${artifact ? ` / v${artifact.version}` : ""}</div>
+        </div>
+      </div>
       ${
-        artifact?.summary
-          ? `<div style="margin-top:8px;font-size:11px;line-height:1.45;color:rgba(161,161,170,.76)">${escapeHtml(artifact.summary)}</div>`
+        previewRows.length > 0
+          ? `<div style="margin-top:13px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">${previewRows.map((row) => `<div style="border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.22);border-radius:8px;padding:8px 9px"><div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">${escapeHtml(row.label)}</div><div style="margin-top:5px;font-size:12px;font-weight:800;color:#f4f4f5">${escapeHtml(row.value)}</div></div>`).join("")}</div>`
           : ""
       }
+      ${previewText ? `<div style="margin-top:10px;font-size:11px;line-height:1.48;color:rgba(212,212,216,.72)">${escapeHtml(previewText)}</div>` : ""}
       ${
         dependencyMessage
           ? `<div style="margin-top:8px;font-size:11px;line-height:1.45;color:rgba(253,230,138,.72)">${escapeHtml(dependencyMessage)}</div>`
@@ -3031,7 +3264,7 @@ function renderLaptopPipeline({
     const controls = document.createElement("div");
     controls.style.display = "flex";
     controls.style.gap = "8px";
-    controls.style.marginTop = "12px";
+    controls.style.marginTop = "13px";
     const runButton = document.createElement("button");
     runButton.type = "button";
     runButton.textContent = "RUN";
@@ -3126,10 +3359,12 @@ function musicLabel(selectedMusicId: MusicOptionId) {
 function renderLaptopBrowser({
   iframe,
   musicMuted,
+  musicVolume,
   onApproveArtifact,
   onCreateRun,
   onMusicChange,
   onMusicMutedChange,
+  onMusicVolumeChange,
   onRunStage,
   onSignOut,
   onTabChange,
@@ -3140,10 +3375,12 @@ function renderLaptopBrowser({
 }: {
   iframe: HTMLIFrameElement;
   musicMuted: boolean;
+  musicVolume: number;
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
+  onMusicVolumeChange: (volume: number) => void;
   onRunStage: (stage: GameLessonStage) => void;
   onSignOut: () => Promise<void>;
   onTabChange: (tab: LaptopTab) => void;
@@ -3244,6 +3481,30 @@ function renderLaptopBrowser({
       onMusicMutedChange(!musicMuted);
     });
     controls.append(mute);
+    const volumeLabel = document.createElement("label");
+    volumeLabel.style.display = "grid";
+    volumeLabel.style.gap = "8px";
+    volumeLabel.style.marginTop = "2px";
+    const volumeText = document.createElement("span");
+    volumeText.textContent = `VOLUME / ${musicVolume}%`;
+    volumeText.style.color = "rgba(207,250,254,0.64)";
+    volumeText.style.fontSize = "11px";
+    volumeText.style.fontWeight = "900";
+    volumeText.style.letterSpacing = "0.14em";
+    const volumeInput = document.createElement("input");
+    volumeInput.type = "range";
+    volumeInput.min = "0";
+    volumeInput.max = "100";
+    volumeInput.step = "1";
+    volumeInput.value = String(musicVolume);
+    volumeInput.style.accentColor = "#67e8f9";
+    volumeInput.addEventListener("pointerdown", (event) => event.stopPropagation());
+    volumeInput.addEventListener("input", (event) => {
+      event.stopPropagation();
+      onMusicVolumeChange(Number((event.currentTarget as HTMLInputElement).value));
+    });
+    volumeLabel.append(volumeText, volumeInput);
+    controls.append(volumeLabel);
     const player = document.createElement("div");
     player.style.overflow = "hidden";
     player.style.border = "1px solid rgba(127,255,230,0.18)";

@@ -29,6 +29,7 @@ STAGE_ORDER: tuple[str, ...] = (
     "narration",
     "handwriting",
     "interactive_bundle",
+    "lesson_publish",
 )
 STAGE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "template": (),
@@ -37,6 +38,7 @@ STAGE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "narration": ("speech_markup",),
     "handwriting": ("narration",),
     "interactive_bundle": ("handwriting",),
+    "lesson_publish": ("interactive_bundle",),
 }
 APPROVAL_REQUIRED_STAGES = {"section_script", "speech_markup"}
 APPROVED_UPSTREAM_REQUIRED: dict[str, tuple[str, ...]] = {
@@ -201,7 +203,7 @@ class InMemoryGameLessonRepository:
             return self._snapshot(run)
         self._create_artifact(run, stage)
         self._mark_descendants_stale(run.id, stage)
-        if stage == "interactive_bundle":
+        if stage == "lesson_publish":
             run.status = "completed"
         run.updated_at = _now()
         return self._snapshot(run)
@@ -280,6 +282,13 @@ class InMemoryGameLessonRepository:
                 template_payload,
                 narration.payload if narration else {},
                 handwriting.payload if handwriting else {},
+            )
+        if stage == "lesson_publish":
+            interactive_bundle = self._current_artifact(run.id, "interactive_bundle")
+            return _lesson_publish_payload(
+                run,
+                template_payload,
+                interactive_bundle,
             )
         return {"stage": stage}
 
@@ -417,7 +426,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             return await self._snapshot(run)
         await self._create_artifact(run, stage)
         await self._mark_descendants_stale(run.id, stage)
-        run_status = "completed" if stage == "interactive_bundle" else None
+        run_status = "completed" if stage == "lesson_publish" else None
         await self._touch_run(run.id, status_value=run_status)
         return await self._snapshot(await self._get_run_for_user(user_id, run.id))
 
@@ -632,6 +641,13 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
                 template.payload,
                 narration.payload if narration else {},
                 handwriting.payload if handwriting else {},
+            )
+        if stage == "lesson_publish":
+            interactive_bundle = await self._current_artifact(run.id, "interactive_bundle")
+            return _lesson_publish_payload(
+                run,
+                template.payload,
+                interactive_bundle,
             )
         return {"stage": stage}
 
@@ -932,6 +948,34 @@ def _interactive_bundle_payload(
         "pages": template_payload.get("pages", []),
         "sections": sections,
         "completedSections": [],
+    }
+
+
+def _lesson_publish_payload(
+    run: _StoredRun,
+    template_payload: dict[str, Any],
+    interactive_bundle: _StoredArtifact | None,
+) -> dict[str, Any]:
+    bundle_payload = interactive_bundle.payload if interactive_bundle else {}
+    return {
+        "summary": (
+            "Canonical Lesson 1 publish marker. This points every learner at the "
+            "approved interactive worksheet bundle without rerunning provider stages."
+        ),
+        "publishVersion": 1,
+        "published": True,
+        "templateId": run.template_id,
+        "templateVersion": template_payload.get("templateVersion", 1),
+        "selectedInstructorId": run.selected_instructor_id,
+        "interactiveBundleArtifactId": interactive_bundle.id if interactive_bundle else None,
+        "interactiveBundleVersion": interactive_bundle.version if interactive_bundle else None,
+        "sectionCount": len(bundle_payload.get("sections", []))
+        if isinstance(bundle_payload.get("sections"), list)
+        else 0,
+        "pageCount": len(bundle_payload.get("pages", []))
+        if isinstance(bundle_payload.get("pages"), list)
+        else 0,
+        "studentReadyAt": _now(),
     }
 
 

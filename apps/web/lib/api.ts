@@ -110,7 +110,8 @@ export type GameLessonStage =
   | "speech_markup"
   | "narration"
   | "handwriting"
-  | "interactive_bundle";
+  | "interactive_bundle"
+  | "lesson_publish";
 
 export type GameLessonArtifactStatus =
   | "pending"
