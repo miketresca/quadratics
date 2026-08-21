@@ -6,6 +6,7 @@ import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, Vector3, 
 import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
 
 import {
+  approveGameLessonArtifact,
   createGameLessonRun,
   runGameLessonStage,
   type GameLessonArtifact,
@@ -381,6 +382,98 @@ export function GameShell({
     }
   }
 
+  async function runGameLessonPipelineStage(stage: GameLessonStage, params: {force?: boolean} = {}) {
+    const requestId = gamePipelineRequestRef.current + 1;
+    gamePipelineRequestRef.current = requestId;
+    const requestingUserId = userRef.current?.id;
+    if (!requestingUserId) {
+      throw new Error("Login on the laptop to start this lesson.");
+    }
+    setGamePipelineLoading(true);
+    setGamePipelineError(null);
+    laptopScreenRef.current?.setPipelineState({error: null, loading: true, run: gameRunRef.current});
+    try {
+      const accessToken = await getLaptopAccessToken();
+      const existingRun =
+        gameRunRef.current?.templateId === GAME_LESSON_TEMPLATE_ID
+          ? gameRunRef.current
+          : await createGameLessonRun({
+              accessToken,
+              selectedInstructorId: null,
+              templateId: GAME_LESSON_TEMPLATE_ID
+            });
+      const snapshot = await runGameLessonStage({
+        accessToken,
+        force: params.force ?? false,
+        runId: existingRun.id,
+        stage
+      });
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
+      setGameRun(snapshot);
+      laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
+      return snapshot;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Could not run ${stage}.`;
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
+      setGamePipelineError(message);
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      throw error;
+    } finally {
+      if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
+        setGamePipelineLoading(false);
+      }
+    }
+  }
+
+  async function approveGameLessonPipelineArtifact(artifact: GameLessonArtifact) {
+    const requestId = gamePipelineRequestRef.current + 1;
+    gamePipelineRequestRef.current = requestId;
+    const requestingUserId = userRef.current?.id;
+    if (!requestingUserId) {
+      throw new Error("Login on the laptop to start this lesson.");
+    }
+    setGamePipelineLoading(true);
+    setGamePipelineError(null);
+    laptopScreenRef.current?.setPipelineState({error: null, loading: true, run: gameRunRef.current});
+    try {
+      const accessToken = await getLaptopAccessToken();
+      await approveGameLessonArtifact({
+        accessToken,
+        artifactId: artifact.id,
+        decision: "approved",
+        notes: "Approved from laptop pipeline console."
+      });
+      const snapshot = await runGameLessonStage({
+        accessToken,
+        force: false,
+        runId: artifact.runId,
+        stage: "template"
+      });
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
+      setGameRun(snapshot);
+      laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
+      return snapshot;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not approve worksheet artifact.";
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
+      setGamePipelineError(message);
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      throw error;
+    } finally {
+      if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
+        setGamePipelineLoading(false);
+      }
+    }
+  }
+
   function startGameLesson(choiceId: GameLessonId, texture: Texture | null) {
     if (!userRef.current) {
       setLockedMessage(true);
@@ -706,6 +799,16 @@ export function GameShell({
         error: loginError,
         onCreateRun: () => {
           void prepareGameLessonRun().catch(() => {
+            // The laptop pipeline tab renders the failure inline.
+          });
+        },
+        onApproveArtifact: (artifact) => {
+          void approveGameLessonPipelineArtifact(artifact).catch(() => {
+            // The laptop pipeline tab renders the failure inline.
+          });
+        },
+        onRunStage: (stage) => {
+          void runGameLessonPipelineStage(stage, {force: false}).catch(() => {
             // The laptop pipeline tab renders the failure inline.
           });
         },
@@ -1233,6 +1336,16 @@ export function GameShell({
               // The focused laptop tab renders the failure inline.
             });
           }}
+          onApproveArtifact={(artifact) => {
+            void approveGameLessonPipelineArtifact(artifact).catch(() => {
+              // The focused laptop tab renders the failure inline.
+            });
+          }}
+          onRunStage={(stage) => {
+            void runGameLessonPipelineStage(stage, {force: false}).catch(() => {
+              // The focused laptop tab renders the failure inline.
+            });
+          }}
           pipeline={{error: gamePipelineError, loading: gamePipelineLoading, run: gameRun}}
           loading={laptopLoginLoading}
           musicMuted={musicMuted}
@@ -1311,11 +1424,13 @@ function LaptopFocusPanel({
   error,
   loading,
   musicMuted,
+  onApproveArtifact,
   onCreateRun,
-  onSignIn,
-  onSignOut,
   onMusicChange,
   onMusicMutedChange,
+  onRunStage,
+  onSignIn,
+  onSignOut,
   onTabChange,
   selectedMusicId,
   pipeline,
@@ -1325,11 +1440,13 @@ function LaptopFocusPanel({
   error: string | null;
   loading: boolean;
   musicMuted: boolean;
+  onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
-  onSignIn: (event: FormEvent<HTMLFormElement>) => void;
-  onSignOut: () => void;
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
+  onRunStage: (stage: GameLessonStage) => void;
+  onSignIn: (event: FormEvent<HTMLFormElement>) => void;
+  onSignOut: () => void;
   onTabChange: (tab: LaptopTab) => void;
   selectedMusicId: MusicOptionId;
   pipeline: LaptopPipelineState;
@@ -1436,7 +1553,7 @@ function LaptopFocusPanel({
                   </button>
                 </div>
               ) : tab === "pipeline" ? (
-                <FocusedPipelinePanel onCreateRun={onCreateRun} pipeline={pipeline} />
+                <FocusedPipelinePanel onApproveArtifact={onApproveArtifact} onCreateRun={onCreateRun} onRunStage={onRunStage} pipeline={pipeline} />
               ) : tab === "costs" ? (
                 <FocusedCostsPanel pipeline={pipeline} />
               ) : tab === "settings" ? (
@@ -1470,10 +1587,14 @@ function LaptopFocusPanel({
 }
 
 function FocusedPipelinePanel({
+  onApproveArtifact,
   onCreateRun,
+  onRunStage,
   pipeline
 }: {
+  onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
+  onRunStage: (stage: GameLessonStage) => void;
   pipeline: LaptopPipelineState;
 }) {
   return (
@@ -1508,6 +1629,26 @@ function FocusedPipelinePanel({
               <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
               <p className={`mt-3 text-sm font-semibold ${statusTextClass(artifact?.status)}`}>{artifact?.status ?? (stage === "template" ? "ready" : "waiting")}</p>
               {artifact?.summary ? <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{artifact.summary}</p> : null}
+              <div className="mt-4 flex gap-2">
+                <button
+                  className="rounded border border-cyan-300/35 bg-cyan-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-cyan-100 hover:bg-cyan-900/35 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={pipeline.loading || (!pipeline.run && stage !== "template")}
+                  onClick={() => onRunStage(stage)}
+                  type="button"
+                >
+                  Run
+                </button>
+                {artifact?.status === "awaiting_approval" ? (
+                  <button
+                    className="rounded border border-emerald-300/45 bg-emerald-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-100 hover:bg-emerald-900/35 disabled:cursor-wait disabled:opacity-50"
+                    disabled={pipeline.loading}
+                    onClick={() => onApproveArtifact(artifact)}
+                    type="button"
+                  >
+                    Approve
+                  </button>
+                ) : null}
+              </div>
             </div>
           );
         })}
@@ -1565,6 +1706,9 @@ function statusTextClass(status?: string) {
   if (status === "running") {
     return "text-cyan-200";
   }
+  if (status === "awaiting_approval") {
+    return "text-violet-200";
+  }
   return "text-zinc-300";
 }
 
@@ -1580,6 +1724,9 @@ function statusColor(status?: string) {
   }
   if (status === "running") {
     return "#a5f3fc";
+  }
+  if (status === "awaiting_approval") {
+    return "#ddd6fe";
   }
   return "#d4d4d8";
 }
@@ -2422,7 +2569,9 @@ function createLaptopScreen(
   options: {
     error: string | null;
     musicMuted: boolean;
+    onApproveArtifact: (artifact: GameLessonArtifact) => void;
     onCreateRun: () => void;
+    onRunStage: (stage: GameLessonStage) => void;
     onSignIn: (formData: FormData) => Promise<void>;
     onSignOut: () => Promise<void>;
     onMusicChange: (selectedMusicId: MusicOptionId) => void;
@@ -2478,7 +2627,9 @@ function createLaptopScreen(
       iframe,
       musicMuted: currentMusicMuted,
       onSignOut: options.onSignOut,
+      onApproveArtifact: options.onApproveArtifact,
       onCreateRun: options.onCreateRun,
+      onRunStage: options.onRunStage,
       onMusicChange: (selectedMusicId) => {
         currentMusicId = selectedMusicId;
         refreshMusicSource();
@@ -2646,10 +2797,14 @@ function createLaptopSectionLabel(text: string) {
 }
 
 function renderLaptopPipeline({
+  onApproveArtifact,
   onCreateRun,
+  onRunStage,
   pipeline
 }: {
+  onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
+  onRunStage: (stage: GameLessonStage) => void;
   pipeline: LaptopPipelineState;
 }) {
   const wrap = document.createElement("div");
@@ -2733,6 +2888,51 @@ function renderLaptopPipeline({
           : ""
       }
     `;
+    const controls = document.createElement("div");
+    controls.style.display = "flex";
+    controls.style.gap = "8px";
+    controls.style.marginTop = "12px";
+    const runButton = document.createElement("button");
+    runButton.type = "button";
+    runButton.textContent = "RUN";
+    runButton.disabled = pipeline.loading || (!pipeline.run && stage !== "template");
+    runButton.style.border = "1px solid rgba(103,232,249,0.35)";
+    runButton.style.background = "rgba(8,47,73,0.26)";
+    runButton.style.color = "#cffafe";
+    runButton.style.borderRadius = "8px";
+    runButton.style.padding = "7px 9px";
+    runButton.style.fontSize = "10px";
+    runButton.style.fontWeight = "900";
+    runButton.style.letterSpacing = ".1em";
+    runButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+    runButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onRunStage(stage);
+    });
+    controls.append(runButton);
+    if (artifact?.status === "awaiting_approval") {
+      const approveButton = document.createElement("button");
+      approveButton.type = "button";
+      approveButton.textContent = "APPROVE";
+      approveButton.disabled = pipeline.loading;
+      approveButton.style.border = "1px solid rgba(52,211,153,0.46)";
+      approveButton.style.background = "rgba(6,78,59,0.28)";
+      approveButton.style.color = "#bbf7d0";
+      approveButton.style.borderRadius = "8px";
+      approveButton.style.padding = "7px 9px";
+      approveButton.style.fontSize = "10px";
+      approveButton.style.fontWeight = "900";
+      approveButton.style.letterSpacing = ".1em";
+      approveButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+      approveButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onApproveArtifact(artifact);
+      });
+      controls.append(approveButton);
+    }
+    card.append(controls);
     grid.append(card);
   }
   wrap.append(grid);
@@ -2786,9 +2986,11 @@ function musicLabel(selectedMusicId: MusicOptionId) {
 function renderLaptopBrowser({
   iframe,
   musicMuted,
+  onApproveArtifact,
   onCreateRun,
   onMusicChange,
   onMusicMutedChange,
+  onRunStage,
   onSignOut,
   onTabChange,
   pipeline,
@@ -2798,9 +3000,11 @@ function renderLaptopBrowser({
 }: {
   iframe: HTMLIFrameElement;
   musicMuted: boolean;
+  onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
+  onRunStage: (stage: GameLessonStage) => void;
   onSignOut: () => Promise<void>;
   onTabChange: (tab: LaptopTab) => void;
   pipeline: LaptopPipelineState;
@@ -2907,7 +3111,7 @@ function renderLaptopBrowser({
     player.append(iframe);
     body.append(controls, player);
   } else if (tab === "pipeline") {
-    body.append(renderLaptopPipeline({onCreateRun, pipeline}));
+    body.append(renderLaptopPipeline({onApproveArtifact, onCreateRun, onRunStage, pipeline}));
   } else if (tab === "costs") {
     body.append(renderLaptopCosts(pipeline));
   } else if (tab === "settings") {

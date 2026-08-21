@@ -19,6 +19,7 @@ from app.schemas.game_lessons import (
     GameWorksheetRunSnapshot,
     GameWorksheetTemplate,
 )
+from app.services.game_lessons.templates import VOLUME_CUBES_LESSON_1_TEMPLATE
 
 TEMPLATE_ID = "volume-cubes-lesson-1"
 STAGE_ORDER: tuple[str, ...] = (
@@ -37,11 +38,14 @@ STAGE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "handwriting": ("narration",),
     "interactive_bundle": ("handwriting",),
 }
-PAID_OR_PROVIDER_STAGES = {"section_script", "speech_markup", "narration"}
+APPROVAL_REQUIRED_STAGES = {"section_script", "speech_markup"}
+APPROVED_UPSTREAM_REQUIRED: dict[str, tuple[str, ...]] = {
+    "speech_markup": ("section_script",),
+    "narration": ("speech_markup",),
+}
+UNIMPLEMENTED_PROVIDER_STAGES = {"narration"}
 _TEMPLATE_COLUMNS = "id,title,version,payload"
-_RUN_COLUMNS = (
-    "id,user_id,template_id,selected_instructor_id,status,metadata,created_at,updated_at"
-)
+_RUN_COLUMNS = "id,user_id,template_id,selected_instructor_id,status,metadata,created_at,updated_at"
 _ARTIFACT_COLUMNS = (
     "id,run_id,stage,version,status,is_current,payload,storage_refs,error_message,"
     "stale_reason,config_metadata,created_at,updated_at"
@@ -149,15 +153,7 @@ class InMemoryGameLessonRepository:
 
     def __post_init__(self) -> None:
         if TEMPLATE_ID not in self._templates:
-            self._templates[TEMPLATE_ID] = GameWorksheetTemplate(
-                id=TEMPLATE_ID,
-                title="Volume With Whole-Number Cubes",
-                version=1,
-                payload={
-                    "source": "misc/task/task_lesson.pdf",
-                    "sections": ["do_now", "vocabulary", "guided_practice"],
-                },
-            )
+            self._templates[TEMPLATE_ID] = VOLUME_CUBES_LESSON_1_TEMPLATE.model_copy(deep=True)
 
     async def create_or_get_run(
         self,
@@ -201,9 +197,10 @@ class InMemoryGameLessonRepository:
         self._validate_stage(stage)
         if stage != "template":
             self._assert_upstream_ready(run.id, stage)
-            if stage in PAID_OR_PROVIDER_STAGES:
+            if stage in UNIMPLEMENTED_PROVIDER_STAGES:
                 raise GameLessonStageBlocked(
-                    f"{stage} is not implemented yet; approval-gated provider stages will run in the next pipeline slice."
+                    f"{stage} is not implemented yet; approval-gated provider stages "
+                    "will run in the next pipeline slice."
                 )
         current = self._current_artifact(run.id, stage)
         if current and current.status in ("completed", "approved") and not request.force:
@@ -251,7 +248,7 @@ class InMemoryGameLessonRepository:
             run_id=run.id,
             stage=stage,
             version=next_version,
-            status="completed",
+            status=_status_for_stage(stage),
             is_current=True,
             payload=self._payload_for_stage(run, stage),
             storage_refs=[],
@@ -265,16 +262,21 @@ class InMemoryGameLessonRepository:
         return artifact
 
     def _payload_for_stage(self, run: _StoredRun, stage: str) -> dict[str, Any]:
+        template_payload = self._template(run.template_id).payload
         if stage == "template":
-            return {
-                "templateId": run.template_id,
-                "templateVersion": self._template(run.template_id).version,
-                "source": self._template(run.template_id).payload["source"],
-                "sections": self._template(run.template_id).payload["sections"],
-            }
+            return _template_artifact_payload(run.template_id, self._template(run.template_id))
+        if stage == "section_script":
+            return _section_script_payload(template_payload)
+        if stage == "speech_markup":
+            section_script = self._current_artifact(run.id, "section_script")
+            return _speech_markup_payload(section_script.payload if section_script else {})
         return {"stage": stage}
 
     def _assert_upstream_ready(self, run_id: str, stage: str) -> None:
+        for upstream_stage in APPROVED_UPSTREAM_REQUIRED.get(stage, ()):
+            upstream = self._current_artifact(run_id, upstream_stage)
+            if upstream is None or upstream.status != "approved":
+                raise GameLessonStageBlocked(f"{stage} requires approved {upstream_stage}")
         for upstream_stage in STAGE_DEPENDENCIES[stage]:
             upstream = self._current_artifact(run_id, upstream_stage)
             if upstream is None or upstream.status not in ("completed", "approved"):
@@ -284,7 +286,11 @@ class InMemoryGameLessonRepository:
         stage_index = STAGE_ORDER.index(stage)
         descendants = set(STAGE_ORDER[stage_index + 1 :])
         for artifact in self._artifacts.values():
-            if artifact.run_id != run_id or artifact.stage not in descendants or not artifact.is_current:
+            if (
+                artifact.run_id != run_id
+                or artifact.stage not in descendants
+                or not artifact.is_current
+            ):
                 continue
             artifact.status = "stale"
             artifact.is_current = False
@@ -395,9 +401,10 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         self._validate_stage(stage)
         if stage != "template":
             await self._assert_upstream_ready(run.id, stage)
-            if stage in PAID_OR_PROVIDER_STAGES:
+            if stage in UNIMPLEMENTED_PROVIDER_STAGES:
                 raise GameLessonStageBlocked(
-                    f"{stage} is not implemented yet; approval-gated provider stages will run in the next pipeline slice."
+                    f"{stage} is not implemented yet; approval-gated provider stages "
+                    "will run in the next pipeline slice."
                 )
         current = await self._current_artifact(run.id, stage)
         if current and current.status in ("completed", "approved") and not request.force:
@@ -579,7 +586,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
                     "run_id": run.id,
                     "stage": stage,
                     "version": next_version,
-                    "status": "completed",
+                    "status": _status_for_stage(stage),
                     "is_current": True,
                     "payload": payload,
                     "storage_refs": [],
@@ -596,17 +603,21 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         return _artifact_from_row(rows[0])
 
     async def _payload_for_stage_from_storage(self, run: _StoredRun, stage: str) -> dict[str, Any]:
-        if stage != "template":
-            return {"stage": stage}
         template = await self._get_template(run.template_id)
-        return {
-            "templateId": run.template_id,
-            "templateVersion": template.version,
-            "source": template.payload["source"],
-            "sections": template.payload["sections"],
-        }
+        if stage == "template":
+            return _template_artifact_payload(run.template_id, template)
+        if stage == "section_script":
+            return _section_script_payload(template.payload)
+        if stage == "speech_markup":
+            section_script = await self._current_artifact(run.id, "section_script")
+            return _speech_markup_payload(section_script.payload if section_script else {})
+        return {"stage": stage}
 
     async def _assert_upstream_ready(self, run_id: str, stage: str) -> None:  # type: ignore[override]
+        for upstream_stage in APPROVED_UPSTREAM_REQUIRED.get(stage, ()):
+            upstream = await self._current_artifact(run_id, upstream_stage)
+            if upstream is None or upstream.status != "approved":
+                raise GameLessonStageBlocked(f"{stage} requires approved {upstream_stage}")
         for upstream_stage in STAGE_DEPENDENCIES[stage]:
             upstream = await self._current_artifact(run_id, upstream_stage)
             if upstream is None or upstream.status not in ("completed", "approved"):
@@ -661,6 +672,148 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             created_at=run.created_at,
             updated_at=run.updated_at,
         )
+
+
+def _status_for_stage(stage: str) -> GameLessonArtifactStatus:
+    return "awaiting_approval" if stage in APPROVAL_REQUIRED_STAGES else "completed"
+
+
+def _template_artifact_payload(template_id: str, template: GameWorksheetTemplate) -> dict[str, Any]:
+    return {
+        "summary": (
+            "Manual worksheet map for Lesson 1, including page regions, questions, "
+            "fill targets, and LLM guardrails."
+        ),
+        "templateId": template_id,
+        "templateVersion": template.version,
+        **template.payload,
+    }
+
+
+def _section_script_payload(template_payload: dict[str, Any]) -> dict[str, Any]:
+    sections = []
+    questions_by_section = _questions_by_section(template_payload)
+    fill_targets_by_section = _fill_targets_by_section(template_payload)
+    for section in template_payload.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        section_id = str(section["id"])
+        questions = questions_by_section.get(section_id, [])
+        section_answers = [
+            str(question["answer"]) for question in questions if "answer" in question
+        ]
+        sections.append(
+            {
+                "sectionId": section_id,
+                "title": section["title"],
+                "targetDurationSeconds": section.get("targetDurationSeconds", 45),
+                "regionId": section.get("regionId"),
+                "questionIds": [question["id"] for question in questions],
+                "fillTargetIds": [
+                    target["id"] for target in fill_targets_by_section.get(section_id, [])
+                ],
+                "narration": _section_narration(
+                    section_id,
+                    str(section["title"]),
+                    section_answers,
+                ),
+                "approvalRequired": True,
+            }
+        )
+    return {
+        "summary": (
+            "Draft narration script split by worksheet section. Review this before "
+            "generating speech markup or audio."
+        ),
+        "scriptVersion": 1,
+        "targetTotalSeconds": sum(
+            int(section.get("targetDurationSeconds", 0)) for section in sections
+        ),
+        "audience": template_payload.get("studentAudience"),
+        "sourceTemplateId": template_payload.get("templateId"),
+        "sections": sections,
+        "promptMetadata": {
+            "provider": "deterministic",
+            "promptSource": "apps/api/app/services/game_lessons/templates/volume_cubes_lesson_1.py",
+            "guardrails": template_payload.get("guardrails", []),
+        },
+    }
+
+
+def _speech_markup_payload(section_script_payload: dict[str, Any]) -> dict[str, Any]:
+    sections = []
+    for section in section_script_payload.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        narration = str(section.get("narration", "")).strip()
+        sections.append(
+            {
+                "sectionId": section.get("sectionId"),
+                "sourceScriptSectionId": section.get("sectionId"),
+                "targetDurationSeconds": section.get("targetDurationSeconds"),
+                "speechText": _speech_ready_text(narration),
+                "approvalRequired": True,
+            }
+        )
+    return {
+        "summary": "Provider-ready speech text with conservative pauses for ElevenLabs narration.",
+        "markupVersion": 1,
+        "sourceScriptVersion": section_script_payload.get("scriptVersion"),
+        "sections": sections,
+        "promptMetadata": {
+            "provider": "deterministic",
+            "guardrails": [
+                "Keep each section independent so audio can be generated and replayed "
+                "section by section.",
+                "Use plain speech and pause tags only; do not add new math or worksheet answers.",
+            ],
+        },
+    }
+
+
+def _section_narration(section_id: str, title: str, answers: list[str]) -> str:
+    if section_id == "do_now":
+        return (
+            "Start with the Do Now. We are not using a formula yet. We are counting "
+            "cubes in an organized way: "
+            f"{' '.join(answers)} This helps us see volume before naming the rule."
+        )
+    if section_id == "vocabulary":
+        return (
+            "Now connect the picture to vocabulary. "
+            f"{' '.join(answers)} The important idea is that volume counts how many "
+            "same-size cubes fit inside the shape."
+        )
+    if section_id == "guided_practice":
+        return (
+            "For guided practice, use length times width times height on each row. "
+            f"{' '.join(answers)} Each answer is written in cubic units because we "
+            "are counting unit cubes."
+        )
+    return f"In {title}, explain the worksheet answers clearly: {' '.join(answers)}"
+
+
+def _speech_ready_text(narration: str) -> str:
+    sentences = [
+        sentence.strip() for sentence in narration.replace("\n", " ").split(".") if sentence.strip()
+    ]
+    return '<break time="0.5s" /> '.join(f"{sentence}." for sentence in sentences)
+
+
+def _questions_by_section(template_payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for question in template_payload.get("questions", []):
+        if isinstance(question, dict) and "sectionId" in question:
+            grouped.setdefault(str(question["sectionId"]), []).append(question)
+    return grouped
+
+
+def _fill_targets_by_section(template_payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for target in template_payload.get("fillTargets", []):
+        if isinstance(target, dict) and "sectionId" in target:
+            grouped.setdefault(str(target["sectionId"]), []).append(target)
+    return grouped
 
 
 def _artifact_to_response(artifact: _StoredArtifact) -> GameLessonArtifact:

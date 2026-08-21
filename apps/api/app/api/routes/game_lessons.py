@@ -76,7 +76,11 @@ async def run_game_lesson_stage(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except GameLessonStageBlocked as exc:
         message = str(exc)
-        status_code = status.HTTP_400_BAD_REQUEST if message == "Unknown game lesson stage" else status.HTTP_409_CONFLICT
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if message == "Unknown game lesson stage"
+            else status.HTTP_409_CONFLICT
+        )
         raise HTTPException(status_code=status_code, detail=message) from exc
     except GameLessonStorageError as exc:
         raise _storage_http_error(exc) from exc

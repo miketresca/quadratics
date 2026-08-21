@@ -103,7 +103,7 @@ async def test_game_lesson_only_current_artifact_can_be_approved():
 
 
 @pytest.mark.asyncio
-async def test_game_lesson_blocks_provider_stage_until_pipeline_slice_exists():
+async def test_game_lesson_runs_section_script_as_approval_gated_artifact():
     repository = InMemoryGameLessonRepository()
     run = await repository.create_or_get_run(
         "user-a",
@@ -112,5 +112,62 @@ async def test_game_lesson_blocks_provider_stage_until_pipeline_slice_exists():
     )
     await repository.run_stage("user-a", run.id, "template", GameLessonRunStageRequest())
 
-    with pytest.raises(GameLessonStageBlocked, match="not implemented yet"):
-        await repository.run_stage("user-a", run.id, "section_script", GameLessonRunStageRequest())
+    snapshot = await repository.run_stage(
+        "user-a", run.id, "section_script", GameLessonRunStageRequest()
+    )
+
+    section_script = next(
+        artifact for artifact in snapshot.artifacts if artifact.stage == "section_script"
+    )
+    assert section_script.status == "awaiting_approval"
+    assert [section["sectionId"] for section in section_script.payload["sections"]] == [
+        "do_now",
+        "vocabulary",
+        "guided_practice",
+    ]
+    assert section_script.payload["targetTotalSeconds"] == 165
+
+
+@pytest.mark.asyncio
+async def test_game_lesson_requires_script_approval_before_speech_markup():
+    repository = InMemoryGameLessonRepository()
+    run = await repository.create_or_get_run(
+        "user-a",
+        "volume-cubes-lesson-1",
+        GameWorksheetRunCreateRequest(),
+    )
+    await repository.run_stage("user-a", run.id, "template", GameLessonRunStageRequest())
+    await repository.run_stage("user-a", run.id, "section_script", GameLessonRunStageRequest())
+
+    with pytest.raises(GameLessonStageBlocked, match="requires approved section_script"):
+        await repository.run_stage("user-a", run.id, "speech_markup", GameLessonRunStageRequest())
+
+
+@pytest.mark.asyncio
+async def test_game_lesson_runs_speech_markup_after_script_approval():
+    repository = InMemoryGameLessonRepository()
+    run = await repository.create_or_get_run(
+        "user-a",
+        "volume-cubes-lesson-1",
+        GameWorksheetRunCreateRequest(),
+    )
+    await repository.run_stage("user-a", run.id, "template", GameLessonRunStageRequest())
+    scripted = await repository.run_stage(
+        "user-a", run.id, "section_script", GameLessonRunStageRequest()
+    )
+    script_artifact = next(
+        artifact for artifact in scripted.artifacts if artifact.stage == "section_script"
+    )
+    await repository.approve_artifact(
+        "user-a",
+        script_artifact.id,
+        GameLessonArtifactApprovalRequest(decision="approved"),
+    )
+
+    snapshot = await repository.run_stage(
+        "user-a", run.id, "speech_markup", GameLessonRunStageRequest()
+    )
+
+    markup = next(artifact for artifact in snapshot.artifacts if artifact.stage == "speech_markup")
+    assert markup.status == "awaiting_approval"
+    assert markup.payload["sections"][0]["speechText"].count('<break time="0.5s" />') >= 1

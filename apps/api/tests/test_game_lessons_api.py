@@ -35,7 +35,7 @@ async def test_game_lessons_create_or_reuse_run(authenticated_client):
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
-    assert first.json()["template"]["payload"]["sections"] == [
+    assert [section["id"] for section in first.json()["template"]["payload"]["sections"]] == [
         "do_now",
         "vocabulary",
         "guided_practice",
@@ -78,7 +78,7 @@ async def test_game_lessons_rejects_unknown_stage(authenticated_client):
 
 
 @pytest.mark.asyncio
-async def test_game_lessons_blocks_downstream_provider_stage(authenticated_client):
+async def test_game_lessons_runs_section_script_stage(authenticated_client):
     created = await authenticated_client.post(
         "/api/v1/game/lessons/volume-cubes-lesson-1/runs",
         json={},
@@ -93,8 +93,10 @@ async def test_game_lessons_blocks_downstream_provider_stage(authenticated_clien
         json={},
     )
 
-    assert response.status_code == 409
-    assert "approval-gated provider stages" in response.json()["detail"]
+    assert response.status_code == 200
+    artifact = response.json()["artifacts"][1]
+    assert artifact["stage"] == "section_script"
+    assert artifact["status"] == "awaiting_approval"
 
 
 @pytest.mark.asyncio

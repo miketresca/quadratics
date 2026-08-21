@@ -112,7 +112,15 @@ export type GameLessonStage =
   | "handwriting"
   | "interactive_bundle";
 
-export type GameLessonArtifactStatus = "pending" | "running" | "completed" | "failed" | "stale" | "approved" | "rejected";
+export type GameLessonArtifactStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "stale"
+  | "awaiting_approval"
+  | "approved"
+  | "rejected";
 
 export type GameLessonArtifact = {
   id: string;
@@ -190,7 +198,7 @@ function normalizeGameLessonRun(snapshot: ApiGameWorksheetRunSnapshot): GameWork
       id: artifact.id,
       runId: artifact.runId,
       stage: artifact.stage,
-      status: artifact.status === "awaiting_approval" ? "pending" : artifact.status,
+      status: artifact.status,
       version: artifact.version,
       payload: artifact.payload,
       summary: typeof artifact.payload.summary === "string" ? artifact.payload.summary : null,
@@ -259,6 +267,27 @@ export async function runGameLessonStage(params: {
     throw new Error(body?.detail ?? `Could not run ${params.stage}`);
   }
   return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
+}
+
+export async function approveGameLessonArtifact(params: {
+  accessToken: string;
+  artifactId: string;
+  decision: "approved" | "rejected";
+  notes?: string | null;
+}): Promise<{decision: "approved" | "rejected"}> {
+  const response = await fetch(`${apiUrl}/api/v1/game/artifacts/${params.artifactId}/approve`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({decision: params.decision, notes: params.notes ?? null})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not approve the worksheet artifact");
+  }
+  return (await response.json()) as {decision: "approved" | "rejected"};
 }
 
 export async function getLatestGenerationVideos(accessToken: string): Promise<LatestGenerationVideosResponse> {
