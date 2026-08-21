@@ -2,7 +2,7 @@
 
 import type {CurrentUser, GameLessonId} from "@quadratics/types";
 import {useEffect, useRef, useState, type FormEvent} from "react";
-import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, WebGLRenderer} from "three";
+import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, Vector3, WebGLRenderer} from "three";
 import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
 
 import {
@@ -181,6 +181,7 @@ export function GameShell({
   const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
   const musicMutedRef = useRef(readMusicState().muted);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
+  const selectedLessonIdRef = useRef<GameLessonId | null>(null);
   const gamePipelineRequestRef = useRef(0);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
   const [lockedMessage, setLockedMessage] = useState(false);
@@ -210,6 +211,7 @@ export function GameShell({
   selectedMusicRef.current = selectedMusicId;
   musicMutedRef.current = musicMuted;
   gameRunRef.current = gameRun;
+  selectedLessonIdRef.current = selectedLessonId;
 
   function updateFocusMode(mode: FocusMode) {
     focusModeRef.current = mode;
@@ -382,6 +384,7 @@ export function GameShell({
   function startGameLesson(choiceId: GameLessonId, texture: Texture | null) {
     if (!userRef.current) {
       setLockedMessage(true);
+      selectedLessonIdRef.current = null;
       setSelectedLessonId(null);
       setGamePipelineError("Login on the laptop to start this lesson.");
       laptopScreenRef.current?.setTab("pipeline");
@@ -394,6 +397,7 @@ export function GameShell({
       return;
     }
     setLockedMessage(false);
+    selectedLessonIdRef.current = choiceId;
     setSelectedLessonId(choiceId);
     refreshPaperTexture(texture, choiceId, choiceId);
     changeLaptopTab("pipeline");
@@ -533,8 +537,7 @@ export function GameShell({
       setLockedMessage(false);
       if (mode !== "paper") {
         hoveredChoiceId = null;
-        setSelectedLessonId(null);
-        refreshPaperTexture(paperTexture, null, null);
+        refreshPaperTexture(paperTexture, selectedLessonIdRef.current, null);
       }
     }
     focusModeSetterRef.current = setFocusMode;
@@ -742,12 +745,12 @@ export function GameShell({
       }, 1_000);
       cleanupCallbacks.push(() => window.clearInterval(clockTimer));
 
-      paperTexture = createWorksheetTexture(THREE, selectedLessonId, null);
+      paperTexture = createWorksheetTexture(THREE, selectedLessonIdRef.current, null);
       paperMesh = createPaper(THREE, paperTexture);
       sceneTunables.paper = paperMesh;
       deskRig.add(paperMesh);
 
-      penGroup = createPenHand(THREE);
+      penGroup = createRaisedPenCursor(THREE);
       penGroup.visible = worksheetFocusedRef.current;
       scene.add(penGroup);
       const fallbackPenGroup = penGroup;
@@ -759,13 +762,9 @@ export function GameShell({
             return;
           }
           const tablePen = createDeskPenModel(THREE, gltf.scene);
-          const cursorPen = createCursorPenModel(THREE, gltf.scene);
           tablePen.visible = !worksheetFocusedRef.current;
-          cursorPen.visible = worksheetFocusedRef.current;
           deskRig.add(tablePen);
-          scene.add(cursorPen);
-          scene.remove(fallbackPenGroup);
-          penGroup = cursorPen;
+          penGroup = fallbackPenGroup;
           sceneTunables.pen = tablePen;
         })
         .catch((error: unknown) => {
@@ -815,7 +814,10 @@ export function GameShell({
           return;
         }
         const rect = renderer.domElement.getBoundingClientRect();
-        if (pointerLockedRef.current && focusModeRef.current === "room") {
+        if (focusModeRef.current === "paper") {
+          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        } else if (pointerLockedRef.current && focusModeRef.current === "room") {
           lookAngles.yaw = Math.max(-1.32, Math.min(1.32, lookAngles.yaw + event.movementX * 0.0022));
           lookAngles.pitch = Math.max(-0.78, Math.min(1.22, lookAngles.pitch - event.movementY * 0.0022));
           pointer.set(0, 0);
@@ -842,17 +844,17 @@ export function GameShell({
         const [hit] = raycaster.intersectObject(paperMesh);
         if (!hit || !hit.uv || focusModeRef.current !== "paper") {
           hoveredChoiceId = null;
-          refreshPaperTexture(paperTexture, selectedLessonId, hoveredChoiceId);
+          refreshPaperTexture(paperTexture, selectedLessonIdRef.current, hoveredChoiceId);
           return;
         }
-        pointerTarget.x = hit.point.x + 0.72;
-        pointerTarget.z = hit.point.z + 0.62;
+        pointerTarget.x = hit.point.x;
+        pointerTarget.z = hit.point.z;
         const canvasX = hit.uv.x * WORKSHEET_CANVAS_WIDTH;
         const canvasY = (1 - hit.uv.y) * WORKSHEET_CANVAS_HEIGHT;
         const nextHover = choiceAtCanvasPoint(canvasX, canvasY)?.id ?? null;
         if (nextHover !== hoveredChoiceId) {
           hoveredChoiceId = nextHover;
-          refreshPaperTexture(paperTexture, selectedLessonId, hoveredChoiceId);
+          refreshPaperTexture(paperTexture, selectedLessonIdRef.current, hoveredChoiceId);
         }
       }
 
@@ -925,6 +927,7 @@ export function GameShell({
         }
         if (choice.locked) {
           setLockedMessage(true);
+          selectedLessonIdRef.current = null;
           setSelectedLessonId(null);
           refreshPaperTexture(paperTexture, null, choice.id);
           return;
@@ -1081,9 +1084,8 @@ export function GameShell({
         if (penGroup) {
           penGroup.visible = worksheetFocusedRef.current;
           penGroup.position.x += (pointerTarget.x - penGroup.position.x) * 0.18;
-          penGroup.position.y += (DESK_SURFACE_Y + 0.34 - penGroup.position.y) * 0.18;
+          penGroup.position.y += (DESK_SURFACE_Y + 0.12 - penGroup.position.y) * 0.18;
           penGroup.position.z += (pointerTarget.z - penGroup.position.z) * 0.18;
-          penGroup.rotation.z = -0.42 + (pointerTarget.x - 0.6) * 0.018;
         }
         const deskPen = sceneTunables.pen;
         if (deskPen) {
@@ -1144,7 +1146,7 @@ export function GameShell({
       paperTexture?.dispose();
       setSceneEditorHud(null);
     };
-  }, [selectedLessonId]);
+  }, []);
 
   return (
     <section className="relative min-h-screen overflow-hidden bg-[#1c120a] text-zinc-100">
@@ -1174,7 +1176,7 @@ export function GameShell({
         </p>
       </div>
 
-      {!worksheetFocused && focusedMode === "room" ? (
+      {focusedMode === "room" ? (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-8 w-8 -translate-x-1/2 -translate-y-1/2">
           <span className={`absolute left-1/2 top-0 h-2.5 w-px -translate-x-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
           <span className={`absolute bottom-0 left-1/2 h-2.5 w-px -translate-x-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
@@ -3414,26 +3416,10 @@ function createPaper(THREE: typeof import("three"), paperTexture: Texture) {
 function createDeskPenModel(THREE: typeof import("three"), source: Object3D) {
   const group = new THREE.Group();
   group.name = "desk-pen";
-  group.position.set(2.16, DESK_SURFACE_Y + 0.082, 0.72);
-  group.rotation.set(0, 0.04, -0.7);
+  group.position.set(2.1, DESK_SURFACE_Y + 0.095, 0.68);
+  group.rotation.set(0, 0, 0);
 
   const model = createNormalizedBlueOfficePen(THREE, source, 0.82);
-  model.rotation.set(Math.PI / 2, 0, 0.1);
-  group.add(model);
-  return group;
-}
-
-function createCursorPenModel(THREE: typeof import("three"), source: Object3D) {
-  const group = new THREE.Group();
-  group.name = "worksheet-cursor-pen";
-  group.position.set(2.18, DESK_SURFACE_Y + 0.12, 0.78 + DESK_RIG_Z);
-  group.rotation.set(-0.55, 0.12, -0.72);
-
-  const model = createNormalizedBlueOfficePen(THREE, source, 0.95);
-  // Offset the model so the visible writing tip sits at the group's origin,
-  // which is the same point the old crosshair used for worksheet hit tests.
-  model.position.set(0.36, -0.04, -0.1);
-  model.rotation.set(Math.PI / 2.18, 0.08, -0.72);
   group.add(model);
   return group;
 }
@@ -3482,21 +3468,73 @@ function cloneBlueOfficePen(THREE: typeof import("three"), source: Object3D) {
   return group;
 }
 
-function createPenHand(THREE: typeof import("three")) {
+function createRaisedPenCursor(THREE: typeof import("three")) {
   const group = new THREE.Group();
-  group.position.set(1.26, DESK_SURFACE_Y + 0.3, 1.02);
-  group.rotation.z = -0.12;
+  group.name = "worksheet-cursor-pen";
+  group.position.set(1.08, DESK_SURFACE_Y + 0.12, 0.82 + DESK_RIG_Z);
 
-  const texture = new THREE.TextureLoader().load("/game/textures/teacher-hand-pen.png");
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-  const material = new THREE.MeshBasicMaterial({map: texture, transparent: true, depthWrite: false});
-  const hand = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.36), material);
-  hand.rotation.x = -Math.PI / 2;
-  hand.renderOrder = 5;
-  group.add(hand);
+  const black = new THREE.MeshStandardMaterial({color: 0x050607, roughness: 0.42, metalness: 0.08});
+  const blue = new THREE.MeshStandardMaterial({color: 0x22c7d3, roughness: 0.5, metalness: 0.12});
+  const metal = new THREE.MeshStandardMaterial({color: 0x111827, roughness: 0.28, metalness: 0.35});
+  const axis = new THREE.Vector3(0.46, 0.42, -0.38).normalize();
+
+  // The local origin is the exact writing point. Every part of the pen extends
+  // away from this point so the screen reticle and visual tip stay calibrated.
+  const tipBase = axis.clone().multiplyScalar(0.13);
+  const tip = createConeBetween(THREE, tipBase, new THREE.Vector3(0, 0, 0), 0.038, black);
+  const barrel = createCylinderBetween(THREE, axis.clone().multiplyScalar(0.13), axis.clone().multiplyScalar(0.64), 0.041, blue);
+  const grip = createCylinderBetween(THREE, axis.clone().multiplyScalar(0.64), axis.clone().multiplyScalar(0.9), 0.052, black);
+  const clip = createCylinderBetween(
+    THREE,
+    axis.clone().multiplyScalar(0.34).add(new THREE.Vector3(0.035, 0.03, 0.028)),
+    axis.clone().multiplyScalar(0.72).add(new THREE.Vector3(0.035, 0.03, 0.028)),
+    0.01,
+    metal
+  );
+  const endCap = new THREE.Mesh(new THREE.SphereGeometry(0.052, 18, 12), black);
+  endCap.position.copy(axis.clone().multiplyScalar(0.93));
+  group.add(tip, barrel, grip, clip, endCap);
+  group.traverse((child) => {
+    const mesh = child as Mesh & {castShadow?: boolean; receiveShadow?: boolean};
+    if (mesh.isMesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    }
+  });
 
   return group;
+}
+
+function createCylinderBetween(
+  THREE: typeof import("three"),
+  start: Vector3,
+  end: Vector3,
+  radius: number,
+  material: import("three").Material
+) {
+  const length = start.distanceTo(end);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 18), material);
+  const midpoint = start.clone().add(end).multiplyScalar(0.5);
+  const direction = end.clone().sub(start).normalize();
+  mesh.position.copy(midpoint);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  return mesh;
+}
+
+function createConeBetween(
+  THREE: typeof import("three"),
+  base: Vector3,
+  tip: Vector3,
+  radius: number,
+  material: import("three").Material
+) {
+  const length = base.distanceTo(tip);
+  const mesh = new THREE.Mesh(new THREE.ConeGeometry(radius, length, 20), material);
+  const midpoint = base.clone().add(tip).multiplyScalar(0.5);
+  const direction = tip.clone().sub(base).normalize();
+  mesh.position.copy(midpoint);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
+  return mesh;
 }
 
 function roundedCanvasRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
