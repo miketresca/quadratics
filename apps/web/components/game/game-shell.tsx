@@ -8,9 +8,13 @@ import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js"
 import {
   approveGameLessonArtifact,
   createGameLessonRun,
+  getGameUsageEvents,
+  getGameUsageSummary,
   runGameLessonStage,
   type GameLessonArtifact,
   type GameLessonStage,
+  type GameUsageEventItem,
+  type GameUsageSummary,
   type GameWorksheetRunSnapshot
 } from "@/lib/api";
 import {updateGameProgress} from "@/lib/game/progress-client";
@@ -37,6 +41,7 @@ type MusicOption = {
 };
 type LaptopScreenApi = {
   setError: (message: string | null) => void;
+  setCostState: (state: LaptopCostState) => void;
   setLoading: (loading: boolean) => void;
   setMusicState: (state: MusicState) => void;
   setPipelineState: (state: LaptopPipelineState) => void;
@@ -52,6 +57,12 @@ type LaptopPipelineState = {
   error: string | null;
   loading: boolean;
   run: GameWorksheetRunSnapshot | null;
+};
+type LaptopCostState = {
+  error: string | null;
+  events: GameUsageEventItem[];
+  loading: boolean;
+  summary: GameUsageSummary | null;
 };
 type WorksheetRect = {height: number; width: number; x: number; y: number};
 type WorksheetSection = {
@@ -252,6 +263,12 @@ export function GameShell({
   const musicMutedRef = useRef(readMusicState().muted);
   const musicVolumeRef = useRef(readMusicState().volume);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
+  const gameCostStateRef = useRef<LaptopCostState>({
+    error: null,
+    events: [],
+    loading: false,
+    summary: null
+  });
   const paperTextureRef = useRef<Texture | null>(null);
   const phoneScreenTextureRef = useRef<Texture | null>(null);
   const phoneQuoteIndexRef = useRef(-1);
@@ -277,6 +294,12 @@ export function GameShell({
   const [musicMuted, setMusicMuted] = useState(() => readMusicState().muted);
   const [musicVolume, setMusicVolume] = useState(() => readMusicState().volume);
   const [gameRun, setGameRun] = useState<GameWorksheetRunSnapshot | null>(null);
+  const [gameCostState, setGameCostState] = useState<LaptopCostState>({
+    error: null,
+    events: [],
+    loading: false,
+    summary: null
+  });
   const [worksheetPlayback, setWorksheetPlayback] = useState<WorksheetPlaybackState>(DEFAULT_WORKSHEET_PLAYBACK);
   const [phoneRewardPending, setPhoneRewardPending] = useState(false);
   const [phoneScreenMode, setPhoneScreenMode] = useState<PhoneScreenMode>("off");
@@ -293,6 +316,7 @@ export function GameShell({
   musicMutedRef.current = musicMuted;
   musicVolumeRef.current = musicVolume;
   gameRunRef.current = gameRun;
+  gameCostStateRef.current = gameCostState;
   worksheetPlaybackRef.current = worksheetPlayback;
   phoneRewardPendingRef.current = phoneRewardPending;
   phoneScreenModeRef.current = phoneScreenMode;
@@ -308,6 +332,10 @@ export function GameShell({
     } else {
       stopPhoneRewardVibration();
     }
+  }, [user]);
+
+  useEffect(() => {
+    void refreshGameUsageCosts();
   }, [user]);
 
   function updateFocusMode(mode: FocusMode) {
@@ -350,6 +378,7 @@ export function GameShell({
     laptopScreenRef.current?.updateUser(nextUser);
     setGamePipelineError(null);
     laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, run: gameRunRef.current});
+    void refreshGameUsageCosts();
   }
 
   async function signOutFromLaptop() {
@@ -362,6 +391,7 @@ export function GameShell({
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
     setGameRun(null);
+    setGameCostSnapshot({error: null, events: [], loading: false, summary: null});
     setWorksheetPlayback(DEFAULT_WORKSHEET_PLAYBACK);
     selectedLessonIdRef.current = null;
     setSelectedLessonId(null);
@@ -392,6 +422,9 @@ export function GameShell({
   function changeLaptopTab(tab: LaptopTab) {
     setLaptopTab(tab);
     laptopScreenRef.current?.setTab(tab);
+    if (tab === "costs") {
+      void refreshGameUsageCosts();
+    }
   }
 
   function changeMusic(selectedMusicId: MusicOptionId) {
@@ -477,6 +510,40 @@ export function GameShell({
     setWorksheetPlayback(nextPlayback);
     laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
     refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, snapshot, nextPlayback);
+  }
+
+  function setGameCostSnapshot(snapshot: LaptopCostState) {
+    gameCostStateRef.current = snapshot;
+    setGameCostState(snapshot);
+    laptopScreenRef.current?.setCostState(snapshot);
+  }
+
+  async function refreshGameUsageCosts() {
+    if (!userRef.current) {
+      setGameCostSnapshot({error: null, events: [], loading: false, summary: null});
+      return;
+    }
+    setGameCostSnapshot({...gameCostStateRef.current, error: null, loading: true});
+    try {
+      const accessToken = await getLaptopAccessToken();
+      const [summary, eventsResponse] = await Promise.all([
+        getGameUsageSummary(accessToken),
+        getGameUsageEvents(accessToken, 30)
+      ]);
+      setGameCostSnapshot({
+        error: null,
+        events: eventsResponse.events,
+        loading: false,
+        summary
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not load game usage costs.";
+      setGameCostSnapshot({
+        ...gameCostStateRef.current,
+        error: message,
+        loading: false
+      });
+    }
   }
 
   function setWorksheetPlaybackSnapshot(nextPlayback: WorksheetPlaybackState) {
@@ -623,6 +690,7 @@ export function GameShell({
         return null;
       }
       setGameRunSnapshot(snapshot);
+      void refreshGameUsageCosts();
       return snapshot;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not start the worksheet run.";
@@ -669,6 +737,7 @@ export function GameShell({
         return null;
       }
       setGameRunSnapshot(snapshot);
+      void refreshGameUsageCosts();
       return snapshot;
     } catch (error) {
       const message = error instanceof Error ? error.message : `Could not run ${stage}.`;
@@ -713,6 +782,7 @@ export function GameShell({
         return null;
       }
       setGameRunSnapshot(snapshot);
+      void refreshGameUsageCosts();
       return snapshot;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not approve worksheet artifact.";
@@ -1055,6 +1125,7 @@ export function GameShell({
       sceneTunables.phone = supplies.phoneGroup;
       const laptop = createDeskLaptop(THREE);
       const laptopScreen = createLaptopScreen(CSS3DObject, {
+        costs: gameCostStateRef.current,
         error: loginError,
         onCreateRun: () => {
           void prepareGameLessonRun().catch(() => {
@@ -1077,7 +1148,12 @@ export function GameShell({
         onMusicChange: changeMusic,
         onMusicMutedChange: changeMusicMuted,
         onMusicVolumeChange: changeMusicVolume,
-        onTabChange: setLaptopTab,
+        onTabChange: (tab) => {
+          setLaptopTab(tab);
+          if (tab === "costs") {
+            void refreshGameUsageCosts();
+          }
+        },
         origin: window.location.origin,
         musicVolume: musicVolumeRef.current,
         selectedMusicId: selectedMusicRef.current,
@@ -1643,6 +1719,7 @@ export function GameShell({
 
       {focusedMode === "laptop" ? (
         <LaptopFocusPanel
+          costs={gameCostState}
           error={loginError}
           onCreateRun={() => {
             void prepareGameLessonRun().catch(() => {
@@ -1751,6 +1828,7 @@ function PhoneRewardVideoPanel() {
 }
 
 function LaptopFocusPanel({
+  costs,
   error,
   loading,
   musicMuted,
@@ -1769,6 +1847,7 @@ function LaptopFocusPanel({
   tab,
   user
 }: {
+  costs: LaptopCostState;
   error: string | null;
   loading: boolean;
   musicMuted: boolean;
@@ -1904,7 +1983,7 @@ function LaptopFocusPanel({
               ) : tab === "pipeline" ? (
                 <FocusedPipelinePanel onApproveArtifact={onApproveArtifact} onCreateRun={onCreateRun} onRunStage={onRunStage} pipeline={pipeline} />
               ) : tab === "costs" ? (
-                <FocusedCostsPanel pipeline={pipeline} />
+                <FocusedCostsPanel costs={costs} pipeline={pipeline} />
               ) : tab === "settings" ? (
                 <div className="grid max-w-xl gap-5">
                   <div>
@@ -2042,29 +2121,54 @@ function FocusedPipelinePanel({
   );
 }
 
-function FocusedCostsPanel({pipeline}: {pipeline: LaptopPipelineState}) {
+function FocusedCostsPanel({costs, pipeline}: {costs: LaptopCostState; pipeline: LaptopPipelineState}) {
+  const total = costs.summary?.userTotalCostUsd ?? 0;
+  const average = costs.summary?.globalAverageCostPerLessonUsd ?? 0;
   return (
-    <div className="grid h-full content-start gap-4 rounded-2xl border border-cyan-200/15 bg-[#050b10] p-6">
+    <div className="grid h-full content-start gap-4 overflow-auto rounded-2xl border border-cyan-200/15 bg-[#050b10] p-6">
       <div>
         <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/65">game costs</p>
-        <h2 className="mt-3 text-2xl font-black text-zinc-50">$0.00</h2>
+        <h2 className="mt-3 text-2xl font-black text-zinc-50">{formatUsd(total)}</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-          Game worksheet costs are tracked separately from the quadratic video pipeline. The template stage is deterministic and free; OpenAI and ElevenLabs usage will appear here after those stages are implemented.
+          Game worksheet costs are tracked separately from the quadratic video pipeline. Provider calls from script, speech markup, and narration stages appear here as soon as they are recorded.
         </p>
       </div>
+      {costs.error ? <div className="rounded-lg border border-red-400/40 bg-red-950/35 px-3 py-2 text-sm text-red-100">{costs.error}</div> : null}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4">
           <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Current run</p>
           <p className="mt-3 text-sm font-semibold text-zinc-300">{pipeline.run ? shortRunId(pipeline.run.id) : "none"}</p>
         </div>
         <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Paid events</p>
-          <p className="mt-3 text-sm font-semibold text-zinc-300">0</p>
+          <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Avg / lesson</p>
+          <p className="mt-3 text-sm font-semibold text-zinc-300">{formatUsd(average)}</p>
         </div>
         <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4">
-          <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Scope</p>
-          <p className="mt-3 text-sm font-semibold text-zinc-300">game only</p>
+          <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Paid events</p>
+          <p className="mt-3 text-sm font-semibold text-zinc-300">{costs.loading ? "loading" : costs.events.length}</p>
         </div>
+      </div>
+      <div className="grid gap-2">
+        <p className="font-mono text-[11px] uppercase tracking-wide text-cyan-100/55">Recent calls</p>
+        {costs.events.length > 0 ? (
+          costs.events.slice(0, 8).map((event) => (
+            <div className="grid grid-cols-[1fr_auto] gap-3 rounded border border-zinc-700/80 bg-black/25 px-3 py-2" key={event.id}>
+              <div className="min-w-0">
+                <p className="truncate font-mono text-xs font-black uppercase text-zinc-100">
+                  {event.provider} / {event.stage}
+                </p>
+                <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+                  {event.model ?? "provider model"} / {formatQuantity(event.quantity)} {event.unitType}
+                </p>
+              </div>
+              <p className="font-mono text-sm font-black text-emerald-200">{formatUsd(event.totalCostUsd)}</p>
+            </div>
+          ))
+        ) : (
+          <div className="rounded border border-dashed border-zinc-700/80 bg-black/20 px-3 py-4 text-sm text-zinc-500">
+            {costs.loading ? "Loading game usage events..." : "No paid game pipeline calls recorded yet."}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3175,6 +3279,7 @@ function createDeskLaptop(THREE: typeof import("three")) {
 function createLaptopScreen(
   CSS3DObject: typeof import("three/examples/jsm/renderers/CSS3DRenderer.js").CSS3DObject,
   options: {
+    costs: LaptopCostState;
     error: string | null;
     musicMuted: boolean;
     onApproveArtifact: (artifact: GameLessonArtifact) => void;
@@ -3237,6 +3342,7 @@ function createLaptopScreen(
   let currentMusicMuted = options.musicMuted;
   let currentMusicVolume = options.musicVolume;
   let currentPipeline = options.pipeline;
+  let currentCosts = options.costs;
   let loading = false;
 
   function postMusicCommand(command: "mute" | "playVideo" | "setVolume" | "unMute", args: unknown[] = []) {
@@ -3306,6 +3412,7 @@ function createLaptopScreen(
       },
       selectedMusicId: currentMusicId,
       pipeline: currentPipeline,
+      costs: currentCosts,
       tab: currentTab,
       user: currentUser
     }));
@@ -3342,6 +3449,10 @@ function createLaptopScreen(
       },
       setPipelineState(state: LaptopPipelineState) {
         currentPipeline = state;
+        render();
+      },
+      setCostState(state: LaptopCostState) {
+        currentCosts = state;
         render();
       },
       setTab(tab: LaptopTab) {
@@ -3621,7 +3732,37 @@ function renderLaptopPipeline({
   return wrap;
 }
 
-function renderLaptopCosts(pipeline: LaptopPipelineState) {
+function renderLaptopCosts(pipeline: LaptopPipelineState, costs: LaptopCostState) {
+  const paidStages = new Set<GameLessonStage>(["section_script", "speech_markup", "narration"]);
+  const userTotal = costs.summary?.userTotalCostUsd ?? 0;
+  const globalAverage = costs.summary?.globalAverageCostPerLessonUsd ?? 0;
+  const stageRows = GAME_LESSON_STAGES.map(({stage, label}) => {
+    const artifact = artifactForStage(pipeline.run, stage);
+    const paid = paidStages.has(stage);
+    const status = artifact?.status ?? "pending";
+    const matchingBreakdown = costs.summary?.userBreakdown.find((item) => item.stage === stage);
+    return `
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;border-top:1px solid rgba(63,63,70,.54);padding:10px 0">
+        <div>
+          <div style="font-size:12px;font-weight:900;color:#f4fff9">${escapeHtml(label)}</div>
+          <div style="margin-top:3px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(161,161,170,.72)">${paid ? "paid-provider stage" : "deterministic stage"}</div>
+        </div>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:${status === "approved" || status === "completed" ? "#a7f3d0" : "#a1a1aa"}">${escapeHtml(status)}</div>
+        <div style="font-size:12px;font-weight:900;color:${paid ? "#fde68a" : "#a7f3d0"}">${paid ? formatUsd(matchingBreakdown?.costUsd ?? 0) : "$0.00"}</div>
+      </div>
+    `;
+  }).join("");
+  const eventRows = costs.events.length > 0
+    ? costs.events.slice(0, 8).map((event) => `
+      <div style="display:grid;grid-template-columns:1fr auto;gap:10px;border-top:1px solid rgba(63,63,70,.5);padding:10px 0">
+        <div style="min-width:0">
+          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:900;text-transform:uppercase;color:#f4fff9">${escapeHtml(event.provider)} / ${escapeHtml(event.stage)}</div>
+          <div style="margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.72)">${escapeHtml(event.model ?? "provider model")} / ${formatQuantity(event.quantity)} ${escapeHtml(event.unitType)}</div>
+        </div>
+        <div style="font-size:12px;font-weight:900;color:#a7f3d0">${formatUsd(event.totalCostUsd)}</div>
+      </div>
+    `).join("")
+    : `<div style="border-top:1px dashed rgba(63,63,70,.7);padding:14px 0;color:rgba(161,161,170,.72);font-size:12px">${costs.loading ? "Loading game usage events..." : "No paid game pipeline calls recorded yet."}</div>`;
   const wrap = document.createElement("div");
   wrap.style.height = "100%";
   wrap.style.display = "grid";
@@ -3634,14 +3775,20 @@ function renderLaptopCosts(pipeline: LaptopPipelineState) {
   wrap.innerHTML = `
     <div>
       <div style="font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(165,243,252,.7)">game costs</div>
-      <div style="margin-top:10px;font-size:25px;font-weight:900;color:#f4fff9">$0.00</div>
-      <div style="margin-top:8px;max-width:680px;font-size:13px;line-height:1.55;color:rgba(212,212,216,.62)">Game worksheet costs are tracked separately from quadratic video generation. The deterministic template stage is free; paid LLM and ElevenLabs events will populate here in the next pipeline slice.</div>
+      <div style="margin-top:10px;font-size:25px;font-weight:900;color:#f4fff9">${formatUsd(userTotal)}</div>
+      <div style="margin-top:8px;max-width:760px;font-size:13px;line-height:1.55;color:rgba(212,212,216,.62)">Game worksheet costs are tracked separately from quadratic video generation. Provider calls from script, speech markup, and narration stages are included in this game-only ledger.</div>
     </div>
+    ${costs.error ? `<div style="border:1px solid rgba(248,113,113,.42);background:rgba(127,29,29,.34);border-radius:9px;padding:10px 12px;color:#fecaca;font-size:12px">${escapeHtml(costs.error)}</div>` : ""}
     <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
       <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Current run</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">${escapeHtml(pipeline.run ? shortRunId(pipeline.run.id) : "none")}</div></div>
-      <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Paid events</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">0</div></div>
-      <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Scope</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">game only</div></div>
+      <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Avg / lesson</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">${formatUsd(globalAverage)}</div></div>
+      <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Paid events</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">${costs.loading ? "loading" : `${costs.events.length} recorded`}</div></div>
     </div>
+    <div style="border:1px solid rgba(63,63,70,.76);border-radius:12px;background:rgba(3,7,18,.42);padding:4px 14px">
+      <div style="padding:10px 0;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:rgba(165,243,252,.56)">recent calls</div>
+      ${eventRows}
+    </div>
+    <div style="border:1px solid rgba(63,63,70,.76);border-radius:12px;background:rgba(3,7,18,.42);padding:4px 14px">${stageRows}</div>
   `;
   return wrap;
 }
@@ -3665,7 +3812,25 @@ function musicLabel(selectedMusicId: MusicOptionId) {
   return MUSIC_OPTIONS.find((option) => option.id === selectedMusicId)?.label ?? MUSIC_OPTIONS[0].label;
 }
 
+function formatUsd(value: number) {
+  if (!Number.isFinite(value)) {
+    return "$0.00";
+  }
+  if (Math.abs(value) > 0 && Math.abs(value) < 0.01) {
+    return `$${value.toFixed(4)}`;
+  }
+  return `$${value.toFixed(2)}`;
+}
+
+function formatQuantity(value: number) {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
 function renderLaptopBrowser({
+  costs,
   iframe,
   musicMuted,
   musicVolume,
@@ -3682,6 +3847,7 @@ function renderLaptopBrowser({
   tab,
   user
 }: {
+  costs: LaptopCostState;
   iframe: HTMLIFrameElement;
   musicMuted: boolean;
   musicVolume: number;
@@ -3823,7 +3989,7 @@ function renderLaptopBrowser({
   } else if (tab === "pipeline") {
     body.append(renderLaptopPipeline({onApproveArtifact, onCreateRun, onRunStage, pipeline}));
   } else if (tab === "costs") {
-    body.append(renderLaptopCosts(pipeline));
+    body.append(renderLaptopCosts(pipeline, costs));
   } else if (tab === "settings") {
     body.innerHTML = `<div style="display:grid;gap:18px;max-width:520px"><div><div style="font-size:24px;font-weight:900;color:#f4fff9">Settings</div><div style="margin-top:6px;color:rgba(212,212,216,.62)">Signed in as ${escapeHtml(accountDisplayName(user))}</div></div></div>`;
     const button = document.createElement("button");

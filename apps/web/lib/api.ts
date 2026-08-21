@@ -153,6 +153,41 @@ export type GameWorksheetRunSnapshot = {
   artifacts: GameLessonArtifact[];
 };
 
+export type GameUsageBreakdownItem = {
+  provider: string;
+  stage: string;
+  unitType: string;
+  quantity: number;
+  costUsd: number;
+};
+
+export type GameUsageSummary = {
+  userTotalCostUsd: number;
+  userTotalQuantity: number;
+  userBreakdown: GameUsageBreakdownItem[];
+  globalAverageCostPerLessonUsd: number;
+  globalCompletedLessonCount: number;
+  globalBreakdown: GameUsageBreakdownItem[];
+};
+
+export type GameUsageEventItem = {
+  id: string;
+  createdAt: string;
+  runId: string | null;
+  artifactId: string | null;
+  provider: string;
+  stage: string;
+  model: string | null;
+  unitType: string;
+  quantity: number;
+  unitCostUsd: number;
+  totalCostUsd: number;
+};
+
+export type GameUsageEventsResponse = {
+  events: GameUsageEventItem[];
+};
+
 type ApiGameWorksheetRunSnapshot = {
   id: string;
   templateId: string;
@@ -291,6 +326,30 @@ export async function approveGameLessonArtifact(params: {
     throw new Error(body?.detail ?? "Could not approve the worksheet artifact");
   }
   return (await response.json()) as {decision: "approved" | "rejected"};
+}
+
+export async function getGameUsageSummary(accessToken: string): Promise<GameUsageSummary> {
+  const response = await fetch(`${apiUrl}/api/v1/game/usage/summary`, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load game usage summary");
+  }
+  return response.json() as Promise<GameUsageSummary>;
+}
+
+export async function getGameUsageEvents(accessToken: string, limit = 30): Promise<GameUsageEventsResponse> {
+  const response = await fetch(`${apiUrl}/api/v1/game/usage/events?limit=${limit}`, {
+    headers: {Authorization: `Bearer ${accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load game usage events");
+  }
+  return response.json() as Promise<GameUsageEventsResponse>;
 }
 
 export async function getLatestGenerationVideos(accessToken: string): Promise<LatestGenerationVideosResponse> {
