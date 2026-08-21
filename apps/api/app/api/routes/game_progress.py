@@ -55,7 +55,10 @@ async def update_game_progress(
     except GameProgressStorageError as exc:
         raise _storage_http_error(exc) from exc
 
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported game progress action")
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Unsupported game progress action",
+    )
 
 
 @router.post("/reset", response_model=GameProgress)

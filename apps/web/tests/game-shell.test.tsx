@@ -22,11 +22,11 @@ describe("GameShell", () => {
     const root = createRoot(container);
 
     await act(async () => {
-      root.render(<GameShell />);
+      root.render(<GameShell initialLoginError={null} initialUser={null} />);
     });
 
     expect(container.textContent).toContain("Worksheet POV Lab");
-    expect(container.textContent).toContain("Press Enter to resume seated look mode");
+    expect(container.textContent).toContain("Press Space to resume seated look mode");
     expect(container.textContent).not.toContain("API keys");
     expect(container.textContent).not.toContain("Quadratics Game Lab");
 

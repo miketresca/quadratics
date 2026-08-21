@@ -36,6 +36,8 @@ For local QA, use Playwright against `http://localhost:3000/game` so the actual 
 
 During review, explicitly evaluate the scene from a player perspective: Does the scale feel right? Does the camera start where a seated player would expect? Do major objects look intentional and game-quality? Does the result match the user’s reference images closely enough? If an important visual element obviously looks temporary, malformed, occluded, or off-scale, keep iterating or state the gap clearly instead of calling the pass complete.
 
+When testing focus surfaces, verify behavior after entering and leaving each mode. The laptop has a CSS3D in-scene screen plus a React focus overlay; tab clicks, login, sign-out, and music playback must be tested in the focused view because screenshots of the room view do not prove the DOM overlay works. The music tab should keep a single persistent player alive instead of creating multiple simultaneous YouTube embeds.
+
 ## Auth And Security
 
 Keep `/login` public as a redirect-only compatibility route and allow the root `/` shell to render as the main product surface. Gate equation submission, generation access, provider key management, and user-owned data behind Supabase auth. API calls must include the authenticated user context. Never expose service-role keys or provider secrets in client code.

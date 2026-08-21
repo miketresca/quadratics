@@ -29,7 +29,7 @@ quadratic input
 
 The final video belongs in the Lesson view. Pipeline logs exist to show how the lesson was produced and to make each stage rerunnable.
 
-The `/game` route is a separate prototype surface for a future worksheet-based lesson experience. It currently proves the game shell, character selection, arena interaction, progress persistence, placeholder lesson, and redacted logs without introducing paid generation into that path.
+The `/game` route is a separate prototype surface for a future worksheet-based lesson experience. It currently proves a seated study-room scene, in-world laptop auth/browser controls, worksheet focus, a Pomodoro clock, a visitor map, a phone focus gag, Lo-Fi ambience, and a PDF-backed placeholder lesson without introducing paid generation into that path.
 
 ## Strategic Principles
 
@@ -49,7 +49,7 @@ The `/game` route is a separate prototype surface for a future worksheet-based l
 4. Separate `elevenlabs_request` and `elevenlabs_audio` internally if request-only regeneration becomes useful; the UI already treats them as visible stages.
 5. Expand blackboard primitives carefully: better final-answer boxing, term-level highlights, layout safeguards, and captions that do not cover math.
 6. Add additional quadratic teaching methods only after factoring is dependable.
-7. Keep `/game` isolated while planning the worksheet-video pipeline; reuse platform primitives, but do not let prototype game mechanics destabilize the quadratic generator.
+7. Keep `/game` isolated while planning the worksheet-video pipeline; reuse auth and static lesson primitives, but do not let prototype room mechanics destabilize the quadratic generator.
 
 ## Non-Goals
 

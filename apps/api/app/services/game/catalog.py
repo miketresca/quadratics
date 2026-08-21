@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 ALLOWED_FIGHTER_IDS = frozenset(
     {
         "mario",

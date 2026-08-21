@@ -193,7 +193,11 @@ class SupabaseGameProgressRepository:
         _raise_for_storage_error(response)
         return [GameLessonProgress.model_validate(row) for row in response.json()]
 
-    async def _get_one_lesson_progress(self, user_id: str, lesson_id: str) -> GameLessonProgress | None:
+    async def _get_one_lesson_progress(
+        self,
+        user_id: str,
+        lesson_id: str,
+    ) -> GameLessonProgress | None:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self._base_url}/rest/v1/game_user_lesson_progress",
@@ -220,7 +224,12 @@ class SupabaseGameProgressRepository:
             )
         _raise_for_storage_error(response)
 
-    async def _upsert_lesson_progress(self, user_id: str, lesson_id: str, values: dict[str, Any]) -> None:
+    async def _upsert_lesson_progress(
+        self,
+        user_id: str,
+        lesson_id: str,
+        values: dict[str, Any],
+    ) -> None:
         payload = {"user_id": user_id, "lesson_id": lesson_id, **values}
         async with httpx.AsyncClient() as client:
             response = await client.post(

@@ -21,7 +21,7 @@ The project exists to make educational video generation inspectable and repeatab
 - Global Supabase-backed instructors with voice IDs, avatar IDs, and reference images
 - Provider usage cost logging for signed-in users
 - Account-scoped generation reuse so repeated equations reopen saved artifacts instead of spending provider credits again
-- `/game` prototype route with a full-screen POV worksheet desk scene, mouse-controlled pen/hand interaction, paper-based lesson selection, and one PDF-backed placeholder lesson
+- `/game` prototype route with a full-screen POV study-room scene, in-world laptop/login surface, worksheet selection, timer, visitor map, phone focus gag, Lo-Fi player, and one PDF-backed placeholder lesson
 
 ## Repository Structure
 
@@ -144,9 +144,11 @@ For avatar generation, the API downloads the completed narration audio from priv
 
 ## Game Prototype
 
-The `/game` route is an isolated prototype for the worksheet lesson direction. It intentionally drops the standard app header and fills the viewport with a POV desk scene: the camera looks down at a worksheet, a stylized hand holds a pen, and pointer movement moves the pen over the paper. The paper acts as the first menu surface with an unlocked PDF-backed lesson and a locked future worksheet-generation lesson.
+The `/game` route is an isolated prototype for the worksheet lesson direction. It intentionally drops the standard app header and fills the viewport with a seated POV study-room scene. Press Space to enter or pause seated look mode. Escape exits focused surfaces. The player can look around the desk, focus the worksheet, laptop, clock, wall map, or phone, and use those surfaces as the scene UI.
 
-The game prototype does not call OpenAI, ElevenLabs, HeyGen, Motion Canvas, or storage generation APIs. It is a UI/composition shell for the next worksheet-video work. The first implementation uses Three.js directly because the scene needs one controlled 3D canvas, pointer raycasting against the worksheet plane, and deterministic generated textures that can later become worksheet regions and timestamped handwriting.
+The laptop owns the in-world login and signed-in browser shell. The signed-in browser has Demo, Music, and Settings tabs; the Lo-Fi Girl player is kept as one persistent embedded player so entering or leaving laptop focus does not start duplicate audio. The clock exposes a local Pomodoro timer. The wall map uses Vercel request geolocation headers for the current visitor pin and seeded demo pins for recorded visits. The phone is a small focus-distraction easter egg that shows a blocked-session quote only while focused.
+
+The game prototype does not call OpenAI, ElevenLabs, HeyGen, Motion Canvas, or storage generation APIs. It is a UI/composition shell for future worksheet-video work. The current implementation uses Three.js because the scene needs one controlled 3D canvas, pointer-lock camera movement, raycast-driven focus targets, CSS3D laptop media, and deterministic generated textures that can later become worksheet regions and timestamped handwriting.
 
 ## Local Development
 

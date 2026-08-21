@@ -19,6 +19,10 @@
 - Instructor: global record containing a display name, ElevenLabs voice ID, optional HeyGen avatar ID, and optional reference image data.
 - Generation job: owned audit record for a generation attempt.
 - Credit transaction: legacy ledger entry from the initial scaffold. It is not part of the current user-facing internal pipeline.
+- Game scene: `/game`-only Three.js study-room prototype that contains desk objects, focus targets, generated canvas textures, and CSS3D media. It is not a generation artifact.
+- Game focus target: an in-world object the player can center and click, such as the worksheet, laptop, clock, wall map, or phone.
+- Visitor map: generated game-scene texture that combines a current visitor pin from request geolocation headers with seeded recorded-visit pins for demo effect.
+- Pomodoro timer: browser-local game timer stored in localStorage for a signed-in game session and cleared on sign-out.
 
 Exact math values are preserved as strings and LaTeX. Display strings are not the only mathematical representation. Script text may explain the deterministic math, but it is not a source of mathematical truth.
 

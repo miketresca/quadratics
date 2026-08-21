@@ -30,7 +30,16 @@ FastAPI protects API routes with Supabase bearer-token verification. Next.js ren
 
 The `/game` route is a separate product surface inside the same Next.js app. It does not import the quadratic equation form, lesson result, or pipeline log components for core rendering.
 
-The current game prototype is a full-screen POV worksheet scene rather than a normal app page. Three.js owns the interactive surface: a camera looks down at a desk and paper, pointer raycasting moves a stylized pen/hand over the worksheet plane, and the generated paper texture acts as the in-world lesson menu. Lesson 1 opens the copied PDF placeholder; Lesson 2 is a locked future worksheet-generation path.
+The current game prototype is a full-screen POV study-room scene rather than a normal app page. Three.js owns the room, desk, lighting, window/city/rain backdrop, pointer-lock camera, and raycast focus targets. The worksheet texture acts as the in-world lesson menu: Lesson 1 opens the copied PDF placeholder, and Lesson 2 is a locked future worksheet-generation path.
+
+The game scene also has in-world utility surfaces:
+
+- the laptop renders a login/browser UI and one persistent Lo-Fi Girl CSS3D player
+- the clock renders local time and opens a browser-local Pomodoro timer
+- the wall map renders a generated world-map texture using Vercel geolocation headers for the current visitor pin
+- the phone renders an inactive screen until focused, then shows a blocked-session quote
+
+The laptop has both a CSS3D in-scene surface and a React focus overlay. The React overlay owns reliable form and tab interaction while the CSS3D player remains the single audio/video owner, which prevents duplicate music when focus changes.
 
 The game prototype is intentionally a UI/composition shell. It does not run paid providers, storage generation, or Motion Canvas stages. Future worksheet generation should use a game/worksheet artifact namespace rather than overloading the quadratic generation pipeline before the contracts are proven.
 

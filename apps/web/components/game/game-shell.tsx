@@ -1,11 +1,12 @@
 "use client";
 
-import type {GameLessonId} from "@quadratics/types";
-import {useEffect, useRef, useState} from "react";
+import type {CurrentUser, GameLessonId} from "@quadratics/types";
+import {useEffect, useRef, useState, type FormEvent} from "react";
 import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, WebGLRenderer} from "three";
 import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
 
 import {getGameLesson} from "@/lib/game/lessons";
+import {createClient} from "@/lib/supabase/client";
 
 type LessonChoice = {
   id: GameLessonId;
@@ -15,7 +16,20 @@ type LessonChoice = {
   box: {x: number; y: number; width: number; height: number};
 };
 
-type SceneTunableName = "laptop" | "clock" | "coffee" | "paper";
+type SceneTunableName = "laptop" | "clock" | "coffee" | "paper" | "map" | "phone";
+type FocusMode = "room" | "paper" | "laptop" | "clock" | "map" | "phone";
+type InteractiveTarget = "paper" | "laptop" | "clock" | "map" | "phone" | null;
+type LaptopTab = "demo" | "music" | "settings";
+type LaptopScreenApi = {
+  setError: (message: string | null) => void;
+  setLoading: (loading: boolean) => void;
+  setTab: (tab: LaptopTab) => void;
+  updateUser: (user: CurrentUser | null) => void;
+};
+type PomodoroState = {
+  endsAt: number | null;
+  minutes: number;
+};
 
 type VisitorLocation = {
   city: string | null;
@@ -25,19 +39,40 @@ type VisitorLocation = {
   region: string | null;
 };
 
+type VisitorMapPin = {
+  current?: boolean;
+  label: string;
+  latitude: number;
+  longitude: number;
+};
+
+type WorldMapGeoJson = {
+  features: Array<{
+    geometry: {
+      coordinates: unknown;
+      type: "Polygon" | "MultiPolygon";
+    } | null;
+    type: "Feature";
+  }>;
+  type: "FeatureCollection";
+};
+
 const PAPER_WIDTH = 2.68;
 const PAPER_HEIGHT = 3.9;
 const DESK_SURFACE_Y = 1.08;
 const PAPER_Y = DESK_SURFACE_Y + 0.045;
+const DESK_RIG_Z = -1.18;
+const SEATED_CAMERA_Z = 5.45 + DESK_RIG_Z;
 const WORKSHEET_CANVAS_WIDTH = 1200;
 const WORKSHEET_CANVAS_HEIGHT = 1600;
 const LOFI_GIRL_EMBED_URL =
   "https://www.youtube.com/embed/0muHFBSiybw?enablejsapi=1&autoplay=1&mute=0&playsinline=1&controls=0&rel=0&modestbranding=1";
+const POMODORO_STORAGE_KEY = "quadratics.game.pomodoro.v1";
 const ROOM = {
   width: 10.6,
   depth: 9.4,
   height: 5.8,
-  floorY: -0.31,
+  floorY: 0,
   backWindowZ: -4.32,
   leftWindowX: -5.3,
   rightWallX: 5.3,
@@ -59,19 +94,137 @@ const LESSON_CHOICES: LessonChoice[] = [
     box: {x: 118, y: 625, width: 964, height: 188}
   }
 ];
+const VISITOR_HISTORY_PINS: VisitorMapPin[] = [
+  {label: "United States", latitude: 39.8, longitude: -98.6},
+  {label: "Argentina", latitude: -38.4, longitude: -63.6},
+  {label: "United Kingdom", latitude: 55.4, longitude: -3.4},
+  {label: "Germany", latitude: 51.2, longitude: 10.4},
+  {label: "Brazil", latitude: -14.2, longitude: -51.9},
+  {label: "Japan", latitude: 36.2, longitude: 138.3},
+  {label: "Australia", latitude: -25.3, longitude: 133.8}
+];
+const PHONE_FOCUS_QUOTES = [
+  {author: "Marcus Aurelius", text: "The impediment to action advances action."},
+  {author: "Seneca", text: "No great thing is created suddenly."},
+  {author: "Epictetus", text: "If you seek tranquility, do less, better."},
+  {author: "David Goggins", text: "Be more than motivated. Be more than driven."},
+  {author: "James Clear", text: "You do not rise to your goals. You fall to your systems."},
+  {author: "Cal Newport", text: "Clarity about what matters provides clarity about what does not."}
+];
 
-export function GameShell() {
+export function GameShell({
+  initialLoginError,
+  initialUser
+}: {
+  initialLoginError: string | null;
+  initialUser: CurrentUser | null;
+}) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
   const worksheetFocusedRef = useRef(false);
+  const focusModeRef = useRef<FocusMode>("room");
+  const focusModeSetterRef = useRef<((mode: FocusMode) => void) | null>(null);
   const pointerLockedRef = useRef(false);
+  const laptopScreenRef = useRef<LaptopScreenApi | null>(null);
+  const userRef = useRef<CurrentUser | null>(initialUser);
+  const pomodoroRef = useRef<PomodoroState>(initialUser ? readPomodoroState() : {endsAt: null, minutes: 25});
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
   const [lockedMessage, setLockedMessage] = useState(false);
   const [started, setStarted] = useState(false);
   const [worksheetFocused, setWorksheetFocused] = useState(false);
+  const [focusedMode, setFocusedMode] = useState<FocusMode>("room");
+  const [clockPanelVisible, setClockPanelVisible] = useState(false);
+  const [interactiveTarget, setInteractiveTarget] = useState<InteractiveTarget>(null);
+  const [laptopTab, setLaptopTab] = useState<LaptopTab>("demo");
+  const [laptopLoginLoading, setLaptopLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(initialLoginError);
+  const [user, setUser] = useState<CurrentUser | null>(initialUser);
+  const [pomodoro, setPomodoro] = useState<PomodoroState>(() => initialUser ? readPomodoroState() : {endsAt: null, minutes: 25});
+  const [pomodoroNow, setPomodoroNow] = useState(() => Date.now());
   const [pointerLocked, setPointerLocked] = useState(false);
   const [sceneEditorHud, setSceneEditorHud] = useState<string | null>(null);
   const selectedLesson = selectedLessonId ? getGameLesson(selectedLessonId) : null;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+  const pomodoroRemaining = pomodoro.endsAt ? Math.max(0, pomodoro.endsAt - pomodoroNow) : 0;
+
+  userRef.current = user;
+  pomodoroRef.current = pomodoro;
+
+  function updateFocusMode(mode: FocusMode) {
+    focusModeRef.current = mode;
+    setFocusedMode(mode);
+    setWorksheetFocused(mode === "paper");
+    setClockPanelVisible(false);
+  }
+
+  async function signInFromLaptop(formData: FormData) {
+    const username = String(formData.get("username") ?? "");
+    const password = String(formData.get("password") ?? "");
+    const email = usernameToAuthEmail(username);
+    if (!email) {
+      setLoginError("Username or password was not accepted.");
+      laptopScreenRef.current?.setError("Username or password was not accepted.");
+      return;
+    }
+    setLaptopLoginLoading(true);
+    laptopScreenRef.current?.setLoading(true);
+    laptopScreenRef.current?.setError(null);
+    const supabase = createClient();
+    const {data, error} = await supabase.auth.signInWithPassword({email, password});
+    setLaptopLoginLoading(false);
+    laptopScreenRef.current?.setLoading(false);
+    if (error || !data.user) {
+      setLoginError("Username or password was not accepted.");
+      laptopScreenRef.current?.setError("Username or password was not accepted.");
+      return;
+    }
+    const nextUser: CurrentUser = {
+      id: data.user.id,
+      email: data.user.email ?? email,
+      displayName: usernameFromAuthEmail(data.user.email ?? email),
+      creditBalance: 0
+    };
+    setLoginError(null);
+    setUser(nextUser);
+    laptopScreenRef.current?.updateUser(nextUser);
+  }
+
+  async function signOutFromLaptop() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.localStorage.removeItem(POMODORO_STORAGE_KEY);
+    setPomodoro({endsAt: null, minutes: 25});
+    setUser(null);
+    laptopScreenRef.current?.updateUser(null);
+  }
+
+  function setPomodoroMinutes(minutes: number) {
+    const next = {endsAt: null, minutes};
+    setPomodoro(next);
+    writePomodoroState(next);
+  }
+
+  function startPomodoro() {
+    const next = {minutes: pomodoroRef.current.minutes, endsAt: Date.now() + pomodoroRef.current.minutes * 60_000};
+    setPomodoro(next);
+    writePomodoroState(next);
+  }
+
+  function stopPomodoro() {
+    const next = {endsAt: null, minutes: pomodoroRef.current.minutes};
+    setPomodoro(next);
+    writePomodoroState(next);
+  }
+
+  function changeLaptopTab(tab: LaptopTab) {
+    setLaptopTab(tab);
+    laptopScreenRef.current?.setTab(tab);
+  }
+
+  function handleLaptopLoginSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void signInFromLaptop(new FormData(event.currentTarget));
+  }
 
   useEffect(() => {
     let disposed = false;
@@ -87,21 +240,20 @@ export function GameShell() {
     let steamGroup: Group | null = null;
     let rainStreaks: Mesh[] = [];
     let clockTexture: Texture | null = null;
+    let phoneScreenTexture: Texture | null = null;
     let lofiIframe: HTMLIFrameElement | null = null;
-    let lofiPlaying = true;
+    let laptopScreenApi: LaptopScreenApi | null = null;
     let hoveredChoiceId: GameLessonId | null = null;
+    let phoneQuoteIndex = -1;
     let sceneEditorSelection: SceneTunableName = "laptop";
     const sceneTunables: Partial<Record<SceneTunableName, Object3D>> = {};
-    const pointerTarget = {x: 1.08, z: 0.82};
-    const cameraTarget = {x: 0, y: 2.85, z: 5.45};
-    const lookTarget = {x: 0, y: 1.52, z: -2.25};
+    const pointerTarget = {x: 1.08, z: 0.82 + DESK_RIG_Z};
+    const cameraTarget = {x: 0, y: 2.85, z: SEATED_CAMERA_Z};
+    const lookTarget = {x: 0, y: 1.52, z: -2.25 + DESK_RIG_Z};
     const lookAngles = {yaw: 0, pitch: -0.2};
     const cleanupCallbacks: Array<() => void> = [];
-
-    function toggleLofiVideo() {
-      lofiPlaying = !lofiPlaying;
-      postLofiCommand(lofiPlaying ? "playVideo" : "pauseVideo");
-    }
+    let laptopInteractionTimer: number | null = null;
+    let clockPanelTimer: number | null = null;
 
     function postLofiCommand(command: "playVideo" | "pauseVideo" | "unMute") {
       lofiIframe?.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args: []}), "https://www.youtube.com");
@@ -118,29 +270,107 @@ export function GameShell() {
     function pauseExperience() {
       startedRef.current = false;
       setStarted(false);
-      setFocusMode(false);
+      setFocusMode("room");
       document.exitPointerLock?.();
       postLofiCommand("pauseVideo");
     }
 
-    function setFocusMode(focused: boolean) {
-      worksheetFocusedRef.current = focused;
-      setWorksheetFocused(focused);
+    function setFocusMode(mode: FocusMode) {
+      focusModeRef.current = mode;
+      worksheetFocusedRef.current = mode === "paper";
+      updateFocusMode(mode);
+      setCssRendererInteraction(cssRenderer, false);
+      if (laptopInteractionTimer !== null) {
+        window.clearTimeout(laptopInteractionTimer);
+        laptopInteractionTimer = null;
+      }
+      if (clockPanelTimer !== null) {
+        window.clearTimeout(clockPanelTimer);
+        clockPanelTimer = null;
+      }
+      refreshPhoneScreenTexture(
+        phoneScreenTexture,
+        mode === "phone",
+        mode === "phone" ? PHONE_FOCUS_QUOTES[Math.max(0, phoneQuoteIndex)] : undefined
+      );
+      applyFocusCamera(mode, 0, 0);
+      if (mode === "laptop") {
+        setCssRendererVisibility(cssRenderer, false);
+      } else {
+        setCssRendererVisibility(cssRenderer, true);
+      }
+      if (mode === "clock") {
+        clockPanelTimer = window.setTimeout(() => {
+          if (focusModeRef.current === "clock") {
+            setClockPanelVisible(true);
+          }
+        }, 520);
+      }
       setLockedMessage(false);
-      if (!focused) {
+      if (mode !== "paper") {
         hoveredChoiceId = null;
         setSelectedLessonId(null);
         refreshPaperTexture(paperTexture, null, null);
       }
     }
+    focusModeSetterRef.current = setFocusMode;
+    cleanupCallbacks.push(() => {
+      if (focusModeSetterRef.current === setFocusMode) {
+        focusModeSetterRef.current = null;
+      }
+    });
+
+    function applyFocusCamera(mode: FocusMode, pointerX: number, pointerY: number) {
+      if (mode === "paper") {
+        cameraTarget.x = pointerX * 0.12;
+        cameraTarget.y = 7.15;
+        cameraTarget.z = 3.75 + DESK_RIG_Z + pointerY * 0.06;
+        lookTarget.x = 0;
+        lookTarget.y = DESK_SURFACE_Y + 0.02;
+        lookTarget.z = -0.35 + DESK_RIG_Z;
+      } else if (mode === "laptop") {
+        cameraTarget.x = -2.12 + pointerX * 0.035;
+        cameraTarget.y = 2.12 + pointerY * 0.025;
+        cameraTarget.z = 0.92 + DESK_RIG_Z;
+        lookTarget.x = -3.68;
+        lookTarget.y = 2.02;
+        lookTarget.z = -1.49 + DESK_RIG_Z;
+      } else if (mode === "clock") {
+        cameraTarget.x = 2.35 + pointerX * 0.05;
+        cameraTarget.y = 2.14 + pointerY * 0.04;
+        cameraTarget.z = 1.05 + DESK_RIG_Z;
+        lookTarget.x = 3.2;
+        lookTarget.y = 1.43;
+        lookTarget.z = -2.0 + DESK_RIG_Z;
+      } else if (mode === "map") {
+        cameraTarget.x = ROOM.rightWallX - 3.72 + pointerX * 0.055;
+        cameraTarget.y = 3.18 + pointerY * 0.025;
+        cameraTarget.z = -1.6;
+        lookTarget.x = ROOM.rightWallX - 0.08;
+        lookTarget.y = 3.18;
+        lookTarget.z = -1.6;
+      } else if (mode === "phone") {
+        cameraTarget.x = 3.72;
+        cameraTarget.y = 3.48;
+        cameraTarget.z = 1.64 + DESK_RIG_Z;
+        lookTarget.x = 3.72;
+        lookTarget.y = DESK_SURFACE_Y + 0.065;
+        lookTarget.z = 1.64 + DESK_RIG_Z;
+      } else {
+        applyRoomLook(pointerX, pointerY);
+      }
+    }
 
     function applyRoomLook(pointerX: number, pointerY: number) {
+      const horizontalRange = 1.32;
+      const horizontalLookDistance = 8.2;
+      const yaw = Math.max(-horizontalRange, Math.min(horizontalRange, lookAngles.yaw));
       cameraTarget.x = 0;
       cameraTarget.y = 2.85;
-      cameraTarget.z = 5.45;
-      lookTarget.x = Math.sin(lookAngles.yaw) * 4.1 + pointerX * 0.18;
+      cameraTarget.z = SEATED_CAMERA_Z;
+      lookTarget.x = cameraTarget.x + Math.sin(yaw) * horizontalLookDistance + pointerX * 0.18;
       lookTarget.y = 1.66 + Math.sin(lookAngles.pitch) * 2.2 + pointerY * 0.12;
-      lookTarget.z = -1.25 - Math.cos(lookAngles.yaw) * 2.15 - Math.cos(lookAngles.pitch) * 0.2;
+      lookTarget.z = cameraTarget.z - Math.cos(yaw) * horizontalLookDistance;
     }
 
     async function setupScene() {
@@ -159,8 +389,8 @@ export function GameShell() {
       scene.background = new THREE.Color(0x090b12);
 
       camera = new THREE.PerspectiveCamera(44, 16 / 9, 0.1, 80);
-      camera.position.set(0, 2.85, 5.45);
-      camera.lookAt(0, 1.52, -2.25);
+      camera.position.set(0, 2.85, SEATED_CAMERA_Z);
+      camera.lookAt(0, 1.52, -2.25 + DESK_RIG_Z);
 
       try {
         renderer = new THREE.WebGLRenderer({alpha: false, antialias: true});
@@ -173,11 +403,15 @@ export function GameShell() {
       renderer.toneMappingExposure = 0.78;
       renderer.shadowMap.enabled = true;
       renderer.domElement.className = "absolute inset-0 h-full w-full cursor-none";
+      renderer.domElement.style.zIndex = "0";
       mount.append(renderer.domElement);
 
       cssRenderer = new CSS3DRenderer();
-      cssRenderer.domElement.className = "pointer-events-none absolute inset-0 h-full w-full cursor-none";
+      cssRenderer.domElement.className = "absolute inset-0 h-full w-full";
+      cssRenderer.domElement.style.pointerEvents = "none";
+      cssRenderer.domElement.style.cursor = "none";
       cssRenderer.domElement.style.overflow = "hidden";
+      cssRenderer.domElement.style.zIndex = "10";
       mount.append(cssRenderer.domElement);
 
       const hemiLight = new THREE.HemisphereLight(0x9fb7d8, 0x0d0908, 0.42);
@@ -207,34 +441,75 @@ export function GameShell() {
       const backdrop = createOfficeBackdrop(THREE);
       rainStreaks = backdrop.rainStreaks;
       scene.add(backdrop.group);
+      sceneTunables.map = backdrop.mapGroup;
+      let visitorLocation: VisitorLocation | null = null;
+      let worldMap: WorldMapGeoJson | null = null;
+      const refreshVisitorMap = () => updateWorldMapTexture(backdrop.mapTexture, visitorLocation, worldMap);
       void loadVisitorLocation().then((location) => {
         if (disposed) {
           return;
         }
-        updateWorldMapTexture(backdrop.mapTexture, location);
-        positionMapDart(backdrop.mapDart, location);
+        visitorLocation = location;
+        refreshVisitorMap();
       });
-      scene.add(createDeskSurface(THREE));
+      void loadWorldMapGeoJson().then((geoJson) => {
+        if (disposed) {
+          return;
+        }
+        worldMap = geoJson;
+        refreshVisitorMap();
+      });
+      const deskRig = new THREE.Group();
+      deskRig.name = "desk-rig";
+      deskRig.position.z = DESK_RIG_Z;
+      scene.add(deskRig);
+
+      deskRig.add(createDeskSurface(THREE));
       const supplies = createDeskSupplies(THREE);
       steamGroup = supplies.steamGroup;
       clockTexture = supplies.clockTexture;
-      scene.add(supplies.group);
+      phoneScreenTexture = supplies.phoneScreenTexture;
+      deskRig.add(supplies.group);
       sceneTunables.clock = supplies.clock;
       sceneTunables.coffee = supplies.coffeeGroup;
+      sceneTunables.phone = supplies.phoneGroup;
       const laptop = createDeskLaptop(THREE);
-      const lofiEmbed = createLaptopLofiEmbed(CSS3DObject, window.location.origin);
-      lofiIframe = lofiEmbed.iframe;
-      laptop.add(lofiEmbed.object);
+      const laptopScreen = createLaptopScreen(CSS3DObject, {
+        error: loginError,
+        onSignIn: signInFromLaptop,
+        onSignOut: signOutFromLaptop,
+        onTabChange: setLaptopTab,
+        origin: window.location.origin,
+        tab: laptopTab,
+        user: userRef.current
+      });
+      laptopScreenApi = laptopScreen.api;
+      laptopScreenRef.current = laptopScreen.api;
+      lofiIframe = laptopScreen.iframe;
+      laptop.add(laptopScreen.object);
       sceneTunables.laptop = laptop;
-      scene.add(laptop);
+      deskRig.add(laptop);
 
-      const clockTimer = window.setInterval(() => refreshClockTexture(clockTexture), 15_000);
+      const clockTimer = window.setInterval(() => {
+        const now = Date.now();
+        const currentPomodoro = pomodoroRef.current;
+        if (currentPomodoro.endsAt !== null && currentPomodoro.endsAt <= now) {
+          const next = {endsAt: null, minutes: currentPomodoro.minutes};
+          setPomodoro(next);
+          writePomodoroState(next);
+          refreshClockTexture(clockTexture, next);
+          setPomodoroNow(now);
+          return;
+        }
+        setPomodoroNow(now);
+        refreshClockTexture(clockTexture, currentPomodoro);
+      }, 1_000);
       cleanupCallbacks.push(() => window.clearInterval(clockTimer));
 
       paperTexture = createWorksheetTexture(THREE, selectedLessonId, null);
       paperMesh = createPaper(THREE, paperTexture);
       sceneTunables.paper = paperMesh;
-      scene.add(paperMesh);
+      deskRig.add(paperMesh);
 
       penGroup = createPenHand(THREE);
       penGroup.visible = worksheetFocusedRef.current;
@@ -242,38 +517,71 @@ export function GameShell() {
 
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2();
+      let lastInteractiveTarget: InteractiveTarget = null;
       applyRoomLook(0, 0);
+
+      function setTarget(target: InteractiveTarget) {
+        if (target === lastInteractiveTarget) {
+          return;
+        }
+        lastInteractiveTarget = target;
+        setInteractiveTarget(target);
+      }
+
+      function pickTarget() {
+        const selectedLaptop = sceneTunables.laptop;
+        const selectedClock = sceneTunables.clock;
+        const selectedMap = sceneTunables.map;
+        const selectedPhone = sceneTunables.phone;
+        if (selectedLaptop && raycaster.intersectObject(selectedLaptop, true).length > 0) {
+          return "laptop";
+        }
+        if (selectedClock && raycaster.intersectObject(selectedClock, true).length > 0) {
+          return "clock";
+        }
+        if (selectedMap && raycaster.intersectObject(selectedMap, true).length > 0) {
+          return "map";
+        }
+        if (selectedPhone && raycaster.intersectObject(selectedPhone, true).length > 0) {
+          return "phone";
+        }
+        if (paperMesh && raycaster.intersectObject(paperMesh).length > 0) {
+          return "paper";
+        }
+        return null;
+      }
 
       function updatePointer(event: PointerEvent) {
         if (!renderer || !camera || !paperMesh) {
           return;
         }
         const rect = renderer.domElement.getBoundingClientRect();
-        if (pointerLockedRef.current && !worksheetFocusedRef.current) {
-          lookAngles.yaw = Math.max(-1.24, Math.min(1.24, lookAngles.yaw + event.movementX * 0.0022));
-          lookAngles.pitch = Math.max(-0.78, Math.min(0.45, lookAngles.pitch - event.movementY * 0.0022));
+        if (pointerLockedRef.current && focusModeRef.current === "room") {
+          lookAngles.yaw = Math.max(-1.32, Math.min(1.32, lookAngles.yaw + event.movementX * 0.0022));
+          lookAngles.pitch = Math.max(-0.78, Math.min(1.22, lookAngles.pitch - event.movementY * 0.0022));
           pointer.set(0, 0);
         } else {
           pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
           pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         }
-        if (worksheetFocusedRef.current) {
-          cameraTarget.x = pointer.x * 0.12;
-          cameraTarget.y = 7.15;
-          cameraTarget.z = 3.75 + pointer.y * 0.06;
-          lookTarget.x = 0;
-          lookTarget.y = DESK_SURFACE_Y + 0.02;
-          lookTarget.z = -0.35;
-        } else {
+        if (focusModeRef.current === "room") {
           if (!pointerLockedRef.current) {
-            lookAngles.yaw = pointer.x * 0.78;
-            lookAngles.pitch = Math.max(-0.78, Math.min(0.45, -0.28 + pointer.y * 0.58));
+            lookAngles.yaw = pointer.x * 1.32;
+            lookAngles.pitch = Math.max(-0.78, Math.min(1.22, -0.28 + pointer.y * 0.58));
           }
+        }
+        applyFocusCamera(focusModeRef.current, pointer.x, pointer.y);
+        if (focusModeRef.current === "room") {
           applyRoomLook(pointer.x, pointer.y);
         }
         raycaster.setFromCamera(pointer, camera);
+        if (focusModeRef.current === "room") {
+          setTarget(pickTarget());
+        } else {
+          setTarget(null);
+        }
         const [hit] = raycaster.intersectObject(paperMesh);
-        if (!hit || !hit.uv || !worksheetFocusedRef.current) {
+        if (!hit || !hit.uv || focusModeRef.current !== "paper") {
           hoveredChoiceId = null;
           refreshPaperTexture(paperTexture, selectedLessonId, hoveredChoiceId);
           return;
@@ -310,13 +618,33 @@ export function GameShell() {
         raycaster.setFromCamera(pointer, camera);
         const selectedLaptop = sceneTunables.laptop;
         if (!worksheetFocusedRef.current && selectedLaptop && raycaster.intersectObject(selectedLaptop, true).length > 0) {
-          toggleLofiVideo();
+          setFocusMode("laptop");
+          document.exitPointerLock?.();
+          return;
+        }
+        const selectedClock = sceneTunables.clock;
+        if (!worksheetFocusedRef.current && selectedClock && raycaster.intersectObject(selectedClock, true).length > 0) {
+          setFocusMode("clock");
+          document.exitPointerLock?.();
+          return;
+        }
+        const selectedMap = sceneTunables.map;
+        if (!worksheetFocusedRef.current && selectedMap && raycaster.intersectObject(selectedMap, true).length > 0) {
+          setFocusMode("map");
+          document.exitPointerLock?.();
+          return;
+        }
+        const selectedPhone = sceneTunables.phone;
+        if (!worksheetFocusedRef.current && selectedPhone && raycaster.intersectObject(selectedPhone, true).length > 0) {
+          phoneQuoteIndex = (phoneQuoteIndex + 1) % PHONE_FOCUS_QUOTES.length;
+          setFocusMode("phone");
+          document.exitPointerLock?.();
           return;
         }
         const [hit] = raycaster.intersectObject(paperMesh);
         if (!hit?.uv) {
           if (!worksheetFocusedRef.current && pointerLockedRef.current && lookAngles.pitch < -0.33) {
-            setFocusMode(true);
+            setFocusMode("paper");
             document.exitPointerLock?.();
             return;
           }
@@ -326,7 +654,7 @@ export function GameShell() {
           return;
         }
         if (!worksheetFocusedRef.current) {
-          setFocusMode(true);
+          setFocusMode("paper");
           document.exitPointerLock?.();
           return;
         }
@@ -356,12 +684,28 @@ export function GameShell() {
         if (handleSceneEditorKey(event)) {
           return;
         }
-        if (event.key === "Enter" && !startedRef.current) {
-          startExperience();
+        const target = event.target;
+        const isLaptopTyping =
+          target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+        if (isLaptopTyping && event.key !== "Escape") {
+          return;
+        }
+        if (event.code === "Space") {
+          event.preventDefault();
+          if (startedRef.current) {
+            pauseExperience();
+          } else {
+            startExperience();
+          }
           return;
         }
         if (event.key === "Escape") {
-          pauseExperience();
+          if (focusModeRef.current !== "room") {
+            event.preventDefault();
+            setFocusMode("room");
+            return;
+          }
+          document.exitPointerLock?.();
         }
       }
       window.addEventListener("keydown", handleKeyDown);
@@ -378,7 +722,7 @@ export function GameShell() {
           return false;
         }
         const selected = sceneTunables[sceneEditorSelection];
-        const orderedNames: SceneTunableName[] = ["laptop", "clock", "coffee", "paper"];
+        const orderedNames: SceneTunableName[] = ["laptop", "clock", "coffee", "paper", "map", "phone"];
         if (event.key === "Tab") {
           event.preventDefault();
           const currentIndex = orderedNames.indexOf(sceneEditorSelection);
@@ -496,7 +840,7 @@ export function GameShell() {
         for (const [index, rain] of rainStreaks.entries()) {
           const speed = typeof rain.userData.speed === "number" ? rain.userData.speed : 0.018;
           rain.position.y -= speed;
-          if (rain.position.y < 0.9) {
+          if (rain.position.y < ROOM.floorY + 0.08) {
             rain.position.y = ROOM.height - 0.35 - (index % 8) * 0.05;
           }
         }
@@ -553,7 +897,7 @@ export function GameShell() {
       {!started ? (
         <div className="absolute inset-0 z-30 grid place-items-center bg-zinc-950/72 backdrop-blur-[2px]">
           <div className="rounded border border-white/15 bg-zinc-950/45 px-8 py-5 text-center shadow-2xl">
-            <p className="font-mono text-sm uppercase tracking-[0.28em] text-zinc-100">Press Enter</p>
+            <p className="font-mono text-sm uppercase tracking-[0.28em] text-zinc-100">Press Space</p>
             <p className="mt-2 text-sm text-zinc-400">Start seated look mode</p>
           </div>
         </div>
@@ -565,24 +909,24 @@ export function GameShell() {
           {worksheetFocused
             ? "Click a checkbox to choose a lesson. Press Escape to look around."
             : pointerLocked
-              ? "Look around with the mouse. Center the worksheet and click to focus. Escape pauses."
-              : "Press Enter to resume seated look mode."}
+              ? "Look around with the mouse. Center an object and click to focus. Space pauses."
+              : "Press Space to resume seated look mode."}
         </p>
       </div>
 
-      {!worksheetFocused ? (
+      {!worksheetFocused && focusedMode === "room" ? (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-8 w-8 -translate-x-1/2 -translate-y-1/2">
-          <span className="absolute left-1/2 top-0 h-2.5 w-px -translate-x-1/2 bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]" />
-          <span className="absolute bottom-0 left-1/2 h-2.5 w-px -translate-x-1/2 bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]" />
-          <span className="absolute left-0 top-1/2 h-px w-2.5 -translate-y-1/2 bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]" />
-          <span className="absolute right-0 top-1/2 h-px w-2.5 -translate-y-1/2 bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]" />
-          <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-amber-50/70 bg-black/20" />
+          <span className={`absolute left-1/2 top-0 h-2.5 w-px -translate-x-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
+          <span className={`absolute bottom-0 left-1/2 h-2.5 w-px -translate-x-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
+          <span className={`absolute left-0 top-1/2 h-px w-2.5 -translate-y-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
+          <span className={`absolute right-0 top-1/2 h-px w-2.5 -translate-y-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
+          <span className={`absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border ${interactiveTarget ? "border-emerald-300 bg-emerald-300/25" : "border-amber-50/70 bg-black/20"}`} />
         </div>
       ) : null}
 
       {pointerLocked && !worksheetFocused ? (
         <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 rounded border border-white/10 bg-zinc-950/45 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-zinc-300/75 backdrop-blur-sm">
-          Esc releases cursor
+          Space pauses / Esc exits focus
         </div>
       ) : null}
 
@@ -598,6 +942,37 @@ export function GameShell() {
         <div className="pointer-events-none absolute bottom-6 left-1/2 w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 rounded border border-amber-300/40 bg-[#211307]/85 px-4 py-3 text-sm text-amber-50 shadow-2xl backdrop-blur-md">
           Lesson 2 is locked while the generated worksheet pipeline is being designed.
         </div>
+      ) : null}
+
+      {focusedMode === "clock" && clockPanelVisible ? (
+        <ClockFocusPanel
+          minutes={pomodoro.minutes}
+          onBack={() => {
+            const setSceneFocusMode = focusModeSetterRef.current;
+            if (setSceneFocusMode) {
+              setSceneFocusMode("room");
+            } else {
+              updateFocusMode("room");
+            }
+          }}
+          onMinutesChange={setPomodoroMinutes}
+          onStart={startPomodoro}
+          onStop={stopPomodoro}
+          remainingMs={pomodoroRemaining}
+          timezone={timezone}
+        />
+      ) : null}
+
+      {focusedMode === "laptop" ? (
+        <LaptopFocusPanel
+          error={loginError}
+          loading={laptopLoginLoading}
+          onSignIn={handleLaptopLoginSubmit}
+          onSignOut={() => void signOutFromLaptop()}
+          onTabChange={changeLaptopTab}
+          tab={laptopTab}
+          user={user}
+        />
       ) : null}
 
       {selectedLesson?.pdfUrl ? (
@@ -630,6 +1005,239 @@ export function GameShell() {
   );
 }
 
+function ClockFocusPanel({
+  minutes,
+  onBack,
+  onMinutesChange,
+  onStart,
+  onStop,
+  remainingMs,
+  timezone
+}: {
+  minutes: number;
+  onBack: () => void;
+  onMinutesChange: (minutes: number) => void;
+  onStart: () => void;
+  onStop: () => void;
+  remainingMs: number;
+  timezone: string;
+}) {
+  const running = remainingMs > 0;
+  return (
+    <div className="absolute bottom-8 right-8 z-30 w-[min(25rem,calc(100vw-2rem))] rounded border border-cyan-200/25 bg-[#050911]/90 p-4 shadow-2xl shadow-black/70 backdrop-blur-md">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-100/60">Desk timer</p>
+          <h2 className="mt-1 font-mono text-3xl font-bold text-cyan-100 drop-shadow-[0_0_14px_rgba(103,232,249,0.35)]">
+            {running ? formatPomodoroClock(remainingMs) : "READY"}
+          </h2>
+        </div>
+        <button className="rounded border border-white/10 px-2.5 py-1.5 text-xs text-zinc-300 hover:border-cyan-200/40 hover:text-cyan-100" onClick={onBack} type="button">
+          Back
+        </button>
+      </div>
+      <div className="grid grid-cols-5 gap-2">
+        {[5, 10, 15, 20, 25].map((value) => (
+          <button
+            className={`rounded border px-2 py-2 text-sm ${minutes === value ? "border-cyan-300/70 bg-cyan-400/15 text-cyan-100" : "border-zinc-700 bg-zinc-950/50 text-zinc-400 hover:text-zinc-100"}`}
+            key={value}
+            onClick={() => onMinutesChange(value)}
+            type="button"
+          >
+            {value}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4 flex gap-2">
+        <button className="flex-1 rounded border border-emerald-400/60 bg-emerald-950/30 px-3 py-2 text-sm font-semibold text-emerald-100 hover:bg-emerald-900/40" onClick={onStart} type="button">
+          Start
+        </button>
+        <button className="flex-1 rounded border border-red-400/35 bg-red-950/20 px-3 py-2 text-sm font-semibold text-red-100 hover:bg-red-900/30" onClick={onStop} type="button">
+          Stop
+        </button>
+      </div>
+      <p className="mt-3 text-xs text-zinc-500">Clock uses your browser time zone: {timezone}.</p>
+    </div>
+  );
+}
+
+function LaptopFocusPanel({
+  error,
+  loading,
+  onSignIn,
+  onSignOut,
+  onTabChange,
+  tab,
+  user
+}: {
+  error: string | null;
+  loading: boolean;
+  onSignIn: (event: FormEvent<HTMLFormElement>) => void;
+  onSignOut: () => void;
+  onTabChange: (tab: LaptopTab) => void;
+  tab: LaptopTab;
+  user: CurrentUser | null;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-30">
+      <div
+        className="pointer-events-auto absolute left-[4.8vw] top-[13.4vh] h-[71vh] w-[90.4vw] overflow-hidden rounded-[1.65rem] border border-cyan-200/16 bg-[#070b12] font-mono text-cyan-50 shadow-[inset_0_0_48px_rgba(35,220,255,0.11),0_0_80px_rgba(20,184,166,0.09)]"
+        data-testid="focused-laptop-screen"
+      >
+        {!user ? (
+          <form className="grid h-full place-items-center bg-gradient-to-br from-[#071018] via-[#0c111c] to-[#121024]" onSubmit={onSignIn}>
+            <div className="grid w-[min(31rem,calc(100%-3rem))] gap-4 rounded-2xl border border-emerald-200/20 bg-black/45 p-8 shadow-[0_0_48px_rgba(16,185,129,0.12)]">
+              <div>
+                <h2 className="text-2xl font-black tracking-wide text-zinc-50">quadratics login</h2>
+                <p className="mt-2 text-sm text-zinc-400">Start a saved worksheet session.</p>
+              </div>
+              <label className="grid gap-2">
+                <span className="text-[11px] uppercase tracking-widest text-zinc-500">Username</span>
+                <input
+                  autoComplete="username"
+                  className="rounded-lg border border-zinc-700 bg-[#101621] px-3 py-3 text-base text-zinc-50 outline-none focus:border-emerald-300/80"
+                  name="username"
+                  required
+                  type="text"
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-[11px] uppercase tracking-widest text-zinc-500">Password</span>
+                <input
+                  autoComplete="current-password"
+                  className="rounded-lg border border-zinc-700 bg-[#101621] px-3 py-3 text-base text-zinc-50 outline-none focus:border-emerald-300/80"
+                  name="password"
+                  required
+                  type="password"
+                />
+              </label>
+              {error ? (
+                <div className="rounded-lg border border-red-400/45 bg-red-950/45 px-3 py-2 text-sm text-red-100">
+                  {error}
+                </div>
+              ) : null}
+              <button
+                className="rounded-lg border border-emerald-300/70 bg-emerald-950/60 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/60 disabled:cursor-wait disabled:opacity-60"
+                disabled={loading}
+                type="submit"
+              >
+                {loading ? "Signing in" : "Sign in"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="grid h-full grid-rows-[4.2rem_1fr] bg-[#070b12]">
+            <div className="flex items-end gap-2 border-b border-zinc-700/70 bg-[#111318] px-3 pt-2">
+              {([
+                ["demo", "Demo"],
+                ["music", "Music"],
+                ["settings", "Settings"]
+              ] as Array<[LaptopTab, string]>).map(([value, label]) => (
+                <button
+                  className={`h-11 rounded-t-xl border px-6 text-base font-black ${tab === value ? "border-zinc-700 border-b-[#071018] bg-[#071018] text-emerald-200" : "border-zinc-700 bg-[#191b22] text-zinc-400 hover:text-zinc-100"}`}
+                  data-testid={`focused-laptop-tab-${value}`}
+                  key={value}
+                  onClick={() => onTabChange(value)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="min-h-0 bg-gradient-to-br from-[#071018] to-[#090d14] p-5">
+              {tab === "music" ? (
+                <div className="grid h-full place-items-center rounded-2xl border border-cyan-200/20 bg-[#020711] text-center shadow-[inset_0_0_54px_rgba(20,184,166,0.12)]">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/70">single player active</p>
+                    <h2 className="mt-3 text-3xl font-black text-zinc-50">Lo-Fi Girl</h2>
+                    <p className="mt-3 max-w-md text-sm leading-6 text-zinc-400">
+                      Music is routed through the laptop's persistent player so it cannot duplicate when you enter or leave focus.
+                    </p>
+                  </div>
+                </div>
+              ) : tab === "settings" ? (
+                <div className="grid max-w-xl gap-5">
+                  <div>
+                    <h2 className="text-2xl font-black text-zinc-50">Settings</h2>
+                    <p className="mt-2 text-sm text-zinc-400">Signed in as {accountDisplayName(user)}</p>
+                  </div>
+                  <button
+                    className="w-fit rounded-lg border border-red-400/60 bg-red-950/45 px-5 py-3 text-sm font-black uppercase tracking-widest text-red-100 hover:bg-red-900/55"
+                    onClick={onSignOut}
+                    type="button"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              ) : (
+                <div className="grid h-full place-items-center rounded-2xl border border-dashed border-cyan-200/25 text-center text-cyan-50/70">
+                  <div>
+                    <h2 className="text-2xl font-black text-zinc-50">Demo video slot</h2>
+                    <p className="mt-3 text-sm text-zinc-400">Loom embed placeholder</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function usernameToAuthEmail(username: string) {
+  const normalized = username.trim().toLowerCase();
+  if (!/^[a-z0-9._-]{2,40}$/.test(normalized)) {
+    return null;
+  }
+  return `${normalized}@quadratics.xyz`;
+}
+
+function usernameFromAuthEmail(email: string) {
+  return email.endsWith("@quadratics.xyz") ? email.slice(0, -"@quadratics.xyz".length) : email.split("@")[0];
+}
+
+function accountDisplayName(user: CurrentUser) {
+  return user.displayName || (user.email ? usernameFromAuthEmail(user.email) : "user");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function readPomodoroState(): PomodoroState {
+  if (typeof window === "undefined") {
+    return {endsAt: null, minutes: 25};
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(POMODORO_STORAGE_KEY) ?? "null") as Partial<PomodoroState> | null;
+    const minutes = typeof parsed?.minutes === "number" && [5, 10, 15, 20, 25].includes(parsed.minutes) ? parsed.minutes : 25;
+    const endsAt = typeof parsed?.endsAt === "number" && parsed.endsAt > Date.now() ? parsed.endsAt : null;
+    return {endsAt, minutes};
+  } catch {
+    return {endsAt: null, minutes: 25};
+  }
+}
+
+function writePomodoroState(state: PomodoroState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(state));
+}
+
+function formatPomodoroClock(ms: number) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
 async function loadVisitorLocation(): Promise<VisitorLocation | null> {
   try {
     const response = await fetch("/api/visitor-location", {cache: "no-store"});
@@ -637,6 +1245,18 @@ async function loadVisitorLocation(): Promise<VisitorLocation | null> {
       return null;
     }
     return await response.json() as VisitorLocation;
+  } catch {
+    return null;
+  }
+}
+
+async function loadWorldMapGeoJson(): Promise<WorldMapGeoJson | null> {
+  try {
+    const response = await fetch("/game/assets/maps/countries.geo.json", {cache: "force-cache"});
+    if (!response.ok) {
+      return null;
+    }
+    return await response.json() as WorldMapGeoJson;
   } catch {
     return null;
   }
@@ -690,6 +1310,12 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   floor.receiveShadow = true;
   group.add(floor);
 
+  const rearWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.width, ROOM.height), wallMaterial);
+  rearWall.position.set(0, ROOM.height / 2, ROOM.depth / 2 - 0.05);
+  rearWall.rotation.y = Math.PI;
+  rearWall.receiveShadow = true;
+  group.add(rearWall);
+
   const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.width, ROOM.depth), ceilingMaterial);
   ceiling.rotation.x = Math.PI / 2;
   ceiling.position.set(0, ROOM.height, -0.05);
@@ -703,7 +1329,7 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
     roughness: 0.22,
     metalness: 0.02,
     transparent: true,
-    opacity: 0.78
+    opacity: 0.6
   });
 
   const sideWall = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.depth, ROOM.height), sideGlassMaterial.clone());
@@ -717,14 +1343,6 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   rightWall.rotation.y = -Math.PI / 2;
   rightWall.receiveShadow = true;
   group.add(rightWall);
-
-  const rightWallGlow = new THREE.Mesh(
-    new THREE.PlaneGeometry(2.6, 2.1),
-    new THREE.MeshBasicMaterial({color: 0x5e2384, transparent: true, opacity: 0.08})
-  );
-  rightWallGlow.position.set(ROOM.rightWallX - 0.02, 2.62, -2.2);
-  rightWallGlow.rotation.y = -Math.PI / 2;
-  group.add(rightWallGlow);
 
   const glass = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM.width, ROOM.height),
@@ -746,15 +1364,6 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   rainStreaks.push(...backCity.rainStreaks, ...leftCity.rainStreaks);
   group.add(backCity.group);
   group.add(leftCity.group);
-
-  for (const x of [-4.25, -3.1, 3.35, 4.4]) {
-    const sign = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.18, 0.82),
-      new THREE.MeshBasicMaterial({color: x < 0 ? 0x58e6ff : 0xff4fd8, transparent: true, opacity: 0.52})
-    );
-    sign.position.set(x, 3.35 + Math.abs(x) * 0.08, -4.12);
-    group.add(sign);
-  }
 
   const frameMaterial = new THREE.MeshStandardMaterial({color: 0x242a2e, roughness: 0.44, metalness: 0.22});
   for (const [x, y, width, height] of [
@@ -792,51 +1401,106 @@ function createOfficeBackdrop(THREE: typeof import("three")) {
   const mapPanel = createRightWallMap(THREE);
   group.add(mapPanel.group);
 
-  return {group, rainStreaks, mapTexture: mapPanel.texture, mapDart: mapPanel.dart};
+  return {group, rainStreaks, mapGroup: mapPanel.group, mapTexture: mapPanel.texture};
 }
 
 function createCityView(THREE: typeof import("three"), side: "back" | "left") {
   const group = new THREE.Group();
   const rainStreaks: Mesh[] = [];
-  const skylineMaterial = new THREE.MeshStandardMaterial({color: 0x172030, emissive: 0x101c31, emissiveIntensity: 0.72, roughness: 0.8});
-  const rainMaterial = new THREE.MeshBasicMaterial({color: 0xa9d8ff, transparent: true, opacity: 0.35});
-  const buildingBaseY = 0.92;
-  const litWindowBaseY = 1;
+  const skylineMaterial = new THREE.MeshStandardMaterial({color: 0x121927, emissive: 0x0b1425, emissiveIntensity: 0.9, roughness: 0.82});
+  const facadeMaterial = new THREE.MeshStandardMaterial({
+    color: 0x1b2435,
+    emissive: 0x101a32,
+    emissiveIntensity: 0.55,
+    roughness: 0.7,
+    depthWrite: false
+  });
+  const rainMaterial = new THREE.MeshBasicMaterial({color: 0xa9d8ff, transparent: true, opacity: side === "left" ? 0.48 : 0.35, side: THREE.DoubleSide});
+  const buildingBaseY = side === "left" ? -0.28 : 0.72;
+  const litWindowBaseY = side === "left" ? 0.2 : 0.9;
   const cityBackZ = ROOM.backWindowZ - 0.34;
   const cityLeftX = ROOM.leftWindowX - 0.34;
 
-  for (let index = 0; index < 28; index += 1) {
-    const width = 0.18 + (index % 4) * 0.055;
-    const height = 0.7 + ((index * 7) % 10) * 0.17;
-    const x = -4.65 + index * 0.36;
-    const z = ROOM.backWindowZ - 0.2 + index * 0.18;
+  const buildingCount = side === "left" ? 58 : 34;
+  for (let index = 0; index < buildingCount; index += 1) {
+    const width = 0.22 + (index % 5) * 0.06;
+    const depth = 0.12 + (index % 4) * 0.05;
+    const height = (0.8 + ((index * 7) % 12) * 0.18) * (side === "left" ? 1.15 : 1);
+    const x = -4.9 + index * 0.31;
+    const z = side === "left" ? -ROOM.depth / 2 + 0.14 + index * (ROOM.depth / Math.max(1, buildingCount - 1)) : ROOM.backWindowZ - 0.32 + index * 0.15;
     const building =
       side === "back"
-        ? new THREE.Mesh(new THREE.BoxGeometry(width, height, 0.06), skylineMaterial)
-        : new THREE.Mesh(new THREE.BoxGeometry(0.06, height, width), skylineMaterial);
+        ? new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), skylineMaterial)
+        : new THREE.Mesh(new THREE.BoxGeometry(depth, height, width), skylineMaterial);
     building.position.set(side === "back" ? x : cityLeftX, buildingBaseY + height / 2, side === "back" ? cityBackZ : z);
     group.add(building);
 
-    const windowRows = Math.max(2, Math.floor(height / 0.28));
+    if (index % 3 === 0) {
+      const facade =
+        side === "back"
+          ? new THREE.Mesh(new THREE.BoxGeometry(width * 0.72, height * 0.24, 0.022), facadeMaterial)
+          : new THREE.Mesh(new THREE.BoxGeometry(0.022, height * 0.24, width * 0.72), facadeMaterial);
+      const sideFacadeX = cityLeftX + depth / 2 + 0.025;
+      facade.position.set(
+        side === "back" ? x : sideFacadeX,
+        buildingBaseY + height * 0.72,
+        side === "back" ? cityBackZ + depth / 2 + 0.018 : z
+      );
+      group.add(facade);
+    }
+
+    const windowRows = Math.max(2, Math.floor(height / 0.24));
+    const windowCols = side === "back" ? 2 : 3;
     const windowColor = index % 5 === 0 ? 0xff58d2 : index % 3 === 0 ? 0x76f0ff : 0xffe186;
     for (let row = 0; row < windowRows; row += 1) {
-      if ((row + index) % 3 === 0) {
-        continue;
+      for (let col = 0; col < windowCols; col += 1) {
+        if ((row + col + index) % 4 === 0) {
+          continue;
+        }
+        const windowWidth = side === "back" ? width * 0.26 : width * 0.2;
+        const windowHeight = side === "back" ? 0.028 : 0.04;
+        const litWindow = new THREE.Mesh(
+          new THREE.PlaneGeometry(windowWidth, windowHeight),
+          new THREE.MeshBasicMaterial({
+            color: windowColor,
+            transparent: true,
+            opacity: side === "left" ? 0.95 : 0.68,
+            side: THREE.DoubleSide,
+            depthWrite: false
+          })
+        );
+        const columnOffset = (col - (windowCols - 1) / 2) * (side === "back" ? width * 0.28 : width * 0.22);
+        const sideWindowX = cityLeftX + depth / 2 + 0.036;
+        litWindow.position.set(
+          side === "back" ? x + columnOffset : sideWindowX,
+          litWindowBaseY + row * 0.19,
+          side === "back" ? cityBackZ + depth / 2 + 0.062 : z + columnOffset
+        );
+        if (side === "left") {
+          litWindow.rotation.y = Math.PI / 2;
+        }
+        group.add(litWindow);
       }
-      const litWindow = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.46, 0.035), new THREE.MeshBasicMaterial({color: windowColor, transparent: true, opacity: 0.72}));
-      litWindow.position.set(side === "back" ? x : cityLeftX + 0.04, litWindowBaseY + row * 0.22, side === "back" ? cityBackZ + 0.05 : z);
-      if (side === "left") {
-        litWindow.rotation.y = Math.PI / 2;
-      }
-      group.add(litWindow);
     }
   }
 
-  for (let index = 0; index < 115; index += 1) {
+  if (side === "back") {
+    const signTexture = createNeonSignTexture(THREE, "quadratics.xyz");
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.45, 0.34),
+      new THREE.MeshBasicMaterial({map: signTexture, transparent: true, side: THREE.DoubleSide})
+    );
+    sign.position.set(-1.34, 3.62, cityBackZ + 0.16);
+    group.add(sign);
+  }
+
+  const rainCount = side === "left" ? 280 : 115;
+  for (let index = 0; index < rainCount; index += 1) {
     const rain = new THREE.Mesh(new THREE.PlaneGeometry(0.006, 0.34), rainMaterial);
+    const insideLeftRain = side === "left" && index % 3 === 0;
     rain.position.set(
-      side === "back" ? -ROOM.width / 2 + Math.random() * ROOM.width : ROOM.leftWindowX - 0.12,
-      1.05 + Math.random() * 4.15,
+      side === "back" ? -ROOM.width / 2 + Math.random() * ROOM.width : insideLeftRain ? ROOM.leftWindowX + 0.045 : ROOM.leftWindowX - 0.12 - (index % 3) * 0.1,
+      ROOM.floorY + 0.12 + Math.random() * (ROOM.height - 0.18),
       side === "back" ? ROOM.backWindowZ - 0.08 : -ROOM.depth / 2 + Math.random() * ROOM.depth
     );
     rain.rotation.z = -0.24;
@@ -851,6 +1515,38 @@ function createCityView(THREE: typeof import("three"), side: "back" | "left") {
   return {group, rainStreaks};
 }
 
+function createNeonSignTexture(THREE: typeof import("three"), label: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 256;
+  const context = canvas.getContext("2d");
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    const glow = context.createRadialGradient(canvas.width / 2, canvas.height / 2, 24, canvas.width / 2, canvas.height / 2, 460);
+    glow.addColorStop(0, "rgba(31,255,188,0.22)");
+    glow.addColorStop(0.42, "rgba(31,255,188,0.08)");
+    glow.addColorStop(1, "rgba(31,255,188,0)");
+    context.fillStyle = glow;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "rgba(91,255,214,0.62)";
+    context.lineWidth = 4;
+    roundRect(context, 38, 50, canvas.width - 76, canvas.height - 100, 22);
+    context.stroke();
+    context.font = "900 78px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.shadowColor = "rgba(80,255,210,0.95)";
+    context.shadowBlur = 24;
+    context.fillStyle = "#b7ffed";
+    context.fillText(label, canvas.width / 2, canvas.height / 2 + 4);
+    context.shadowBlur = 0;
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function createRightWallMap(THREE: typeof import("three")) {
   const group = new THREE.Group();
   const texture = createWorldMapTexture(THREE, null);
@@ -858,67 +1554,42 @@ function createRightWallMap(THREE: typeof import("three")) {
   const mapMaterial = new THREE.MeshBasicMaterial({map: texture, color: 0xffffff, side: THREE.DoubleSide});
 
   // The group is mounted on the right wall; child XY coordinates are the map face.
-  const backing = new THREE.Mesh(new THREE.BoxGeometry(3.16, 1.72, 0.08), frameMaterial);
+  const backing = new THREE.Mesh(new THREE.BoxGeometry(4.05, 2.24, 0.08), frameMaterial);
   backing.position.z = -0.035;
   backing.castShadow = true;
   backing.receiveShadow = true;
   group.add(backing);
 
-  const map = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.42), mapMaterial);
+  const map = new THREE.Mesh(new THREE.PlaneGeometry(3.76, 1.94), mapMaterial);
   map.position.z = 0.018;
   group.add(map);
 
-  const dart = new THREE.Group();
-  const red = new THREE.MeshStandardMaterial({color: 0xf04444, emissive: 0x5f0808, emissiveIntensity: 0.45, roughness: 0.38, metalness: 0.08});
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.38, 12), red);
-  shaft.rotation.x = Math.PI / 2;
-  shaft.position.z = 0.17;
-  shaft.castShadow = true;
-  dart.add(shaft);
-  const head = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.16, 16), red);
-  head.rotation.x = Math.PI / 2;
-  head.position.z = 0.38;
-  head.castShadow = true;
-  dart.add(head);
-  dart.visible = false;
-  group.add(dart);
-
   group.name = "visitor-world-map";
-  group.position.set(ROOM.rightWallX - 0.1, 3.08, -1.65);
+  group.position.set(ROOM.rightWallX - 0.09, 3.06, -1.7);
   group.rotation.y = -Math.PI / 2;
-  return {group, texture, dart};
+  return {group, texture};
 }
 
-function createWorldMapTexture(THREE: typeof import("three"), location: VisitorLocation | null) {
+function createWorldMapTexture(THREE: typeof import("three"), location: VisitorLocation | null, worldMap: WorldMapGeoJson | null = null) {
   const canvas = document.createElement("canvas");
   canvas.width = 1400;
   canvas.height = 720;
-  drawWorldMap(canvas, location);
+  drawWorldMap(canvas, location, worldMap);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
 
-function updateWorldMapTexture(texture: Texture, location: VisitorLocation | null) {
+function updateWorldMapTexture(texture: Texture, location: VisitorLocation | null, worldMap: WorldMapGeoJson | null = null) {
   if (!(texture.image instanceof HTMLCanvasElement)) {
     return;
   }
-  drawWorldMap(texture.image, location);
+  drawWorldMap(texture.image, location, worldMap);
   texture.needsUpdate = true;
 }
 
-function positionMapDart(dart: Object3D, location: VisitorLocation | null) {
-  if (!location || location.latitude === null || location.longitude === null) {
-    dart.visible = false;
-    return;
-  }
-  const {x, y} = projectLocationToMap(location.latitude, location.longitude);
-  dart.position.set(x * 2.9, y * 1.42, 0.12);
-  dart.visible = true;
-}
-
-function drawWorldMap(canvas: HTMLCanvasElement, location: VisitorLocation | null) {
+function drawWorldMap(canvas: HTMLCanvasElement, location: VisitorLocation | null, worldMap: WorldMapGeoJson | null) {
   const context = canvas.getContext("2d");
   if (!context) {
     return;
@@ -930,77 +1601,158 @@ function drawWorldMap(canvas: HTMLCanvasElement, location: VisitorLocation | nul
   context.fillStyle = background;
   context.fillRect(0, 0, canvas.width, canvas.height);
 
-  context.strokeStyle = "rgba(127,255,230,0.08)";
+  context.strokeStyle = "rgba(127,255,230,0.075)";
   context.lineWidth = 1;
-  for (let x = 100; x < canvas.width; x += 100) {
+  for (let x = 82; x < canvas.width; x += 82) {
     context.beginPath();
     context.moveTo(x, 0);
     context.lineTo(x, canvas.height);
     context.stroke();
   }
-  for (let y = 90; y < canvas.height; y += 90) {
+  for (let y = 72; y < canvas.height; y += 72) {
     context.beginPath();
     context.moveTo(0, y);
     context.lineTo(canvas.width, y);
     context.stroke();
   }
 
-  const landColor = "#25394f";
-  const edgeColor = "rgba(159, 226, 255, 0.45)";
-  const continents = [
-    [[0.12, 0.31], [0.2, 0.2], [0.31, 0.24], [0.34, 0.36], [0.27, 0.48], [0.19, 0.45]],
-    [[0.27, 0.5], [0.33, 0.57], [0.31, 0.73], [0.25, 0.84], [0.21, 0.66]],
-    [[0.43, 0.29], [0.53, 0.22], [0.64, 0.29], [0.61, 0.42], [0.49, 0.43]],
-    [[0.52, 0.45], [0.62, 0.49], [0.64, 0.67], [0.55, 0.78], [0.49, 0.62]],
-    [[0.63, 0.33], [0.76, 0.25], [0.87, 0.37], [0.82, 0.56], [0.68, 0.51]],
-    [[0.78, 0.68], [0.89, 0.65], [0.93, 0.78], [0.84, 0.84]]
-  ];
-  for (const continent of continents) {
-    context.beginPath();
-    for (const [index, point] of continent.entries()) {
-      const px = point[0] * canvas.width;
-      const py = point[1] * canvas.height;
-      if (index === 0) {
-        context.moveTo(px, py);
-      } else {
-        context.lineTo(px, py);
-      }
-    }
-    context.closePath();
-    context.fillStyle = landColor;
-    context.fill();
-    context.strokeStyle = edgeColor;
-    context.lineWidth = 4;
-    context.stroke();
+  const mapBounds = {x: 72, y: 104, width: canvas.width - 144, height: canvas.height - 166};
+  context.save();
+  context.beginPath();
+  roundRect(context, mapBounds.x, mapBounds.y, mapBounds.width, mapBounds.height, 18);
+  context.clip();
+  context.fillStyle = "rgba(8,14,24,0.74)";
+  context.fillRect(mapBounds.x, mapBounds.y, mapBounds.width, mapBounds.height);
+  if (worldMap) {
+    drawGeoJsonMap(context, mapBounds, worldMap);
+  } else {
+    context.font = "800 34px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillStyle = "rgba(219,234,254,0.54)";
+    context.fillText("LOADING MAP DATA", mapBounds.x + mapBounds.width / 2, mapBounds.y + mapBounds.height / 2);
+    context.textAlign = "start";
+    context.textBaseline = "alphabetic";
   }
+  context.restore();
+
+  context.strokeStyle = "rgba(127,255,230,0.24)";
+  context.lineWidth = 2;
+  roundRect(context, mapBounds.x, mapBounds.y, mapBounds.width, mapBounds.height, 18);
+  context.stroke();
 
   context.fillStyle = "#dbeafe";
-  context.font = "700 34px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.font = "800 34px ui-monospace, SFMono-Regular, Menlo, monospace";
   context.fillText("VISITOR MAP", 54, 68);
   context.font = "500 24px ui-monospace, SFMono-Regular, Menlo, monospace";
   context.fillStyle = "rgba(219,234,254,0.62)";
   context.fillText(locationLabel(location), 54, 106);
 
+  const pins = [...VISITOR_HISTORY_PINS];
   if (location !== null && location.latitude !== null && location.longitude !== null) {
-    const {x, y} = projectLocationToMap(location.latitude, location.longitude);
-    const px = canvas.width / 2 + x * canvas.width;
-    const py = canvas.height / 2 - y * canvas.height;
-    context.fillStyle = "rgba(255,68,68,0.25)";
-    context.beginPath();
-    context.arc(px, py, 36, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "#ff4545";
-    context.beginPath();
-    context.arc(px, py, 12, 0, Math.PI * 2);
-    context.fill();
+    pins.push({
+      current: true,
+      label: locationLabel(location),
+      latitude: location.latitude,
+      longitude: location.longitude
+    });
+  }
+  for (const pin of pins) {
+    const point = projectGeoToCanvas(mapBounds, pin.latitude, pin.longitude);
+    drawThumbtack(context, point.x, point.y, pin.current ? "#ffd76a" : "#ff4747", pin.current);
+  }
+
+  context.font = "700 22px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillStyle = "rgba(219,234,254,0.58)";
+  context.fillText("GOLD = CURRENT VISITOR", 54, canvas.height - 38);
+  context.fillStyle = "rgba(255,120,120,0.74)";
+  context.fillText("RED = RECORDED VISITS", 404, canvas.height - 38);
+}
+
+function drawGeoJsonMap(
+  context: CanvasRenderingContext2D,
+  bounds: {x: number; y: number; width: number; height: number},
+  geoJson: WorldMapGeoJson
+) {
+  context.fillStyle = "#233852";
+  context.strokeStyle = "rgba(151,215,255,0.5)";
+  context.lineWidth = 1.8;
+  for (const feature of geoJson.features) {
+    const geometry = feature.geometry;
+    if (!geometry) {
+      continue;
+    }
+    const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.coordinates;
+    if (!isGeoJsonPolygons(polygons)) {
+      continue;
+    }
+    for (const polygon of polygons) {
+      drawGeoPolygon(context, bounds, polygon);
+    }
   }
 }
 
-function projectLocationToMap(latitude: number, longitude: number) {
+function isGeoJsonPolygons(value: unknown): value is number[][][][] {
+  return Array.isArray(value);
+}
+
+function drawGeoPolygon(
+  context: CanvasRenderingContext2D,
+  bounds: {x: number; y: number; width: number; height: number},
+  rings: number[][][]
+) {
+  context.beginPath();
+  for (const ring of rings) {
+    for (const [index, coordinate] of ring.entries()) {
+      const [longitude, latitude] = coordinate;
+      if (typeof latitude !== "number" || typeof longitude !== "number") {
+        continue;
+      }
+      const point = projectGeoToCanvas(bounds, latitude, longitude);
+      if (index === 0) {
+        context.moveTo(point.x, point.y);
+      } else {
+        context.lineTo(point.x, point.y);
+      }
+    }
+    context.closePath();
+  }
+  context.fill();
+  context.stroke();
+}
+
+function projectGeoToCanvas(
+  bounds: {x: number; y: number; width: number; height: number},
+  latitude: number,
+  longitude: number
+) {
+  const clampedLatitude = Math.max(-58, Math.min(78, latitude));
   return {
-    x: Math.max(-0.46, Math.min(0.46, longitude / 360)),
-    y: Math.max(-0.42, Math.min(0.42, latitude / 180))
+    x: bounds.x + ((longitude + 180) / 360) * bounds.width,
+    y: bounds.y + ((78 - clampedLatitude) / 136) * bounds.height
   };
+}
+
+function drawThumbtack(context: CanvasRenderingContext2D, x: number, y: number, color: string, current = false) {
+  context.save();
+  context.shadowColor = current ? "rgba(255,215,106,0.95)" : "rgba(255,71,71,0.72)";
+  context.shadowBlur = current ? 28 : 18;
+  context.fillStyle = color;
+  context.strokeStyle = current ? "#fff6bf" : "#fecaca";
+  context.lineWidth = current ? 5 : 3;
+  context.beginPath();
+  context.arc(x, y - 18, current ? 17 : 13, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+  context.shadowBlur = 0;
+  context.beginPath();
+  context.moveTo(x - 7, y - 4);
+  context.lineTo(x + 7, y - 4);
+  context.lineTo(x, y + 26);
+  context.closePath();
+  context.fillStyle = current ? "#d69b1f" : "#b91c1c";
+  context.fill();
+  context.restore();
 }
 
 function locationLabel(location: VisitorLocation | null) {
@@ -1025,7 +1777,179 @@ function createDeskSupplies(THREE: typeof import("three")) {
   coffee.group.rotation.y = -0.32;
   group.add(coffee.group);
 
-  return {group, steamGroup: coffee.steamGroup, clockTexture, clock, coffeeGroup: coffee.group};
+  const phone = createDeskPhone(THREE);
+  group.add(phone.group);
+
+  return {
+    group,
+    steamGroup: coffee.steamGroup,
+    clockTexture,
+    clock,
+    coffeeGroup: coffee.group,
+    phoneGroup: phone.group,
+    phoneScreenTexture: phone.screenTexture
+  };
+}
+
+function createDeskPhone(THREE: typeof import("three")) {
+  const group = new THREE.Group();
+  group.name = "desk-phone";
+  group.position.set(3.72, 0.055, 1.64);
+  group.rotation.y = -0.56;
+
+  const bodyMaterial = new THREE.MeshStandardMaterial({color: 0x0b1118, roughness: 0.48, metalness: 0.22});
+  const sideMaterial = new THREE.MeshStandardMaterial({color: 0x121a22, roughness: 0.42, metalness: 0.18});
+  const edgeMaterial = new THREE.MeshStandardMaterial({color: 0x05080b, roughness: 0.4, metalness: 0.28});
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.045, 0.94), bodyMaterial);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.61, 0.035, 0.99), edgeMaterial);
+  edge.position.y = -0.012;
+  edge.castShadow = true;
+  group.add(edge);
+
+  const screenTexture = createPhoneScreenTexture(THREE, false);
+  const screen = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.48, 0.78),
+    new THREE.MeshBasicMaterial({map: screenTexture, color: 0xffffff, side: THREE.DoubleSide})
+  );
+  screen.rotation.x = -Math.PI / 2;
+  screen.position.y = 0.028;
+  screen.position.z = -0.012;
+  group.add(screen);
+
+  const notch = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.006, 0.018), sideMaterial);
+  notch.position.set(0, 0.033, -0.38);
+  group.add(notch);
+
+  return {group, screenTexture};
+}
+
+function createPhoneScreenTexture(
+  THREE: typeof import("three"),
+  active: boolean,
+  quote?: {author: string; text: string}
+) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 832;
+  drawPhoneScreen(canvas, active, quote);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function refreshPhoneScreenTexture(texture: Texture | null, active: boolean, quote?: {author: string; text: string}) {
+  if (!texture) {
+    return;
+  }
+  const image = texture.image;
+  if (!(image instanceof HTMLCanvasElement)) {
+    return;
+  }
+  drawPhoneScreen(image, active, quote);
+  texture.needsUpdate = true;
+}
+
+function setCssRendererInteraction(renderer: CSS3DRenderer | null, enabled: boolean) {
+  if (!renderer) {
+    return;
+  }
+  const pointerEvents = enabled ? "auto" : "none";
+  renderer.domElement.style.pointerEvents = pointerEvents;
+  renderer.domElement.style.cursor = enabled ? "auto" : "none";
+  for (const element of Array.from(renderer.domElement.querySelectorAll<HTMLElement>("*"))) {
+    element.style.pointerEvents = pointerEvents;
+  }
+}
+
+function setCssRendererVisibility(renderer: CSS3DRenderer | null, visible: boolean) {
+  if (!renderer) {
+    return;
+  }
+  renderer.domElement.style.opacity = visible ? "1" : "0";
+  renderer.domElement.style.visibility = visible ? "visible" : "hidden";
+}
+
+function drawPhoneScreen(canvas: HTMLCanvasElement, active: boolean, quote?: {author: string; text: string}) {
+  const context = canvas.getContext("2d");
+  if (!context) {
+    return;
+  }
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  const glass = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+  glass.addColorStop(0, active ? "#071720" : "#101820");
+  glass.addColorStop(0.55, active ? "#061015" : "#17222b");
+  glass.addColorStop(1, active ? "#030608" : "#0a0f14");
+  context.fillStyle = glass;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.fillStyle = "rgba(255,255,255,0.08)";
+  roundRect(context, canvas.width / 2 - 58, 22, 116, 12, 6);
+  context.fill();
+
+  if (!active) {
+    return;
+  }
+
+  const glow = context.createRadialGradient(canvas.width / 2, 280, 10, canvas.width / 2, 280, 360);
+  glow.addColorStop(0, "rgba(52,255,191,0.2)");
+  glow.addColorStop(1, "rgba(52,255,191,0)");
+  context.fillStyle = glow;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.strokeStyle = "rgba(94,255,214,0.42)";
+  context.lineWidth = 3;
+  roundRect(context, 48, 80, canvas.width - 96, canvas.height - 160, 30);
+  context.stroke();
+
+  context.font = "700 28px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillStyle = "#7fffe6";
+  context.textAlign = "left";
+  context.fillText("OPAL BLOCK", 76, 142);
+
+  context.font = "800 42px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillStyle = "#f8fafc";
+  wrapCanvasText(context, "Deep work session active.", 76, 225, canvas.width - 152, 52);
+
+  context.font = "600 30px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillStyle = "#cbd5e1";
+  const quoteEndY = wrapCanvasText(context, quote?.text ?? PHONE_FOCUS_QUOTES[0].text, 76, 435, canvas.width - 152, 42);
+
+  context.font = "700 24px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillStyle = "#8be8d1";
+  context.fillText(`- ${quote?.author ?? PHONE_FOCUS_QUOTES[0].author}`, 76, quoteEndY + 46);
+}
+
+function wrapCanvasText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number
+): number {
+  const words = text.split(" ");
+  let line = "";
+  let currentY = y;
+  for (const word of words) {
+    const testLine = line ? `${line} ${word}` : word;
+    if (context.measureText(testLine).width > maxWidth && line) {
+      context.fillText(line, x, currentY);
+      line = word;
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  if (line) {
+    context.fillText(line, x, currentY);
+  }
+  return currentY;
 }
 
 function createDeskLaptop(THREE: typeof import("three")) {
@@ -1070,7 +1994,18 @@ function createDeskLaptop(THREE: typeof import("three")) {
   return group;
 }
 
-function createLaptopLofiEmbed(CSS3DObject: typeof import("three/examples/jsm/renderers/CSS3DRenderer.js").CSS3DObject, origin: string) {
+function createLaptopScreen(
+  CSS3DObject: typeof import("three/examples/jsm/renderers/CSS3DRenderer.js").CSS3DObject,
+  options: {
+    error: string | null;
+    onSignIn: (formData: FormData) => Promise<void>;
+    onSignOut: () => Promise<void>;
+    onTabChange: (tab: LaptopTab) => void;
+    origin: string;
+    tab: LaptopTab;
+    user: CurrentUser | null;
+  }
+) {
   const screen = document.createElement("div");
   screen.style.width = "1068px";
   screen.style.height = "600px";
@@ -1078,9 +2013,11 @@ function createLaptopLofiEmbed(CSS3DObject: typeof import("three/examples/jsm/re
   screen.style.borderRadius = "14px";
   screen.style.background = "#071018";
   screen.style.boxShadow = "inset 0 0 36px rgba(35, 220, 255, 0.16)";
+  screen.style.color = "#d9fff5";
+  screen.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
   const iframe = document.createElement("iframe");
-  iframe.src = `${LOFI_GIRL_EMBED_URL}&origin=${encodeURIComponent(origin)}`;
+  iframe.src = `${LOFI_GIRL_EMBED_URL}&origin=${encodeURIComponent(options.origin)}`;
   iframe.title = "Lo-Fi Girl livestream";
   iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
   iframe.allowFullscreen = true;
@@ -1089,14 +2026,241 @@ function createLaptopLofiEmbed(CSS3DObject: typeof import("three/examples/jsm/re
   iframe.style.height = "100%";
   iframe.style.border = "0";
   iframe.style.display = "block";
-  screen.append(iframe);
+
+  let currentUser = options.user;
+  let currentTab = options.tab;
+  let currentError = options.error;
+  let loading = false;
+
+  function render() {
+    screen.replaceChildren();
+    if (!currentUser) {
+      screen.append(renderLaptopLogin({error: currentError, loading, onSignIn: options.onSignIn}));
+      return;
+    }
+    screen.append(renderLaptopBrowser({
+      iframe,
+      onSignOut: options.onSignOut,
+      onTabChange: (tab) => {
+        currentTab = tab;
+        render();
+        options.onTabChange(tab);
+      },
+      tab: currentTab,
+      user: currentUser
+    }));
+  }
+  render();
 
   const object = new CSS3DObject(screen);
   object.name = "laptop-lofi-girl-embed";
   object.position.set(0, 0.88, -0.668);
   object.rotation.x = 0.12;
   object.scale.setScalar(0.0025);
-  return {object, iframe};
+  return {
+    api: {
+      setError(message: string | null) {
+        currentError = message;
+        render();
+      },
+      setLoading(value: boolean) {
+        loading = value;
+        render();
+      },
+      setTab(tab: LaptopTab) {
+        currentTab = tab;
+        render();
+      },
+      updateUser(user: CurrentUser | null) {
+        currentUser = user;
+        currentError = null;
+        render();
+      }
+    },
+    iframe,
+    object
+  };
+}
+
+function renderLaptopLogin({
+  error,
+  loading,
+  onSignIn
+}: {
+  error: string | null;
+  loading: boolean;
+  onSignIn: (formData: FormData) => Promise<void>;
+}) {
+  const wrap = document.createElement("div");
+  wrap.style.height = "100%";
+  wrap.style.display = "grid";
+  wrap.style.placeItems = "center";
+  wrap.style.background = "linear-gradient(135deg, #071018, #0c111c 68%, #121024)";
+
+  const form = document.createElement("form");
+  form.style.width = "430px";
+  form.style.display = "grid";
+  form.style.gap = "18px";
+  form.style.padding = "34px";
+  form.style.border = "1px solid rgba(127,255,230,0.24)";
+  form.style.borderRadius = "18px";
+  form.style.background = "rgba(2,7,18,0.72)";
+  form.style.boxShadow = "0 0 48px rgba(16,185,129,0.12)";
+
+  const title = document.createElement("div");
+  title.innerHTML = `<div style="font-size:24px;font-weight:800;letter-spacing:.04em;color:#f4fff9">quadratics login</div><div style="margin-top:8px;font-size:13px;color:rgba(217,255,245,.58)">Start a saved worksheet session.</div>`;
+  form.append(title);
+
+  const username = createLaptopInput("username", "text", "USERNAME");
+  const password = createLaptopInput("password", "password", "PASSWORD");
+  form.append(username.label, password.label);
+
+  if (error) {
+    const message = document.createElement("div");
+    message.textContent = error;
+    message.style.border = "1px solid rgba(248,113,113,0.46)";
+    message.style.background = "rgba(127,29,29,0.42)";
+    message.style.color = "#fecaca";
+    message.style.padding = "12px 14px";
+    message.style.borderRadius = "10px";
+    message.style.fontSize = "12px";
+    form.append(message);
+  }
+
+  const button = document.createElement("button");
+  button.type = "submit";
+  button.textContent = loading ? "SIGNING IN" : "SIGN IN";
+  button.disabled = loading;
+  button.style.border = "1px solid rgba(52,211,153,0.75)";
+  button.style.background = "rgba(6,78,59,0.62)";
+  button.style.color = "#a7f3d0";
+  button.style.padding = "14px";
+  button.style.borderRadius = "10px";
+  button.style.fontWeight = "800";
+  button.style.letterSpacing = ".08em";
+  form.append(button);
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void onSignIn(new FormData(form));
+  });
+
+  wrap.append(form);
+  return wrap;
+}
+
+function createLaptopInput(name: string, type: string, labelText: string) {
+  const label = document.createElement("label");
+  label.style.display = "grid";
+  label.style.gap = "7px";
+  const span = document.createElement("span");
+  span.textContent = labelText;
+  span.style.fontSize = "11px";
+  span.style.color = "rgba(212,212,216,0.55)";
+  span.style.letterSpacing = ".1em";
+  const input = document.createElement("input");
+  input.name = name;
+  input.type = type;
+  input.required = true;
+  input.autocomplete = type === "password" ? "current-password" : "username";
+  input.style.border = "1px solid rgba(63,63,70,0.9)";
+  input.style.background = "#101621";
+  input.style.color = "#f4f4f5";
+  input.style.padding = "13px 14px";
+  input.style.borderRadius = "10px";
+  input.style.fontSize = "16px";
+  label.append(span, input);
+  return {input, label};
+}
+
+function renderLaptopBrowser({
+  iframe,
+  onSignOut,
+  onTabChange,
+  tab,
+  user
+}: {
+  iframe: HTMLIFrameElement;
+  onSignOut: () => Promise<void>;
+  onTabChange: (tab: LaptopTab) => void;
+  tab: LaptopTab;
+  user: CurrentUser;
+}) {
+  const wrap = document.createElement("div");
+  wrap.style.height = "100%";
+  wrap.style.display = "grid";
+  wrap.style.gridTemplateRows = "58px 1fr";
+  wrap.style.background = "#070b12";
+
+  const tabs = document.createElement("div");
+  tabs.style.display = "flex";
+  tabs.style.alignItems = "end";
+  tabs.style.gap = "7px";
+  tabs.style.padding = "10px 12px 0";
+  tabs.style.borderBottom = "1px solid rgba(63,63,70,0.7)";
+  tabs.style.background = "#111318";
+  for (const item of [
+    ["demo", "◼ Demo"],
+    ["music", "▶ Music"],
+    ["settings", "⚙ Settings"]
+  ] as Array<[LaptopTab, string]>) {
+    const button = document.createElement("button");
+    button.textContent = item[1];
+    button.type = "button";
+    button.style.height = "38px";
+    button.style.padding = "0 20px";
+    button.style.border = "1px solid rgba(63,63,70,0.86)";
+    button.style.borderBottom = tab === item[0] ? "1px solid #071018" : "1px solid rgba(63,63,70,0.86)";
+    button.style.borderRadius = "11px 11px 0 0";
+    button.style.background = tab === item[0] ? "#071018" : "#191b22";
+    button.style.color = tab === item[0] ? "#a7f3d0" : "#a1a1aa";
+    button.style.fontWeight = "800";
+    button.style.fontSize = "13px";
+    button.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onTabChange(item[0]);
+    });
+    tabs.append(button);
+  }
+  wrap.append(tabs);
+
+  const body = document.createElement("div");
+  body.style.minHeight = "0";
+  body.style.padding = "20px";
+  body.style.background = "linear-gradient(135deg,#071018,#090d14)";
+  if (tab === "music") {
+    body.style.padding = "0";
+    body.append(iframe);
+  } else if (tab === "settings") {
+    body.innerHTML = `<div style="display:grid;gap:18px;max-width:520px"><div><div style="font-size:24px;font-weight:900;color:#f4fff9">Settings</div><div style="margin-top:6px;color:rgba(212,212,216,.62)">Signed in as ${escapeHtml(accountDisplayName(user))}</div></div></div>`;
+    const button = document.createElement("button");
+    button.textContent = "SIGN OUT";
+    button.type = "button";
+    button.style.marginTop = "24px";
+    button.style.border = "1px solid rgba(248,113,113,0.6)";
+    button.style.background = "rgba(127,29,29,0.45)";
+    button.style.color = "#fecaca";
+    button.style.padding = "14px 18px";
+    button.style.borderRadius = "10px";
+    button.style.fontWeight = "900";
+    button.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+    });
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void onSignOut();
+    });
+    body.append(button);
+  } else {
+    body.innerHTML = `<div style="height:100%;display:grid;place-items:center;border:1px dashed rgba(127,255,230,.25);border-radius:16px;color:rgba(217,255,245,.72)"><div style="text-align:center"><div style="font-size:22px;font-weight:900;color:#f4fff9">Demo video slot</div><div style="margin-top:10px;font-size:13px;color:rgba(212,212,216,.58)">Loom embed placeholder</div></div></div>`;
+  }
+  wrap.append(body);
+  return wrap;
 }
 
 function formatSceneTransform(name: SceneTunableName, object: Object3D) {
@@ -1341,22 +2505,22 @@ function createClockTexture(THREE: typeof import("three")) {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 256;
-  drawClockTexture(canvas);
+  drawClockTexture(canvas, null);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
 
-function refreshClockTexture(texture: Texture | null) {
+function refreshClockTexture(texture: Texture | null, pomodoro: PomodoroState | null = null) {
   if (!texture?.image || !(texture.image instanceof HTMLCanvasElement)) {
     return;
   }
-  drawClockTexture(texture.image);
+  drawClockTexture(texture.image, pomodoro);
   texture.needsUpdate = true;
 }
 
-function drawClockTexture(canvas: HTMLCanvasElement) {
+function drawClockTexture(canvas: HTMLCanvasElement, pomodoro: PomodoroState | null) {
   const context = canvas.getContext("2d");
   if (!context) {
     return;
@@ -1377,11 +2541,10 @@ function drawClockTexture(canvas: HTMLCanvasElement) {
   context.lineTo(canvas.width - 74, canvas.height - 50);
   context.stroke();
 
-  const timeLabel = new Intl.DateTimeFormat("en-US", {
+  const timeLabel = pomodoro?.endsAt ? formatPomodoroClock(Math.max(0, pomodoro.endsAt - Date.now())) : new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-    timeZone: "America/New_York"
+    hour12: false
   }).format(new Date());
 
   context.font = "700 112px ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -1391,6 +2554,12 @@ function drawClockTexture(canvas: HTMLCanvasElement) {
   context.shadowColor = "rgba(77,246,255,0.86)";
   context.shadowBlur = 22;
   context.fillText(timeLabel, canvas.width / 2, canvas.height / 2 + 4);
+  if (pomodoro?.endsAt) {
+    context.font = "700 24px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillStyle = "#ff72cf";
+    context.shadowBlur = 8;
+    context.fillText("FOCUS", canvas.width / 2, canvas.height - 42);
+  }
   context.shadowBlur = 0;
   context.textAlign = "start";
   context.textBaseline = "alphabetic";
@@ -1399,9 +2568,10 @@ function drawClockTexture(canvas: HTMLCanvasElement) {
 function createCoffeeCup(THREE: typeof import("three")) {
   const group = new THREE.Group();
   const steamGroup = new THREE.Group();
-  const ceramic = new THREE.MeshStandardMaterial({color: 0x15120f, roughness: 0.5, metalness: 0.1});
+  const ceramic = new THREE.MeshStandardMaterial({color: 0x15120f, roughness: 0.5, metalness: 0.1, side: THREE.DoubleSide});
   const gold = new THREE.MeshStandardMaterial({color: 0xb98437, roughness: 0.34, metalness: 0.55});
-  const coffeeMaterial = new THREE.MeshStandardMaterial({color: 0x2b1a0f, roughness: 0.55});
+  const coffeeMaterial = new THREE.MeshStandardMaterial({color: 0x1b0a04, roughness: 0.38, metalness: 0.01});
+  const coffeeHighlightMaterial = new THREE.MeshBasicMaterial({color: 0x5a2a10, transparent: true, opacity: 0.34});
   const coasterMaterial = new THREE.MeshStandardMaterial({color: 0x5b3721, roughness: 0.75});
   const steamTexture = createSteamTexture(THREE);
   const steamMaterial = new THREE.MeshBasicMaterial({
@@ -1418,10 +2588,17 @@ function createCoffeeCup(THREE: typeof import("three")) {
   coaster.castShadow = true;
   group.add(coaster);
 
-  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.31, 0.45, 32, 1, true), ceramic);
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.31, 0.45, 48, 1, true), ceramic);
   cup.position.y = 0.28;
   cup.castShadow = true;
   group.add(cup);
+
+  const cupInner = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.315, 0.27, 0.4, 48, 1, true),
+    new THREE.MeshStandardMaterial({color: 0x090806, roughness: 0.72, metalness: 0.02, side: THREE.DoubleSide})
+  );
+  cupInner.position.y = 0.285;
+  group.add(cupInner);
 
   const rim = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.026, 10, 36), gold);
   rim.position.y = 0.51;
@@ -1429,15 +2606,35 @@ function createCoffeeCup(THREE: typeof import("three")) {
   rim.castShadow = true;
   group.add(rim);
 
-  const coffee = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.018, 32), coffeeMaterial);
-  coffee.position.y = 0.51;
+  const coffee = new THREE.Mesh(new THREE.CircleGeometry(0.312, 48), coffeeMaterial);
+  coffee.rotation.x = -Math.PI / 2;
+  coffee.position.y = 0.472;
   group.add(coffee);
 
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.032, 10, 28, Math.PI * 1.22), ceramic);
-  handle.position.set(0.36, 0.31, 0.02);
-  handle.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+  const coffeeShine = new THREE.Mesh(new THREE.CircleGeometry(0.085, 28), coffeeHighlightMaterial);
+  coffeeShine.rotation.x = -Math.PI / 2;
+  coffeeShine.scale.set(1.42, 0.34, 1);
+  coffeeShine.position.set(-0.08, 0.475, 0.052);
+  group.add(coffeeShine);
+
+  const handleCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.34, 0.42, 0.01),
+    new THREE.Vector3(0.52, 0.41, 0.01),
+    new THREE.Vector3(0.61, 0.31, 0.01),
+    new THREE.Vector3(0.52, 0.21, 0.01),
+    new THREE.Vector3(0.34, 0.2, 0.01)
+  ]);
+  const handle = new THREE.Mesh(new THREE.TubeGeometry(handleCurve, 44, 0.036, 14, false), ceramic);
   handle.castShadow = true;
   group.add(handle);
+
+  for (const y of [0.42, 0.2]) {
+    const connector = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.16, 16), ceramic);
+    connector.position.set(0.32, y, 0.01);
+    connector.rotation.z = Math.PI / 2;
+    connector.castShadow = true;
+    group.add(connector);
+  }
 
   const professorMark = createMugMark(THREE);
   professorMark.position.set(0, 0.31, 0.361);
@@ -1490,38 +2687,44 @@ function createMugMark(THREE: typeof import("three")) {
   const context = canvas.getContext("2d");
   if (context) {
     context.clearRect(0, 0, canvas.width, canvas.height);
-    const gradient = context.createLinearGradient(80, 28, 176, 132);
-    gradient.addColorStop(0, "#8cffd7");
-    gradient.addColorStop(0.45, "#fff7a6");
-    gradient.addColorStop(1, "#ff72cf");
-    context.fillStyle = gradient;
-    context.strokeStyle = "rgba(127,255,230,0.92)";
-    context.lineWidth = 7;
-    context.shadowColor = "rgba(127,255,230,0.8)";
-    context.shadowBlur = 14;
+    const halo = context.createRadialGradient(canvas.width / 2, canvas.height / 2, 8, canvas.width / 2, canvas.height / 2, 70);
+    halo.addColorStop(0, "rgba(255, 224, 119, 0.55)");
+    halo.addColorStop(0.58, "rgba(255, 186, 73, 0.2)");
+    halo.addColorStop(1, "rgba(255, 186, 73, 0)");
+    context.fillStyle = halo;
     context.beginPath();
-    context.ellipse(canvas.width / 2, canvas.height / 2 + 4, 33, 48, 0, 0, Math.PI * 2);
+    context.arc(canvas.width / 2, canvas.height / 2, 74, 0, Math.PI * 2);
+    context.fill();
+
+    const eggGradient = context.createRadialGradient(109, 55, 6, 130, 82, 56);
+    eggGradient.addColorStop(0, "#fff8c7");
+    eggGradient.addColorStop(0.32, "#ffd85c");
+    eggGradient.addColorStop(0.72, "#d9941c");
+    eggGradient.addColorStop(1, "#8f5812");
+    context.fillStyle = eggGradient;
+    context.strokeStyle = "rgba(255,246,186,0.95)";
+    context.lineWidth = 6;
+    context.shadowColor = "rgba(255, 214, 82, 0.95)";
+    context.shadowBlur = 18;
+    context.beginPath();
+    context.ellipse(canvas.width / 2, canvas.height / 2 + 5, 34, 49, 0, 0, Math.PI * 2);
     context.fill();
     context.stroke();
+
+    const shine = context.createLinearGradient(102, 36, 144, 96);
+    shine.addColorStop(0, "rgba(255,255,255,0.92)");
+    shine.addColorStop(0.5, "rgba(255,255,255,0.22)");
+    shine.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = shine;
     context.shadowBlur = 0;
-    context.strokeStyle = "rgba(12,18,20,0.72)";
-    context.lineWidth = 6;
     context.beginPath();
-    context.moveTo(104, 78);
-    context.quadraticCurveTo(128, 60, 152, 78);
-    context.moveTo(101, 99);
-    context.quadraticCurveTo(128, 116, 155, 99);
-    context.stroke();
-    context.fillStyle = "rgba(12,18,20,0.86)";
-    context.font = "700 28px ui-monospace, SFMono-Regular, Menlo, monospace";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText("egg", canvas.width / 2, canvas.height / 2 + 2);
+    context.ellipse(116, 58, 10, 21, 0.62, 0, Math.PI * 2);
+    context.fill();
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
-  return new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.18), new THREE.MeshBasicMaterial({map: texture, transparent: true}));
+  return new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.22), new THREE.MeshBasicMaterial({map: texture, transparent: true}));
 }
 
 function createPaper(THREE: typeof import("three"), paperTexture: Texture) {
