@@ -262,6 +262,7 @@ async def test_game_lesson_builds_preview_narration_handwriting_and_bundle():
         "vocabulary",
         "guided_practice",
     ]
+    assert bundle.payload["sections"][0]["narration"]["speechText"]
     assert bundle.payload["sections"][0]["handwritingActions"]
 
     published = await repository.run_stage(
