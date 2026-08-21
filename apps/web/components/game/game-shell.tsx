@@ -182,6 +182,7 @@ export function GameShell({
   const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
   const musicMutedRef = useRef(readMusicState().muted);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
+  const gamePipelineRequestRef = useRef(0);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
   const [lockedMessage, setLockedMessage] = useState(false);
   const [started, setStarted] = useState(false);
@@ -247,6 +248,7 @@ export function GameShell({
       creditBalance: 0
     };
     setLoginError(null);
+    gamePipelineRequestRef.current += 1;
     setUser(nextUser);
     laptopScreenRef.current?.updateUser(nextUser);
     setGamePipelineError(null);
@@ -256,6 +258,7 @@ export function GameShell({
   async function signOutFromLaptop() {
     const supabase = createClient();
     await supabase.auth.signOut();
+    gamePipelineRequestRef.current += 1;
     window.localStorage.removeItem(POMODORO_STORAGE_KEY);
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
@@ -331,6 +334,12 @@ export function GameShell({
   }
 
   async function prepareGameLessonRun(params: {forceTemplate?: boolean} = {}) {
+    const requestId = gamePipelineRequestRef.current + 1;
+    gamePipelineRequestRef.current = requestId;
+    const requestingUserId = userRef.current?.id;
+    if (!requestingUserId) {
+      throw new Error("Login on the laptop to start this lesson.");
+    }
     setGamePipelineLoading(true);
     setGamePipelineError(null);
     laptopScreenRef.current?.setPipelineState({error: null, loading: true, run: gameRunRef.current});
@@ -351,16 +360,24 @@ export function GameShell({
         runId: run.id,
         stage: "template"
       });
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
       setGameRun(snapshot);
       laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
       return snapshot;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not start the worksheet run.";
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
       setGamePipelineError(message);
       laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
       throw error;
     } finally {
-      setGamePipelineLoading(false);
+      if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
+        setGamePipelineLoading(false);
+      }
     }
   }
 

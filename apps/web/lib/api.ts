@@ -143,6 +143,68 @@ export type GameWorksheetRunSnapshot = {
   artifacts: GameLessonArtifact[];
 };
 
+type ApiGameWorksheetRunSnapshot = {
+  id: string;
+  templateId: string;
+  userId: string;
+  selectedInstructorId: string | null;
+  status: "active" | "completed" | "failed";
+  template: {
+    id: string;
+    title: string;
+    version: number;
+    payload: Record<string, unknown>;
+  };
+  artifacts: ApiGameLessonArtifact[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ApiGameLessonArtifact = {
+  id: string;
+  runId: string;
+  stage: GameLessonStage;
+  version: number;
+  status: GameLessonArtifactStatus | "awaiting_approval";
+  isCurrent: boolean;
+  payload: Record<string, unknown>;
+  storageRefs: Array<Record<string, unknown>>;
+  errorMessage: string | null;
+  staleReason: string | null;
+  configMetadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function normalizeGameLessonRun(snapshot: ApiGameWorksheetRunSnapshot): GameWorksheetRunSnapshot {
+  return {
+    id: snapshot.id,
+    templateId: snapshot.templateId,
+    userId: snapshot.userId,
+    selectedInstructorId: snapshot.selectedInstructorId,
+    status: snapshot.status === "active" ? "running" : snapshot.status,
+    templateTitle: snapshot.template.title,
+    createdAt: snapshot.createdAt,
+    updatedAt: snapshot.updatedAt,
+    artifacts: snapshot.artifacts.map((artifact) => ({
+      id: artifact.id,
+      runId: artifact.runId,
+      stage: artifact.stage,
+      status: artifact.status === "awaiting_approval" ? "pending" : artifact.status,
+      version: artifact.version,
+      payload: artifact.payload,
+      summary: typeof artifact.payload.summary === "string" ? artifact.payload.summary : null,
+      errorMessage: artifact.errorMessage,
+      isCurrent: artifact.isCurrent,
+      staleReason: artifact.staleReason,
+      providerName: typeof artifact.configMetadata.provider === "string" ? artifact.configMetadata.provider : null,
+      modelName: typeof artifact.configMetadata.model === "string" ? artifact.configMetadata.model : null,
+      createdAt: artifact.createdAt,
+      completedAt: artifact.status === "completed" || artifact.status === "approved" ? artifact.updatedAt : null
+    }))
+  };
+}
+
 export async function createGameLessonRun(params: {
   accessToken: string;
   selectedInstructorId?: string | null;
@@ -160,7 +222,7 @@ export async function createGameLessonRun(params: {
     const body = (await response.json().catch(() => null)) as {detail?: string} | null;
     throw new Error(body?.detail ?? "Could not create the worksheet run");
   }
-  return response.json() as Promise<GameWorksheetRunSnapshot>;
+  return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
 }
 
 export async function getGameLessonRun(params: {
@@ -175,7 +237,7 @@ export async function getGameLessonRun(params: {
     const body = (await response.json().catch(() => null)) as {detail?: string} | null;
     throw new Error(body?.detail ?? "Could not load the worksheet run");
   }
-  return response.json() as Promise<GameWorksheetRunSnapshot>;
+  return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
 }
 
 export async function runGameLessonStage(params: {
@@ -196,7 +258,7 @@ export async function runGameLessonStage(params: {
     const body = (await response.json().catch(() => null)) as {detail?: string} | null;
     throw new Error(body?.detail ?? `Could not run ${params.stage}`);
   }
-  return response.json() as Promise<GameWorksheetRunSnapshot>;
+  return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
 }
 
 export async function getLatestGenerationVideos(accessToken: string): Promise<LatestGenerationVideosResponse> {
