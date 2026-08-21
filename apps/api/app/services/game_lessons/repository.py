@@ -20,7 +20,11 @@ from app.schemas.game_lessons import (
     GameWorksheetTemplate,
 )
 from app.services.game_lessons.costs import GameUsageCostRepository
-from app.services.game_lessons.providers import GameLessonProviderResult, GameLessonStageProvider
+from app.services.game_lessons.providers import (
+    GameLessonNarrationStageProvider,
+    GameLessonProviderResult,
+    GameLessonStageProvider,
+)
 from app.services.game_lessons.templates import VOLUME_CUBES_LESSON_1_TEMPLATE
 
 TEMPLATE_ID = "volume-cubes-lesson-1"
@@ -374,6 +378,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         settings: Settings,
         *,
         stage_provider: GameLessonStageProvider | None = None,
+        narration_provider: GameLessonNarrationStageProvider | None = None,
         usage_costs: GameUsageCostRepository | None = None,
     ) -> None:
         if not settings.supabase_url or not settings.supabase_service_role_key:
@@ -385,6 +390,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             "Content-Type": "application/json",
         }
         self._stage_provider = stage_provider
+        self._narration_provider = narration_provider
         self._usage_costs = usage_costs
 
     async def create_or_get_run(
@@ -615,7 +621,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
                     "status": _status_for_stage(stage),
                     "is_current": True,
                     "payload": generated.payload,
-                    "storage_refs": [],
+                    "storage_refs": generated.storage_refs,
                     "config_metadata": generated.config_metadata,
                 },
             )
@@ -642,6 +648,14 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             section_script = await self._current_artifact(run.id, "section_script")
             return await self._stage_provider.generate_speech_markup(
                 section_script_payload=section_script.payload if section_script else {},
+            )
+        if self._narration_provider is not None and stage == "narration":
+            speech_markup = await self._current_artifact(run.id, "speech_markup")
+            return await self._narration_provider.generate_narration(
+                user_id=run.user_id,
+                run_id=run.id,
+                selected_instructor_id=run.selected_instructor_id,
+                speech_markup_payload=speech_markup.payload if speech_markup else {},
             )
         return GameLessonProviderResult(
             payload=await self._payload_for_stage_from_storage(run, stage),

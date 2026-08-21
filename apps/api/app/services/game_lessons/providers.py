@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import base64
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Awaitable, Callable, Protocol
+
+from app.services.narration.base import NarrationProvider, NarrationRequest
+from app.services.storage.media_store import MediaStore
 
 
 class GameLessonProviderConfigurationError(RuntimeError):
@@ -24,6 +28,7 @@ class GameLessonProviderResult:
     payload: dict[str, Any]
     config_metadata: dict[str, Any]
     usage_records: list[GameLessonUsageRecord] = field(default_factory=list)
+    storage_refs: list[dict[str, Any]] = field(default_factory=list)
 
 
 class GameLessonStageProvider(Protocol):
@@ -38,6 +43,17 @@ class GameLessonStageProvider(Protocol):
         self,
         *,
         section_script_payload: dict[str, Any],
+    ) -> GameLessonProviderResult: ...
+
+
+class GameLessonNarrationStageProvider(Protocol):
+    async def generate_narration(
+        self,
+        *,
+        user_id: str,
+        run_id: str,
+        selected_instructor_id: str | None,
+        speech_markup_payload: dict[str, Any],
     ) -> GameLessonProviderResult: ...
 
 
@@ -284,6 +300,119 @@ class OpenAIGameLessonStageProvider:
         return records
 
 
+class ElevenLabsGameLessonNarrationProvider:
+    def __init__(
+        self,
+        *,
+        provider: NarrationProvider,
+        media_store: MediaStore,
+        voice_id_resolver: Callable[[str | None], Awaitable[str]],
+        model_id: str,
+        cost_per_credit_usd: float,
+    ) -> None:
+        self._provider = provider
+        self._media_store = media_store
+        self._voice_id_resolver = voice_id_resolver
+        self._model_id = model_id
+        self._cost_per_credit_usd = cost_per_credit_usd
+
+    async def generate_narration(
+        self,
+        *,
+        user_id: str,
+        run_id: str,
+        selected_instructor_id: str | None,
+        speech_markup_payload: dict[str, Any],
+    ) -> GameLessonProviderResult:
+        voice_id = await self._voice_id_resolver(selected_instructor_id)
+        if not voice_id:
+            raise GameLessonProviderConfigurationError("Selected instructor does not have an ElevenLabs voice ID")
+
+        sections: list[dict[str, Any]] = []
+        storage_refs: list[dict[str, Any]] = []
+        usage_records: list[GameLessonUsageRecord] = []
+        elapsed_seconds = 0.0
+        for index, section in enumerate(speech_markup_payload.get("sections", []), start=1):
+            if not isinstance(section, dict):
+                continue
+            section_id = str(section.get("sectionId", f"section_{index}"))
+            speech_text = str(section.get("speechText", "")).strip()
+            if not speech_text:
+                continue
+            result = await self._provider.generate(
+                NarrationRequest(
+                    step_id=section_id,
+                    text=speech_text,
+                    voice_id=voice_id,
+                )
+            )
+            audio_bytes = base64.b64decode(result.audio_base64)
+            reference = self._media_store.put(
+                path=f"{user_id}/{run_id}/game/narration/{section_id}.mp3",
+                content=audio_bytes,
+                content_type=result.audio_mime_type,
+                metadata={"sectionId": section_id, "voiceId": voice_id},
+            )
+            storage_ref = {
+                "bucket": reference.bucket,
+                "path": reference.path,
+                "signedUrl": reference.signed_url,
+                "contentType": reference.content_type,
+                "sizeBytes": reference.size_bytes,
+                "checksumSha256": reference.checksum_sha256,
+                "durationSeconds": result.duration_seconds,
+                "metadata": reference.metadata,
+            }
+            storage_refs.append(storage_ref)
+            duration_seconds = round(result.duration_seconds or _estimated_speech_duration_seconds(speech_text), 2)
+            sections.append(
+                {
+                    "sectionId": section_id,
+                    "audioMode": "elevenlabs",
+                    "audioUrl": reference.signed_url,
+                    "storageRef": storage_ref,
+                    "speechText": speech_text,
+                    "durationSeconds": duration_seconds,
+                    "startSeconds": round(elapsed_seconds, 2),
+                    "endSeconds": round(elapsed_seconds + duration_seconds, 2),
+                    "alignment": _alignment_payload(result.normalized_alignment or result.alignment),
+                    "providerMetadata": result.provider_metadata or {},
+                }
+            )
+            elapsed_seconds += duration_seconds
+            usage_records.append(
+                GameLessonUsageRecord(
+                    provider="elevenlabs",
+                    model=self._model_id,
+                    unit_type="credits",
+                    quantity=len(speech_text),
+                    unit_cost_usd=self._cost_per_credit_usd,
+                    metadata={"sectionId": section_id},
+                )
+            )
+
+        return GameLessonProviderResult(
+            payload={
+                "summary": "ElevenLabs narration audio generated section by section for worksheet playback.",
+                "narrationVersion": 1,
+                "provider": "elevenlabs",
+                "model": self._model_id,
+                "selectedInstructorId": selected_instructor_id,
+                "voiceId": voice_id,
+                "durationSeconds": round(elapsed_seconds, 2),
+                "sections": sections,
+            },
+            config_metadata={
+                "provider": "elevenlabs",
+                "model": self._model_id,
+                "source": "game_lesson_narration_provider",
+                "voiceId": voice_id,
+            },
+            usage_records=usage_records,
+            storage_refs=storage_refs,
+        )
+
+
 def _response_text(response: Any) -> str:
     output_text = getattr(response, "output_text", None)
     if isinstance(output_text, str) and output_text:
@@ -341,3 +470,18 @@ def _config_metadata(provider: str, model: str, usage: dict[str, int]) -> dict[s
         "source": "game_lesson_stage_provider",
         "usage": usage,
     }
+
+
+def _estimated_speech_duration_seconds(speech_text: str) -> float:
+    stripped_text = speech_text.replace('<break time="0.5s" />', " ")
+    word_count = len([word for word in stripped_text.split() if word.strip()])
+    break_count = speech_text.count('<break time="0.5s" />')
+    return round(max(word_count / 2.65 + break_count * 0.5, 4.0), 2)
+
+
+def _alignment_payload(alignment: Any | None) -> dict[str, Any] | None:
+    if alignment is None:
+        return None
+    if hasattr(alignment, "model_dump"):
+        return alignment.model_dump(mode="json", by_alias=True)
+    return None

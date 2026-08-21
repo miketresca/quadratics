@@ -3,8 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies.auth import get_current_user
+from app.api.routes.instructors import _instructor_repository
 from app.core.config import Settings, get_settings
 from app.core.security import AuthenticatedUser
+from app.providers.elevenlabs.narration_provider import ElevenLabsNarrationProvider
 from app.schemas.game_lessons import (
     GameLessonArtifactApproval,
     GameLessonArtifactApprovalRequest,
@@ -27,14 +29,17 @@ from app.services.game_lessons.costs import (
     SupabaseGameUsageCostRepository,
 )
 from app.services.game_lessons.providers import (
+    ElevenLabsGameLessonNarrationProvider,
     GameLessonProviderConfigurationError,
     OpenAIGameLessonStageProvider,
 )
+from app.services.storage.media_store import InMemoryMediaStore, SupabaseMediaStore
 
 router = APIRouter(prefix="/game")
 _game_lessons: GameLessonRepository | None = None
 _fallback_game_lessons = InMemoryGameLessonRepository()
 _fallback_game_usage_costs = InMemoryGameUsageCostRepository()
+_fallback_media_store = InMemoryMediaStore(bucket="generated-media")
 
 
 @router.post("/lessons/{template_id}/runs", response_model=GameWorksheetRunSnapshot)
@@ -129,6 +134,7 @@ def _repository(settings: Settings) -> GameLessonRepository:
         return SupabaseGameLessonRepository(
             settings,
             stage_provider=_stage_provider(settings),
+            narration_provider=_narration_provider(settings),
             usage_costs=_usage_repository(settings),
         )
     return _fallback_game_lessons
@@ -149,6 +155,31 @@ def _usage_repository(settings: Settings) -> InMemoryGameUsageCostRepository | S
     if settings.supabase_url and settings.supabase_service_role_key:
         return SupabaseGameUsageCostRepository(settings)
     return _fallback_game_usage_costs
+
+
+def _narration_provider(settings: Settings) -> ElevenLabsGameLessonNarrationProvider | None:
+    if not settings.elevenlabs_api_key:
+        return None
+    media_store = (
+        SupabaseMediaStore(settings, bucket=settings.generated_media_bucket)
+        if settings.supabase_url and settings.supabase_service_role_key
+        else _fallback_media_store
+    )
+    return ElevenLabsGameLessonNarrationProvider(
+        provider=ElevenLabsNarrationProvider(
+            api_key=settings.elevenlabs_api_key,
+            model_id=settings.elevenlabs_model_id,
+        ),
+        media_store=media_store,
+        voice_id_resolver=lambda instructor_id: _voice_id_for_instructor(settings, instructor_id),
+        model_id=settings.elevenlabs_model_id,
+        cost_per_credit_usd=settings.elevenlabs_cost_per_credit_usd,
+    )
+
+
+async def _voice_id_for_instructor(settings: Settings, instructor_id: str | None) -> str:
+    instructor = await _instructor_repository(settings).get(instructor_id)
+    return instructor.voice_id if instructor and instructor.voice_id else ""
 
 
 def _storage_http_error(exc: GameLessonStorageError) -> HTTPException:
