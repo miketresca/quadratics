@@ -292,17 +292,22 @@ export async function runGameLessonStage(params: {
   runId: string;
   stage: GameLessonStage;
 }): Promise<GameWorksheetRunSnapshot> {
-  const response = await fetch(`${apiUrl}/api/v1/game/lesson-runs/${params.runId}/stages/${params.stage}`, {
+  const url = `${apiUrl}/api/v1/game/lesson-runs/${params.runId}/stages/${params.stage}`;
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${params.accessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({force: params.force ?? false})
+  }).catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : "network request failed";
+    throw new Error(`Could not reach API while running ${params.stage} at ${url}: ${message}`);
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {detail?: string} | null;
-    throw new Error(body?.detail ?? `Could not run ${params.stage}`);
+    const detail = body?.detail ?? `Could not run ${params.stage}`;
+    throw new Error(`${params.stage} failed (${response.status}) at ${url}: ${detail}`);
   }
   return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
 }

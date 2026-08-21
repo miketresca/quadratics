@@ -2,8 +2,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.providers.elevenlabs.narration_provider import ElevenLabsProviderError
 from app.services.game_lessons.providers import (
     ElevenLabsGameLessonNarrationProvider,
+    GameLessonProviderRuntimeError,
     OpenAIGameLessonStageProvider,
 )
 from app.services.narration.base import NarrationRequest, NarrationResult
@@ -36,6 +38,15 @@ class _FakeNarrationProvider:
             audio_mime_type="audio/mpeg",
             duration_seconds=1.25,
             provider_metadata={"sectionId": request.step_id},
+        )
+
+
+class _FailingNarrationProvider:
+    async def generate(self, request: NarrationRequest) -> NarrationResult:
+        raise ElevenLabsProviderError(
+            "ElevenLabs payment is required or the account has insufficient credits.",
+            status_code=402,
+            error_type="payment_required",
         )
 
 
@@ -167,6 +178,38 @@ async def test_elevenlabs_game_lesson_provider_stores_section_audio_with_usage()
     assert result.storage_refs[0]["contentType"] == "audio/mpeg"
     assert result.usage_records[0].unit_type == "credits"
     assert result.usage_records[0].quantity == len("Count the cubes carefully.")
+
+
+@pytest.mark.asyncio
+async def test_elevenlabs_game_lesson_provider_names_failed_section():
+    provider = ElevenLabsGameLessonNarrationProvider(
+        provider=_FailingNarrationProvider(),
+        media_store=InMemoryMediaStore(bucket="generated-media"),
+        voice_id_resolver=lambda _instructor_id: _async_value("voice-123"),
+        model_id="eleven_multilingual_v2",
+        cost_per_credit_usd=0.01,
+    )
+
+    with pytest.raises(GameLessonProviderRuntimeError) as exc_info:
+        await provider.generate_narration(
+            user_id="user-a",
+            run_id="run-a",
+            selected_instructor_id="male",
+            speech_markup_payload={
+                "sections": [
+                    {
+                        "sectionId": "do_now",
+                        "speechText": "Count the cubes carefully.",
+                    }
+                ]
+            },
+        )
+
+    assert exc_info.value.status_code == 402
+    assert exc_info.value.provider == "elevenlabs"
+    assert exc_info.value.stage == "narration"
+    assert "do_now" in str(exc_info.value)
+    assert "insufficient credits" in str(exc_info.value)
 
 
 async def _async_value(value: str) -> str:

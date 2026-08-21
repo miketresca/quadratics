@@ -1,6 +1,6 @@
 "use client";
 
-import type {CurrentUser, GameLessonId, GameProgress, GameWorksheetPlaybackProgress} from "@quadratics/types";
+import type {CurrentUser, GameLessonId, GameProgress, GameWorksheetPlaybackProgress, Instructor} from "@quadratics/types";
 import {useEffect, useRef, useState, type FormEvent} from "react";
 import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, Vector3, WebGLRenderer} from "three";
 import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
@@ -10,6 +10,7 @@ import {
   createGameLessonRun,
   getGameUsageEvents,
   getGameUsageSummary,
+  listInstructors,
   runGameLessonStage,
   type GameLessonArtifact,
   type GameLessonStage,
@@ -56,6 +57,7 @@ type MusicState = {
 type LaptopPipelineState = {
   error: string | null;
   loading: boolean;
+  loadingStage: GameLessonStage | null;
   run: GameWorksheetRunSnapshot | null;
 };
 type LaptopCostState = {
@@ -158,7 +160,6 @@ const DEFAULT_WORKSHEET_PLAYBACK: WorksheetPlaybackState = {
 };
 const WORKSHEET_NEXT_PAGE_RECT = {height: 74, width: 312, x: 792, y: 1402};
 const WORKSHEET_COMPLETE_RECT = {height: 74, width: 348, x: 756, y: 1402};
-const GAME_LESSON_DEFAULT_INSTRUCTOR_ID = "male";
 const GAME_LESSON_DEFAULT_INSTRUCTOR_LABEL = "Male Instructor";
 const MUSIC_OPTIONS: MusicOption[] = [
   {
@@ -279,6 +280,7 @@ export function GameShell({
   const phoneScreenModeRef = useRef<PhoneScreenMode>("off");
   const selectedLessonIdRef = useRef<GameLessonId | null>(null);
   const gamePipelineRequestRef = useRef(0);
+  const gameLessonInstructorIdRef = useRef<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
   const [lockedMessage, setLockedMessage] = useState(false);
   const [started, setStarted] = useState(false);
@@ -306,6 +308,7 @@ export function GameShell({
   const [phoneRewardPending, setPhoneRewardPending] = useState(false);
   const [phoneScreenMode, setPhoneScreenMode] = useState<PhoneScreenMode>("off");
   const [gamePipelineLoading, setGamePipelineLoading] = useState(false);
+  const [gamePipelineLoadingStage, setGamePipelineLoadingStage] = useState<GameLessonStage | null>(null);
   const [gamePipelineError, setGamePipelineError] = useState<string | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [sceneEditorHud, setSceneEditorHud] = useState<string | null>(null);
@@ -378,7 +381,7 @@ export function GameShell({
     setUser(nextUser);
     laptopScreenRef.current?.updateUser(nextUser);
     setGamePipelineError(null);
-    laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, run: gameRunRef.current});
+    laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, loadingStage: gamePipelineLoadingStage, run: gameRunRef.current});
     if (data.session?.access_token) {
       void refreshGameProgressFromApi(data.session.access_token);
     }
@@ -401,7 +404,7 @@ export function GameShell({
     setSelectedLessonId(null);
     setGamePipelineError(null);
     laptopScreenRef.current?.updateUser(null);
-    laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: null});
+    laptopScreenRef.current?.setPipelineState({error: null, loading: false, loadingStage: null, run: null});
     refreshPaperTexture(paperTextureRef.current, null, null, null, worksheetPlaybackRef.current);
   }
 
@@ -518,7 +521,7 @@ export function GameShell({
     setGameRun(snapshot);
     const nextPlayback = snapshot ? readWorksheetPlaybackState(snapshot.id) : DEFAULT_WORKSHEET_PLAYBACK;
     setWorksheetPlayback(nextPlayback);
-    laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
+    laptopScreenRef.current?.setPipelineState({error: null, loading: false, loadingStage: null, run: snapshot});
     refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, snapshot, nextPlayback);
     if (snapshot && userRef.current) {
       void refreshGameProgressFromApi();
@@ -694,6 +697,34 @@ export function GameShell({
     setPhoneRewardSnapshot(lesson?.metadata?.phoneRewardPending === true, {persist: false});
   }
 
+  async function resolveGameLessonInstructorId(accessToken: string): Promise<string | null> {
+    if (gameLessonInstructorIdRef.current) {
+      return gameLessonInstructorIdRef.current;
+    }
+    try {
+      const instructors = await listInstructors(accessToken);
+      const defaultInstructor = instructors.find(isDefaultGameLessonInstructor) ?? instructors[0] ?? null;
+      gameLessonInstructorIdRef.current = defaultInstructor?.id ?? null;
+      return gameLessonInstructorIdRef.current;
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[quadratics] could not resolve game lesson instructor", error);
+      }
+      return null;
+    }
+  }
+
+  function isDefaultGameLessonInstructor(instructor: Instructor): boolean {
+    return instructor.id === "male" || instructor.displayName.trim().toLowerCase() === "male instructor";
+  }
+
+  function canReuseGameLessonRun(run: GameWorksheetRunSnapshot | null, selectedInstructorId: string | null): run is GameWorksheetRunSnapshot {
+    if (!run || run.templateId !== GAME_LESSON_TEMPLATE_ID) {
+      return false;
+    }
+    return run.selectedInstructorId === selectedInstructorId;
+  }
+
   async function prepareGameLessonRun(params: {forceTemplate?: boolean} = {}) {
     const requestId = gamePipelineRequestRef.current + 1;
     gamePipelineRequestRef.current = requestId;
@@ -702,17 +733,19 @@ export function GameShell({
       throw new Error("Login on the laptop to start this lesson.");
     }
     setGamePipelineLoading(true);
+    setGamePipelineLoadingStage("template");
     setGamePipelineError(null);
-    laptopScreenRef.current?.setPipelineState({error: null, loading: true, run: gameRunRef.current});
+    laptopScreenRef.current?.setPipelineState({error: null, loading: true, loadingStage: "template", run: gameRunRef.current});
     try {
       const accessToken = await getLaptopAccessToken();
+      const selectedInstructorId = await resolveGameLessonInstructorId(accessToken);
       const existingRun = gameRunRef.current;
       const run =
-        existingRun?.templateId === GAME_LESSON_TEMPLATE_ID
+        canReuseGameLessonRun(existingRun, selectedInstructorId)
           ? existingRun
           : await createGameLessonRun({
               accessToken,
-              selectedInstructorId: GAME_LESSON_DEFAULT_INSTRUCTOR_ID,
+              selectedInstructorId,
               templateId: GAME_LESSON_TEMPLATE_ID
             });
       const snapshot = await runGameLessonStage({
@@ -733,11 +766,12 @@ export function GameShell({
         return null;
       }
       setGamePipelineError(message);
-      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, loadingStage: null, run: gameRunRef.current});
       throw error;
     } finally {
       if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
         setGamePipelineLoading(false);
+        setGamePipelineLoadingStage(null);
       }
     }
   }
@@ -750,16 +784,18 @@ export function GameShell({
       throw new Error("Login on the laptop to start this lesson.");
     }
     setGamePipelineLoading(true);
+    setGamePipelineLoadingStage(stage);
     setGamePipelineError(null);
-    laptopScreenRef.current?.setPipelineState({error: null, loading: true, run: gameRunRef.current});
+    laptopScreenRef.current?.setPipelineState({error: null, loading: true, loadingStage: stage, run: gameRunRef.current});
     try {
       const accessToken = await getLaptopAccessToken();
+      const selectedInstructorId = await resolveGameLessonInstructorId(accessToken);
       const existingRun =
-        gameRunRef.current?.templateId === GAME_LESSON_TEMPLATE_ID
+        canReuseGameLessonRun(gameRunRef.current, selectedInstructorId)
           ? gameRunRef.current
           : await createGameLessonRun({
               accessToken,
-              selectedInstructorId: GAME_LESSON_DEFAULT_INSTRUCTOR_ID,
+              selectedInstructorId,
               templateId: GAME_LESSON_TEMPLATE_ID
             });
       const snapshot = await runGameLessonStage({
@@ -780,11 +816,12 @@ export function GameShell({
         return null;
       }
       setGamePipelineError(message);
-      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, loadingStage: null, run: gameRunRef.current});
       throw error;
     } finally {
       if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
         setGamePipelineLoading(false);
+        setGamePipelineLoadingStage(null);
       }
     }
   }
@@ -794,7 +831,7 @@ export function GameShell({
       throw new Error("Login on the laptop to reset progress.");
     }
     setGamePipelineError(null);
-    laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, run: gameRunRef.current});
+    laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, loadingStage: gamePipelineLoadingStage, run: gameRunRef.current});
     try {
       const accessToken = await getLaptopAccessToken();
       await resetGameProgress(accessToken);
@@ -810,7 +847,7 @@ export function GameShell({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not reset lesson progress.";
       setGamePipelineError(message);
-      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, loadingStage: null, run: gameRunRef.current});
       throw error;
     }
   }
@@ -823,8 +860,9 @@ export function GameShell({
       throw new Error("Login on the laptop to start this lesson.");
     }
     setGamePipelineLoading(true);
+    setGamePipelineLoadingStage(artifact.stage);
     setGamePipelineError(null);
-    laptopScreenRef.current?.setPipelineState({error: null, loading: true, run: gameRunRef.current});
+    laptopScreenRef.current?.setPipelineState({error: null, loading: true, loadingStage: artifact.stage, run: gameRunRef.current});
     try {
       const accessToken = await getLaptopAccessToken();
       await approveGameLessonArtifact({
@@ -851,11 +889,12 @@ export function GameShell({
         return null;
       }
       setGamePipelineError(message);
-      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, loadingStage: null, run: gameRunRef.current});
       throw error;
     } finally {
       if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
         setGamePipelineLoading(false);
+        setGamePipelineLoadingStage(null);
       }
     }
   }
@@ -870,6 +909,7 @@ export function GameShell({
       laptopScreenRef.current?.setPipelineState({
         error: "Login on the laptop to start this lesson.",
         loading: false,
+        loadingStage: null,
         run: gameRunRef.current
       });
       refreshPaperTexture(texture, null, choiceId, gameRunRef.current, worksheetPlaybackRef.current);
@@ -1198,8 +1238,8 @@ export function GameShell({
             // The laptop pipeline tab renders the failure inline.
           });
         },
-        onRunStage: (stage) => {
-          void runGameLessonPipelineStage(stage, {force: false}).catch(() => {
+        onRunStage: (stage, options) => {
+          void runGameLessonPipelineStage(stage, {force: options?.force ?? false}).catch(() => {
             // The laptop pipeline tab renders the failure inline.
           });
         },
@@ -1223,7 +1263,7 @@ export function GameShell({
         origin: window.location.origin,
         musicVolume: musicVolumeRef.current,
         selectedMusicId: selectedMusicRef.current,
-        pipeline: {error: gamePipelineError, loading: gamePipelineLoading, run: gameRunRef.current},
+        pipeline: {error: gamePipelineError, loading: gamePipelineLoading, loadingStage: gamePipelineLoadingStage, run: gameRunRef.current},
         tab: laptopTab,
         user: userRef.current
       });
@@ -1802,8 +1842,8 @@ export function GameShell({
               // The focused laptop tab renders the failure inline.
             });
           }}
-          onRunStage={(stage) => {
-            void runGameLessonPipelineStage(stage, {force: false}).catch(() => {
+          onRunStage={(stage, options) => {
+            void runGameLessonPipelineStage(stage, {force: options?.force ?? false}).catch(() => {
               // The focused laptop tab renders the failure inline.
             });
           }}
@@ -1812,7 +1852,7 @@ export function GameShell({
               // The focused laptop tab renders the failure inline.
             });
           }}
-          pipeline={{error: gamePipelineError, loading: gamePipelineLoading, run: gameRun}}
+          pipeline={{error: gamePipelineError, loading: gamePipelineLoading, loadingStage: gamePipelineLoadingStage, run: gameRun}}
           loading={laptopLoginLoading}
           musicMuted={musicMuted}
           musicVolume={musicVolume}
@@ -1934,7 +1974,7 @@ function LaptopFocusPanel({
   onMusicMutedChange: (muted: boolean) => void;
   onMusicVolumeChange: (volume: number) => void;
   onResetProgress: () => void;
-  onRunStage: (stage: GameLessonStage) => void;
+  onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
   onSignIn: (event: FormEvent<HTMLFormElement>) => void;
   onSignOut: () => void;
   onTabChange: (tab: LaptopTab) => void;
@@ -2108,7 +2148,7 @@ function FocusedPipelinePanel({
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
   onResetProgress: () => void;
-  onRunStage: (stage: GameLessonStage) => void;
+  onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
   pipeline: LaptopPipelineState;
 }) {
   return (
@@ -2161,62 +2201,300 @@ function FocusedPipelinePanel({
           const artifact = artifactForStage(pipeline.run, stage);
           const dependencyMessage = pipelineDependencyMessage(pipeline.run, stage);
           const canRun = !pipeline.loading && !dependencyMessage;
-          const palette = stagePalette(stage);
-          const previewRows = artifactPreviewRows(artifact, stage);
-          const previewText = artifactPreviewText(artifact, stage);
           return (
-            <div
-              className="rounded border bg-zinc-950/45 p-4 shadow-[inset_0_0_40px_rgba(255,255,255,0.015)]"
+            <GamePipelineStageCard
+              artifact={artifact}
+              canRun={canRun}
+              dependencyMessage={dependencyMessage}
+              isRunning={pipeline.loadingStage === stage || artifact?.status === "running"}
               key={stage}
-              style={{borderColor: palette.border, boxShadow: `inset 0 0 54px ${palette.glow}`}}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-mono text-sm font-black uppercase tracking-wide" style={{color: palette.text}}>
-                    {label}
-                  </p>
-                  <p className="mt-2 font-mono text-[11px] uppercase tracking-wide text-zinc-500">
-                    {artifact?.status ?? (stage === "template" ? "ready" : "waiting")} {artifact ? `/ v${artifact.version}` : ""}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className="rounded border border-cyan-300/35 bg-cyan-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-cyan-100 hover:bg-cyan-900/35 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={!canRun}
-                    onClick={() => onRunStage(stage)}
-                    type="button"
-                  >
-                    Run
-                  </button>
-                  {artifact?.status === "awaiting_approval" ? (
-                    <button
-                    className="rounded border border-emerald-300/45 bg-emerald-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-100 hover:bg-emerald-900/35 disabled:cursor-wait disabled:opacity-50"
-                    disabled={pipeline.loading}
-                    onClick={() => onApproveArtifact(artifact)}
-                    type="button"
-                  >
-                    Approve
-                  </button>
-                  ) : null}
-                </div>
-              </div>
-              {dependencyMessage ? <p className="mt-3 text-xs leading-5 text-amber-100/70">{dependencyMessage}</p> : null}
-              {previewRows.length > 0 ? (
-                <div className="mt-4 grid grid-cols-3 gap-2">
-                  {previewRows.map((row) => (
-                    <div className="rounded border border-white/10 bg-black/25 px-3 py-2" key={`${stage}-${row.label}`}>
-                      <p className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{row.label}</p>
-                      <p className="mt-1 text-sm font-semibold text-zinc-100">{row.value}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              {previewText ? <p className="mt-3 text-xs leading-5 text-zinc-400">{previewText}</p> : null}
-              </div>
+              label={label}
+              loading={pipeline.loading}
+              onApproveArtifact={onApproveArtifact}
+              onRunStage={onRunStage}
+              stage={stage}
+            />
           );
         })}
       </div>
     </div>
+  );
+}
+
+function GamePipelineStageCard({
+  artifact,
+  canRun,
+  dependencyMessage,
+  isRunning,
+  label,
+  loading,
+  onApproveArtifact,
+  onRunStage,
+  stage
+}: {
+  artifact: GameLessonArtifact | null;
+  canRun: boolean;
+  dependencyMessage: string | null;
+  isRunning: boolean;
+  label: string;
+  loading: boolean;
+  onApproveArtifact: (artifact: GameLessonArtifact) => void;
+  onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
+  stage: GameLessonStage;
+}) {
+  const palette = stagePalette(stage);
+  const status = artifact?.status ?? (stage === "template" ? "ready" : "waiting");
+  const isFailed = status === "failed" || status === "rejected";
+  const isStale = status === "stale";
+  const actionLabel = artifact ? `Regenerate ${label}` : `Run ${label}`;
+  return (
+    <div
+      className="rounded border bg-zinc-950/50 p-4 shadow-[inset_0_0_40px_rgba(255,255,255,0.015)]"
+      style={{borderColor: palette.border, boxShadow: `inset 0 0 54px ${palette.glow}`}}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <GamePipelineStageInfo stage={stage} title={label} />
+            <p className="font-mono text-sm font-black uppercase tracking-wide" style={{color: palette.text}}>
+              {label}
+            </p>
+          </div>
+          <p className={`mt-2 font-mono text-[11px] uppercase tracking-wide ${statusTextClass(status)}`}>
+            {gameStageMetaLine(artifact, status)}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {isStale ? <GamePipelineStageBadge tone="amber">STALE</GamePipelineStageBadge> : null}
+          {isFailed ? <GamePipelineStageBadge tone="red">FAILED</GamePipelineStageBadge> : null}
+          {isRunning ? <GamePipelineSpinner /> : null}
+          <button
+            aria-label={actionLabel}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-zinc-700 text-zinc-300 transition hover:border-emerald-400/60 hover:bg-emerald-400/10 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!canRun || isRunning}
+            onClick={() => onRunStage(stage, {force: Boolean(artifact)})}
+            title={actionLabel}
+            type="button"
+          >
+            {artifact ? <GamePipelineRegenerateIcon /> : <GamePipelineRunIcon />}
+          </button>
+          {artifact?.status === "awaiting_approval" ? (
+            <button
+              className="rounded border border-emerald-300/45 bg-emerald-950/25 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-emerald-100 hover:bg-emerald-900/35 disabled:cursor-wait disabled:opacity-50"
+              disabled={loading || isRunning}
+              onClick={() => onApproveArtifact(artifact)}
+              type="button"
+            >
+              Approve
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {dependencyMessage ? <p className="mt-3 text-xs leading-5 text-amber-100/70">{dependencyMessage}</p> : null}
+      {artifact?.staleReason ? <p className="mt-3 text-xs leading-5 text-amber-100/70">Stale: {artifact.staleReason}</p> : null}
+      {artifact?.errorMessage ? <p className="mt-3 text-xs leading-5 text-red-100/80">{artifact.errorMessage}</p> : null}
+      <GamePipelineStagePreview artifact={artifact} stage={stage} />
+    </div>
+  );
+}
+
+function GamePipelineStageInfo({stage, title}: {stage: GameLessonStage; title: string}) {
+  const triggerRef = useRef<HTMLSpanElement>(null);
+  const [position, setPosition] = useState<{left: number; top: number; width: number} | null>(null);
+  const details = gameStageDetails[stage];
+  const open = position !== null;
+
+  function openPanel() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    const width = Math.min(380, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.left - width - 18, window.innerWidth - width - 12));
+    const maxPanelHeight = Math.min(440, window.innerHeight - 24);
+    const top = Math.max(12, Math.min(rect.top - 12, window.innerHeight - maxPanelHeight - 12));
+    setPosition({left, top, width});
+  }
+
+  return (
+    <span
+      className="relative inline-flex h-5 w-5 shrink-0 items-center justify-center"
+      onBlur={() => setPosition(null)}
+      onFocus={openPanel}
+      onMouseEnter={openPanel}
+      onMouseLeave={() => setPosition(null)}
+    >
+      <span
+        aria-label={`${title} info`}
+        className={[
+          "flex h-4 w-4 items-center justify-center rounded-full border font-mono text-[10px] font-semibold transition",
+          open ? "border-emerald-400/60 text-emerald-300" : "border-zinc-700 text-zinc-500"
+        ].join(" ")}
+        ref={triggerRef}
+        tabIndex={0}
+      >
+        i
+      </span>
+      {position ? (
+        <span
+          className="pointer-events-none fixed z-[420] max-h-[min(440px,calc(100vh-24px))] overflow-auto rounded border border-zinc-700 bg-[#090d14]/98 p-3 text-left text-xs leading-5 text-zinc-200 shadow-2xl shadow-black/70 backdrop-blur"
+          style={{left: position.left, top: position.top, width: position.width}}
+        >
+          <span className="block break-words font-mono text-[11px] uppercase tracking-wide text-emerald-300">{title}</span>
+          <span className="mt-2 block break-words text-zinc-200">{details.summary}</span>
+          <span className="mt-3 grid gap-2">
+            <GamePipelineInfoRow label="Inputs" value={details.inputs} />
+            <GamePipelineInfoRow label="Guardrails" value={details.guardrails} />
+            <GamePipelineInfoRow label="Cost" value={details.cost} />
+            {details.prompt ? <GamePipelineInfoRow label="Prompt" value={details.prompt} /> : null}
+          </span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function GamePipelineInfoRow({label, value}: {label: string; value: string}) {
+  return (
+    <span className="grid gap-0.5 border-t border-zinc-800 pt-2">
+      <span className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{label}</span>
+      <span className="break-words text-zinc-300">{value}</span>
+    </span>
+  );
+}
+
+function GamePipelineStagePreview({artifact, stage}: {artifact: GameLessonArtifact | null; stage: GameLessonStage}) {
+  const previewRows = artifactPreviewRows(artifact, stage);
+  const previewText = artifactPreviewText(artifact, stage);
+  const sections = artifactSections(artifact);
+  const actions = artifactActions(artifact);
+  if (!artifact) {
+    return <p className="mt-3 text-xs leading-5 text-zinc-500">Run this stage to create a persisted artifact preview.</p>;
+  }
+  if (stage === "section_script" || stage === "speech_markup") {
+    return (
+      <div className="mt-4 grid gap-3">
+        <GamePipelinePreviewRows rows={previewRows} stage={stage} />
+        {sections.slice(0, 4).map((section, index) => (
+          <div className="rounded border border-white/10 bg-black/25 p-3" key={`${stage}-${recordString(section, "sectionId") ?? index}`}>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-bold text-zinc-100">
+                {recordString(section, "title") ?? recordString(section, "sectionId") ?? `Section ${index + 1}`}
+              </p>
+              {typeof recordNumber(section, "estimatedSeconds") === "number" ? (
+                <span className="font-mono text-[11px] text-zinc-500">{recordNumber(section, "estimatedSeconds")}s</span>
+              ) : null}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-zinc-300">
+              {recordString(section, "speechText") ?? recordString(section, "narration") ?? recordString(section, "summary") ?? ""}
+            </p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (stage === "narration") {
+    return (
+      <div className="mt-4 grid gap-3">
+        <GamePipelinePreviewRows rows={previewRows} stage={stage} />
+        {sections.map((section, index) => (
+          <div className="rounded border border-white/10 bg-black/25 p-3" key={`narration-${recordString(section, "sectionId") ?? index}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">
+                  {recordString(section, "sectionId") ?? `segment_${index + 1}`}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-zinc-100">
+                  {recordString(section, "title") ?? `Narration segment ${index + 1}`}
+                </p>
+              </div>
+              {typeof recordNumber(section, "durationSeconds") === "number" ? (
+                <span className="font-mono text-[11px] text-violet-200">{recordNumber(section, "durationSeconds")?.toFixed(1)}s</span>
+              ) : null}
+            </div>
+            {recordString(section, "audioUrl") ? (
+              <audio className="mt-3 h-9 w-full" controls preload="none" src={recordString(section, "audioUrl")} />
+            ) : null}
+            {recordString(section, "speechText") ? <p className="mt-2 text-xs leading-5 text-zinc-400">{recordString(section, "speechText")}</p> : null}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (stage === "handwriting") {
+    return (
+      <div className="mt-4 grid gap-3">
+        <GamePipelinePreviewRows rows={previewRows} stage={stage} />
+        {actions.slice(0, 6).map((action, index) => (
+          <div className="grid gap-1 rounded border border-white/10 bg-black/25 p-3" key={`handwriting-${recordString(action, "id") ?? index}`}>
+            <p className="font-mono text-[10px] uppercase tracking-wide text-pink-200/75">
+              {recordString(action, "sectionId") ?? "section"} / {recordString(action, "fillTargetId") ?? "target"}
+            </p>
+            <p className="text-xs leading-5 text-zinc-300">{recordString(action, "text") ?? "Pen action"}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <GamePipelinePreviewRows rows={previewRows} stage={stage} />
+      {previewText ? <p className="mt-3 text-xs leading-5 text-zinc-400">{previewText}</p> : null}
+    </div>
+  );
+}
+
+function GamePipelinePreviewRows({rows, stage}: {rows: Array<{label: string; value: string}>; stage: GameLessonStage}) {
+  if (rows.length === 0) {
+    return null;
+  }
+  return (
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+      {rows.map((row) => (
+        <div className="rounded border border-white/10 bg-black/25 px-3 py-2" key={`${stage}-${row.label}`}>
+          <p className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{row.label}</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-100">{row.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GamePipelineStageBadge({children, tone}: {children: string; tone: "amber" | "red"}) {
+  const className = tone === "amber" ? "border-amber-400/40 text-amber-200" : "border-red-400/50 text-red-200";
+  return <span className={`rounded border px-2 py-1 font-mono text-[10px] font-semibold ${className}`}>{children}</span>;
+}
+
+function GamePipelineSpinner() {
+  return (
+    <svg
+      aria-label="Loading"
+      className="h-4 w-4 animate-spin text-emerald-300"
+      fill="none"
+      role="status"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-90" d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function GamePipelineRegenerateIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M21 12a9 9 0 1 1-2.6-6.4" />
+      <path d="M21 3v6h-6" />
+      <path d="m10 8 6 4-6 4V8z" />
+    </svg>
+  );
+}
+
+function GamePipelineRunIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+      <path d="M8 5v14l11-7z" />
+    </svg>
   );
 }
 
@@ -2304,6 +2582,37 @@ function pipelineDependencyMessage(run: GameWorksheetRunSnapshot | null, stage: 
 
 function shortRunId(id: string) {
   return id.slice(0, 8);
+}
+
+function gameStageMetaLine(artifact: GameLessonArtifact | null, fallbackStatus: string) {
+  const parts = [fallbackStatus.replaceAll("_", " ")];
+  if (artifact) {
+    parts.push(`v${artifact.version}`);
+    const timestamp = artifact.completedAt ?? artifact.createdAt;
+    if (timestamp) {
+      parts.push(`last ran ${formatPipelineTimestamp(timestamp)}`);
+    }
+    if (artifact.providerName) {
+      parts.push(artifact.providerName);
+    }
+    if (artifact.modelName) {
+      parts.push(artifact.modelName);
+    }
+  }
+  return parts.join(" / ");
+}
+
+function formatPipelineTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function statusTextClass(status?: string) {
@@ -2444,6 +2753,79 @@ function artifactPreviewText(artifact: GameLessonArtifact | null, stage: GameLes
     return "Marks the approved interactive bundle as the canonical Lesson 1 output.";
   }
   return artifact.summary ?? "";
+}
+
+type GameStageDetails = {
+  summary: string;
+  inputs: string;
+  guardrails: string;
+  cost: string;
+  prompt?: string;
+};
+
+const gameStageDetails: Record<GameLessonStage, GameStageDetails> = {
+  template: {
+    summary: "Builds the deterministic map for Lesson 1 before any model writes content.",
+    inputs: "The fixed Volume With Cubes worksheet template, manually defined page regions, questions, fill targets, and section order.",
+    guardrails: "The template is deterministic and should be reviewed carefully because downstream LLM stages can only write into these known targets.",
+    cost: "Free. Local template mapping only."
+  },
+  section_script: {
+    summary: "Writes the section-level teaching script for the worksheet.",
+    inputs: "Template sections, questions, fill targets, grade level, and the lesson voice constraints.",
+    guardrails: "The model must stay inside the worksheet map, explain at a sixth-grade level, and produce concise section scripts for human approval.",
+    cost: "OpenAI token usage is logged for the game lesson ledger.",
+    prompt: "Provider path: apps/api/app/services/game_lessons/providers.py"
+  },
+  speech_markup: {
+    summary: "Turns the approved section script into ElevenLabs-friendly narration text.",
+    inputs: "Approved section scripts and their section IDs.",
+    guardrails: "Speech markup preserves section IDs and only changes wording, pauses, and speaking flow for reliable narration.",
+    cost: "OpenAI token usage is logged if the configured markup provider uses an LLM.",
+    prompt: "Provider path: apps/api/app/services/game_lessons/providers.py"
+  },
+  narration: {
+    summary: "Generates one ElevenLabs audio segment per major worksheet section.",
+    inputs: "Approved speech markup, selected instructor voice ID, and ElevenLabs model configuration.",
+    guardrails: "Each audio segment is stored privately, signed for playback, and tied to the section ID for later interactive playback.",
+    cost: "ElevenLabs credit usage is logged from generated speech character count."
+  },
+  handwriting: {
+    summary: "Creates the timed pen-writing action plan for the worksheet.",
+    inputs: "Template fill targets plus generated section narration timing.",
+    guardrails: "Actions must reference known section and fill-target IDs so the browser pen can write only into mapped worksheet regions.",
+    cost: "Free in the current implementation. Browser-side renderer actions are deterministic."
+  },
+  interactive_bundle: {
+    summary: "Packages the worksheet pages, narration, and pen actions into a clickable browser lesson.",
+    inputs: "Template, approved script, narration audio, and handwriting actions.",
+    guardrails: "The bundle is the playback contract used by the desk paper and should remain stable until an upstream artifact is rerun.",
+    cost: "Free. Bundle assembly only."
+  },
+  lesson_publish: {
+    summary: "Marks the current interactive bundle as the canonical Lesson 1 output.",
+    inputs: "Completed interactive bundle artifact.",
+    guardrails: "Publishing does not regenerate content. It only records which bundle the paper should use as Lesson 1.",
+    cost: "Free. Metadata update only."
+  }
+};
+
+function artifactSections(artifact: GameLessonArtifact | null): Array<Record<string, unknown>> {
+  const payload = artifactPayloadRecord(artifact);
+  return Array.isArray(payload.sections) ? payload.sections.filter(isRecord) : [];
+}
+
+function artifactActions(artifact: GameLessonArtifact | null): Array<Record<string, unknown>> {
+  const payload = artifactPayloadRecord(artifact);
+  return Array.isArray(payload.actions) ? payload.actions.filter(isRecord) : [];
+}
+
+function recordString(record: Record<string, unknown>, key: string) {
+  return typeof record[key] === "string" ? record[key] : undefined;
+}
+
+function recordNumber(record: Record<string, unknown>, key: string) {
+  return typeof record[key] === "number" ? record[key] : undefined;
 }
 
 function usernameToAuthEmail(username: string) {
@@ -3406,7 +3788,7 @@ function createLaptopScreen(
     onApproveArtifact: (artifact: GameLessonArtifact) => void;
     onCreateRun: () => void;
     onResetProgress: () => void;
-    onRunStage: (stage: GameLessonStage) => void;
+    onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
     onSignIn: (formData: FormData) => Promise<void>;
     onSignOut: () => Promise<void>;
     onMusicChange: (selectedMusicId: MusicOptionId) => void;
@@ -3435,6 +3817,10 @@ function createLaptopScreen(
   const appRoot = document.createElement("div");
   appRoot.style.height = "100%";
   appRoot.style.width = "100%";
+
+  const screenStyle = document.createElement("style");
+  screenStyle.textContent = "@keyframes game-pipeline-spin { to { transform: rotate(360deg); } }";
+  screen.append(screenStyle);
 
   const musicDock = document.createElement("div");
   musicDock.style.position = "absolute";
@@ -3704,7 +4090,7 @@ function renderLaptopPipeline({
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
   onResetProgress: () => void;
-  onRunStage: (stage: GameLessonStage) => void;
+  onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
   pipeline: LaptopPipelineState;
 }) {
   const wrap = document.createElement("div");
@@ -3805,11 +4191,16 @@ function renderLaptopPipeline({
     card.style.borderRadius = "12px";
     card.style.padding = "14px";
     const status = artifact?.status ?? (stage === "template" ? "ready" : "waiting");
+    const details = gameStageDetails[stage];
+    const isRunning = pipeline.loadingStage === stage || artifact?.status === "running";
     card.innerHTML = `
       <div style="display:flex;justify-content:space-between;gap:18px;align-items:flex-start">
         <div>
-          <div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:${palette.text};font-weight:900">${escapeHtml(label)}</div>
-          <div style="margin-top:7px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(161,161,170,.7)">${escapeHtml(status)}${artifact ? ` / v${artifact.version}` : ""}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span title="${escapeHtml(`${details.summary}\n\nInputs: ${details.inputs}\n\nGuardrails: ${details.guardrails}\n\nCost: ${details.cost}`)}" style="display:inline-flex;width:15px;height:15px;align-items:center;justify-content:center;border:1px solid rgba(113,113,122,.8);border-radius:999px;color:rgba(161,161,170,.9);font-size:10px;font-family:monospace">i</span>
+            <div style="font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:${palette.text};font-weight:900">${escapeHtml(label)}</div>
+          </div>
+          <div style="margin-top:7px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:${statusColor(artifact?.status)}">${escapeHtml(gameStageMetaLine(artifact, status))}</div>
         </div>
       </div>
       ${
@@ -3818,6 +4209,11 @@ function renderLaptopPipeline({
           : ""
       }
       ${previewText ? `<div style="margin-top:10px;font-size:11px;line-height:1.48;color:rgba(212,212,216,.72)">${escapeHtml(previewText)}</div>` : ""}
+      ${
+        artifact?.errorMessage
+          ? `<div style="margin-top:8px;font-size:11px;line-height:1.45;color:rgba(254,202,202,.84)">${escapeHtml(artifact.errorMessage)}</div>`
+          : ""
+      }
       ${
         dependencyMessage
           ? `<div style="margin-top:8px;font-size:11px;line-height:1.45;color:rgba(253,230,138,.72)">${escapeHtml(dependencyMessage)}</div>`
@@ -3831,25 +4227,60 @@ function renderLaptopPipeline({
     `;
     const controls = document.createElement("div");
     controls.style.display = "flex";
+    controls.style.alignItems = "center";
     controls.style.gap = "8px";
     controls.style.marginTop = "13px";
+    if (artifact?.status === "stale") {
+      const staleBadge = document.createElement("span");
+      staleBadge.textContent = "STALE";
+      staleBadge.style.border = "1px solid rgba(251,191,36,.42)";
+      staleBadge.style.borderRadius = "7px";
+      staleBadge.style.padding = "5px 7px";
+      staleBadge.style.color = "#fde68a";
+      staleBadge.style.fontSize = "9px";
+      staleBadge.style.fontFamily = "monospace";
+      staleBadge.style.fontWeight = "800";
+      controls.append(staleBadge);
+    }
+    if (artifact?.status === "failed" || artifact?.status === "rejected") {
+      const failedBadge = document.createElement("span");
+      failedBadge.textContent = "FAILED";
+      failedBadge.style.border = "1px solid rgba(248,113,113,.52)";
+      failedBadge.style.borderRadius = "7px";
+      failedBadge.style.padding = "5px 7px";
+      failedBadge.style.color = "#fecaca";
+      failedBadge.style.fontSize = "9px";
+      failedBadge.style.fontFamily = "monospace";
+      failedBadge.style.fontWeight = "800";
+      controls.append(failedBadge);
+    }
+    if (isRunning) {
+      const spinner = document.createElement("span");
+      spinner.innerHTML = `<svg aria-label="Loading" viewBox="0 0 24 24" style="display:block;width:16px;height:16px;animation:game-pipeline-spin .8s linear infinite;color:#6ee7b7" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" opacity=".25"></circle><path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-linecap="round" stroke-width="3"></path></svg>`;
+      controls.append(spinner);
+    }
     const runButton = document.createElement("button");
     runButton.type = "button";
-    runButton.textContent = "RUN";
-    runButton.disabled = pipeline.loading || Boolean(dependencyMessage);
-    runButton.style.border = "1px solid rgba(103,232,249,0.35)";
-    runButton.style.background = "rgba(8,47,73,0.26)";
-    runButton.style.color = "#cffafe";
+    runButton.title = artifact ? `Regenerate ${label}` : `Run ${label}`;
+    runButton.setAttribute("aria-label", runButton.title);
+    runButton.innerHTML = artifact
+      ? `<svg aria-hidden="true" viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M21 12a9 9 0 1 1-2.6-6.4"></path><path d="M21 3v6h-6"></path><path d="m10 8 6 4-6 4V8z"></path></svg>`
+      : `<svg aria-hidden="true" viewBox="0 0 24 24" style="width:16px;height:16px" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>`;
+    runButton.disabled = pipeline.loading || isRunning || Boolean(dependencyMessage);
+    runButton.style.display = "inline-flex";
+    runButton.style.width = "32px";
+    runButton.style.height = "32px";
+    runButton.style.alignItems = "center";
+    runButton.style.justifyContent = "center";
+    runButton.style.border = "1px solid rgba(63,63,70,.95)";
+    runButton.style.background = "transparent";
+    runButton.style.color = "#d4d4d8";
     runButton.style.borderRadius = "8px";
-    runButton.style.padding = "7px 9px";
-    runButton.style.fontSize = "10px";
-    runButton.style.fontWeight = "900";
-    runButton.style.letterSpacing = ".1em";
     runButton.addEventListener("pointerdown", (event) => event.stopPropagation());
     runButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      onRunStage(stage);
+      onRunStage(stage, {force: Boolean(artifact)});
     });
     controls.append(runButton);
     if (artifact?.status === "awaiting_approval") {
@@ -4006,7 +4437,7 @@ function renderLaptopBrowser({
   onMusicMutedChange: (muted: boolean) => void;
   onMusicVolumeChange: (volume: number) => void;
   onResetProgress: () => void;
-  onRunStage: (stage: GameLessonStage) => void;
+  onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
   onSignOut: () => Promise<void>;
   onTabChange: (tab: LaptopTab) => void;
   pipeline: LaptopPipelineState;

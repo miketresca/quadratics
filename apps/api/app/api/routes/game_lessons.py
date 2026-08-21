@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +15,7 @@ from app.schemas.game_lessons import (
     GameWorksheetRunCreateRequest,
     GameWorksheetRunSnapshot,
 )
+from app.schemas.instructor import Instructor
 from app.services.game_lessons.costs import (
     InMemoryGameUsageCostRepository,
     SupabaseGameUsageCostRepository,
@@ -21,6 +23,7 @@ from app.services.game_lessons.costs import (
 from app.services.game_lessons.providers import (
     ElevenLabsGameLessonNarrationProvider,
     GameLessonProviderConfigurationError,
+    GameLessonProviderRuntimeError,
     OpenAIGameLessonStageProvider,
 )
 from app.services.game_lessons.repository import (
@@ -33,9 +36,11 @@ from app.services.game_lessons.repository import (
     InMemoryGameLessonRepository,
     SupabaseGameLessonRepository,
 )
+from app.services.instructors.repository import InstructorStorageError
 from app.services.storage.media_store import InMemoryMediaStore, SupabaseMediaStore
 
 router = APIRouter(prefix="/game")
+logger = logging.getLogger(__name__)
 _game_lessons: GameLessonRepository | None = None
 _fallback_game_lessons = InMemoryGameLessonRepository()
 _fallback_game_usage_costs = InMemoryGameUsageCostRepository()
@@ -111,6 +116,18 @@ async def run_game_lesson_stage(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+    except GameLessonProviderRuntimeError as exc:
+        logger.warning(
+            "game lesson provider stage failed",
+            extra={
+                "run_id": run_id,
+                "stage": stage,
+                "provider": exc.provider,
+                "user_id": current_user.id,
+                "upstream_status_code": exc.upstream_status_code,
+            },
+        )
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except GameLessonStorageError as exc:
         raise _storage_http_error(exc) from exc
 
@@ -192,8 +209,48 @@ def _narration_provider(settings: Settings) -> ElevenLabsGameLessonNarrationProv
 
 
 async def _voice_id_for_instructor(settings: Settings, instructor_id: str | None) -> str:
-    instructor = await _instructor_repository(settings).get(instructor_id)
+    repository = _instructor_repository(settings)
+    try:
+        instructor = await repository.get(instructor_id)
+    except InstructorStorageError as exc:
+        if instructor_id in {"male", "female"}:
+            instructor = await _instructor_by_default_alias(repository, instructor_id, exc)
+        else:
+            label = instructor_id or "default instructor"
+            raise GameLessonProviderRuntimeError(
+                f"Narration could not resolve instructor voice for {label}: {exc}",
+                provider="instructors",
+                stage="narration",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            ) from exc
+    if instructor is None and instructor_id in {"male", "female"}:
+        instructor = await _instructor_by_default_alias(repository, instructor_id, None)
     return instructor.voice_id if instructor and instructor.voice_id else ""
+
+
+async def _instructor_by_default_alias(
+    repository: object,
+    alias: str,
+    source_error: InstructorStorageError | None,
+) -> Instructor | None:
+    try:
+        instructors = await repository.list()  # type: ignore[attr-defined]
+    except InstructorStorageError as exc:
+        raise GameLessonProviderRuntimeError(
+            f"Narration could not resolve instructor voice for legacy alias '{alias}': {exc}",
+            provider="instructors",
+            stage="narration",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        ) from source_error or exc
+    expected_name = f"{alias} instructor"
+    return next(
+        (
+            instructor
+            for instructor in instructors
+            if instructor.id == alias or instructor.display_name.strip().lower() == expected_name
+        ),
+        None,
+    )
 
 
 def _storage_http_error(exc: GameLessonStorageError) -> HTTPException:

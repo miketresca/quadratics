@@ -23,6 +23,7 @@ from app.services.game_lessons.costs import GameUsageCostRepository
 from app.services.game_lessons.providers import (
     GameLessonNarrationStageProvider,
     GameLessonProviderResult,
+    GameLessonProviderRuntimeError,
     GameLessonStageProvider,
 )
 from app.services.game_lessons.templates import VOLUME_CUBES_LESSON_1_TEMPLATE
@@ -207,7 +208,11 @@ class InMemoryGameLessonRepository:
         current = self._current_artifact(run.id, stage)
         if current and current.status in ("completed", "approved") and not request.force:
             return self._snapshot(run)
-        self._create_artifact(run, stage)
+        try:
+            self._create_artifact(run, stage)
+        except GameLessonProviderRuntimeError as exc:
+            self._create_failed_artifact(run, stage, exc)
+            raise
         self._mark_descendants_stale(run.id, stage)
         if stage == "lesson_publish":
             run.status = "completed"
@@ -259,6 +264,45 @@ class InMemoryGameLessonRepository:
             error_message=None,
             stale_reason=None,
             config_metadata={"provider": "deterministic", "source": "game_lesson_repository"},
+            created_at=now,
+            updated_at=now,
+        )
+        self._artifacts[artifact.id] = artifact
+        return artifact
+
+    def _create_failed_artifact(
+        self,
+        run: _StoredRun,
+        stage: str,
+        error: GameLessonProviderRuntimeError,
+    ) -> _StoredArtifact:
+        now = _now()
+        current = self._current_artifact(run.id, stage)
+        next_version = (current.version + 1) if current else 1
+        if current:
+            current.is_current = False
+            current.updated_at = now
+        artifact = _StoredArtifact(
+            id=str(uuid4()),
+            run_id=run.id,
+            stage=stage,
+            version=next_version,
+            status="failed",
+            is_current=True,
+            payload={
+                "summary": f"{stage} failed",
+                "provider": error.provider,
+                "stage": error.stage,
+                "upstreamStatusCode": error.upstream_status_code,
+            },
+            storage_refs=[],
+            error_message=str(error),
+            stale_reason=None,
+            config_metadata={
+                "provider": error.provider,
+                "source": "game_lesson_repository",
+                "upstreamStatusCode": error.upstream_status_code,
+            },
             created_at=now,
             updated_at=now,
         )
@@ -440,7 +484,11 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         current = await self._current_artifact(run.id, stage)
         if current and current.status in ("completed", "approved") and not request.force:
             return await self._snapshot(run)
-        await self._create_artifact(run, stage)
+        try:
+            await self._create_artifact(run, stage)
+        except GameLessonProviderRuntimeError as exc:
+            await self._create_failed_artifact(run, stage, exc)
+            raise
         await self._mark_descendants_stale(run.id, stage)
         run_status = "completed" if stage == "lesson_publish" else None
         await self._touch_run(run.id, status_value=run_status)
@@ -632,6 +680,58 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         artifact = _artifact_from_row(rows[0])
         await self._record_usage(run, artifact, generated)
         return artifact
+
+    async def _create_failed_artifact(
+        self,
+        run: _StoredRun,
+        stage: str,
+        error: GameLessonProviderRuntimeError,
+    ) -> _StoredArtifact:
+        current = await self._current_artifact(run.id, stage)
+        next_version = (current.version + 1) if current else 1
+        payload = {
+            "summary": f"{stage} failed",
+            "provider": error.provider,
+            "stage": error.stage,
+            "upstreamStatusCode": error.upstream_status_code,
+        }
+        config_metadata = {
+            "provider": error.provider,
+            "source": "game_lesson_repository",
+            "upstreamStatusCode": error.upstream_status_code,
+        }
+        async with httpx.AsyncClient() as client:
+            if current:
+                current_response = await client.patch(
+                    f"{self._base_url}/rest/v1/game_lesson_artifacts",
+                    headers=self._headers,
+                    params={"id": f"eq.{current.id}"},
+                    json={"is_current": False, "updated_at": _now()},
+                )
+                _raise_for_storage_error(current_response)
+            create_response = await client.post(
+                f"{self._base_url}/rest/v1/game_lesson_artifacts",
+                headers={**self._headers, "Prefer": "return=representation"},
+                params={"select": _ARTIFACT_COLUMNS},
+                json={
+                    "run_id": run.id,
+                    "stage": stage,
+                    "version": next_version,
+                    "status": "failed",
+                    "is_current": True,
+                    "payload": payload,
+                    "storage_refs": [],
+                    "error_message": str(error),
+                    "config_metadata": config_metadata,
+                },
+            )
+        _raise_for_storage_error(create_response)
+        rows = create_response.json()
+        if not rows:
+            raise GameLessonStorageError(
+                "Failed game lesson artifact was not returned after create"
+            )
+        return _artifact_from_row(rows[0])
 
     async def _generated_stage_from_storage(
         self,

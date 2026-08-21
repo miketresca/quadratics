@@ -1,17 +1,36 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from app.providers.elevenlabs.narration_provider import ElevenLabsProviderError
 from app.services.narration.base import NarrationProvider, NarrationRequest
-from app.services.storage.media_store import MediaStore
+from app.services.storage.media_store import MediaStore, MediaStoreError
 
 
 class GameLessonProviderConfigurationError(RuntimeError):
     pass
+
+
+class GameLessonProviderRuntimeError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        provider: str,
+        stage: str,
+        status_code: int = 502,
+        upstream_status_code: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.provider = provider
+        self.stage = stage
+        self.status_code = status_code
+        self.upstream_status_code = upstream_status_code
 
 
 @dataclass(frozen=True)
@@ -345,20 +364,54 @@ class ElevenLabsGameLessonNarrationProvider:
             speech_text = str(section.get("speechText", "")).strip()
             if not speech_text:
                 continue
-            result = await self._provider.generate(
-                NarrationRequest(
-                    step_id=section_id,
-                    text=speech_text,
-                    voice_id=voice_id,
+            try:
+                result = await self._provider.generate(
+                    NarrationRequest(
+                        step_id=section_id,
+                        text=speech_text,
+                        voice_id=voice_id,
+                    )
                 )
-            )
-            audio_bytes = base64.b64decode(result.audio_base64)
-            reference = self._media_store.put(
-                path=f"{user_id}/{run_id}/game/narration/{section_id}.mp3",
-                content=audio_bytes,
-                content_type=result.audio_mime_type,
-                metadata={"sectionId": section_id, "voiceId": voice_id},
-            )
+                audio_bytes = base64.b64decode(result.audio_base64, validate=True)
+            except ElevenLabsProviderError as exc:
+                raise _narration_runtime_error(section_id, exc) from exc
+            except (binascii.Error, ValueError) as exc:
+                raise GameLessonProviderRuntimeError(
+                    (
+                        "Narration failed while decoding ElevenLabs audio for section "
+                        f"'{section_id}': provider returned invalid audio data."
+                    ),
+                    provider="elevenlabs",
+                    stage="narration",
+                    status_code=502,
+                ) from exc
+            except Exception as exc:
+                raise GameLessonProviderRuntimeError(
+                    (
+                        "Narration failed while generating ElevenLabs audio for section "
+                        f"'{section_id}': {exc}"
+                    ),
+                    provider="elevenlabs",
+                    stage="narration",
+                    status_code=502,
+                ) from exc
+            try:
+                reference = self._media_store.put(
+                    path=f"{user_id}/{run_id}/game/narration/{section_id}.mp3",
+                    content=audio_bytes,
+                    content_type=result.audio_mime_type,
+                    metadata={"sectionId": section_id, "voiceId": voice_id},
+                )
+            except MediaStoreError as exc:
+                raise GameLessonProviderRuntimeError(
+                    (
+                        "Narration failed while storing ElevenLabs audio for section "
+                        f"'{section_id}': {exc}"
+                    ),
+                    provider="supabase_storage",
+                    stage="narration",
+                    status_code=503,
+                ) from exc
             storage_ref = {
                 "bucket": reference.bucket,
                 "path": reference.path,
@@ -425,6 +478,29 @@ class ElevenLabsGameLessonNarrationProvider:
             usage_records=usage_records,
             storage_refs=storage_refs,
         )
+
+
+def _narration_runtime_error(
+    section_id: str,
+    exc: ElevenLabsProviderError,
+) -> GameLessonProviderRuntimeError:
+    return GameLessonProviderRuntimeError(
+        f"Narration failed while generating ElevenLabs audio for section '{section_id}': {exc}",
+        provider="elevenlabs",
+        stage="narration",
+        status_code=_http_status_for_elevenlabs_error(exc),
+        upstream_status_code=exc.status_code or None,
+    )
+
+
+def _http_status_for_elevenlabs_error(exc: ElevenLabsProviderError) -> int:
+    if exc.status_code == 402:
+        return 402
+    if exc.status_code == 429:
+        return 429
+    if exc.status_code == 0:
+        return 503
+    return 502
 
 
 def _response_text(response: Any) -> str:
