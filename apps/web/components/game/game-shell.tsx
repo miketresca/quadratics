@@ -5,6 +5,13 @@ import {useEffect, useRef, useState, type FormEvent} from "react";
 import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, WebGLRenderer} from "three";
 import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
 
+import {
+  createGameLessonRun,
+  runGameLessonStage,
+  type GameLessonArtifact,
+  type GameLessonStage,
+  type GameWorksheetRunSnapshot
+} from "@/lib/api";
 import {getGameLesson} from "@/lib/game/lessons";
 import {createClient} from "@/lib/supabase/client";
 
@@ -31,8 +38,14 @@ type LaptopScreenApi = {
   setError: (message: string | null) => void;
   setLoading: (loading: boolean) => void;
   setMusicState: (state: {muted: boolean; selectedMusicId: MusicOptionId}) => void;
+  setPipelineState: (state: LaptopPipelineState) => void;
   setTab: (tab: LaptopTab) => void;
   updateUser: (user: CurrentUser | null) => void;
+};
+type LaptopPipelineState = {
+  error: string | null;
+  loading: boolean;
+  run: GameWorksheetRunSnapshot | null;
 };
 type PomodoroState = {
   endsAt: number | null;
@@ -139,6 +152,15 @@ const PHONE_FOCUS_QUOTES = [
   {author: "James Clear", text: "You do not rise to your goals. You fall to your systems."},
   {author: "Cal Newport", text: "Clarity about what matters provides clarity about what does not."}
 ];
+const GAME_LESSON_TEMPLATE_ID = "volume-cubes-lesson-1";
+const GAME_LESSON_STAGES: Array<{label: string; stage: GameLessonStage}> = [
+  {stage: "template", label: "Template"},
+  {stage: "section_script", label: "Section script"},
+  {stage: "speech_markup", label: "Speech markup"},
+  {stage: "narration", label: "Narration"},
+  {stage: "handwriting", label: "Handwriting"},
+  {stage: "interactive_bundle", label: "Interactive bundle"}
+];
 
 export function GameShell({
   initialLoginError,
@@ -159,6 +181,7 @@ export function GameShell({
   const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
   const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
   const musicMutedRef = useRef(readMusicState().muted);
+  const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
   const [lockedMessage, setLockedMessage] = useState(false);
   const [started, setStarted] = useState(false);
@@ -174,6 +197,9 @@ export function GameShell({
   const [pomodoroNow, setPomodoroNow] = useState(() => Date.now());
   const [selectedMusicId, setSelectedMusicId] = useState<MusicOptionId>(() => readMusicState().selectedMusicId);
   const [musicMuted, setMusicMuted] = useState(() => readMusicState().muted);
+  const [gameRun, setGameRun] = useState<GameWorksheetRunSnapshot | null>(null);
+  const [gamePipelineLoading, setGamePipelineLoading] = useState(false);
+  const [gamePipelineError, setGamePipelineError] = useState<string | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [sceneEditorHud, setSceneEditorHud] = useState<string | null>(null);
   const selectedLesson = selectedLessonId ? getGameLesson(selectedLessonId) : null;
@@ -184,6 +210,7 @@ export function GameShell({
   pomodoroRef.current = pomodoro;
   selectedMusicRef.current = selectedMusicId;
   musicMutedRef.current = musicMuted;
+  gameRunRef.current = gameRun;
 
   function updateFocusMode(mode: FocusMode) {
     focusModeRef.current = mode;
@@ -222,6 +249,8 @@ export function GameShell({
     setLoginError(null);
     setUser(nextUser);
     laptopScreenRef.current?.updateUser(nextUser);
+    setGamePipelineError(null);
+    laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, run: gameRunRef.current});
   }
 
   async function signOutFromLaptop() {
@@ -230,7 +259,10 @@ export function GameShell({
     window.localStorage.removeItem(POMODORO_STORAGE_KEY);
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
+    setGameRun(null);
+    setGamePipelineError(null);
     laptopScreenRef.current?.updateUser(null);
+    laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: null});
   }
 
   function setPomodoroMinutes(minutes: number) {
@@ -285,6 +317,74 @@ export function GameShell({
   function handleLaptopLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void signInFromLaptop(new FormData(event.currentTarget));
+  }
+
+  async function getLaptopAccessToken() {
+    const supabase = createClient();
+    const {
+      data: {session}
+    } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error("Login on the laptop to start this lesson.");
+    }
+    return session.access_token;
+  }
+
+  async function prepareGameLessonRun(params: {forceTemplate?: boolean} = {}) {
+    setGamePipelineLoading(true);
+    setGamePipelineError(null);
+    laptopScreenRef.current?.setPipelineState({error: null, loading: true, run: gameRunRef.current});
+    try {
+      const accessToken = await getLaptopAccessToken();
+      const existingRun = gameRunRef.current;
+      const run =
+        existingRun?.templateId === GAME_LESSON_TEMPLATE_ID
+          ? existingRun
+          : await createGameLessonRun({
+              accessToken,
+              selectedInstructorId: null,
+              templateId: GAME_LESSON_TEMPLATE_ID
+            });
+      const snapshot = await runGameLessonStage({
+        accessToken,
+        force: params.forceTemplate ?? false,
+        runId: run.id,
+        stage: "template"
+      });
+      setGameRun(snapshot);
+      laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
+      return snapshot;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not start the worksheet run.";
+      setGamePipelineError(message);
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      throw error;
+    } finally {
+      setGamePipelineLoading(false);
+    }
+  }
+
+  function startGameLesson(choiceId: GameLessonId, texture: Texture | null) {
+    if (!userRef.current) {
+      setLockedMessage(true);
+      setSelectedLessonId(null);
+      setGamePipelineError("Login on the laptop to start this lesson.");
+      laptopScreenRef.current?.setTab("pipeline");
+      laptopScreenRef.current?.setPipelineState({
+        error: "Login on the laptop to start this lesson.",
+        loading: false,
+        run: gameRunRef.current
+      });
+      refreshPaperTexture(texture, null, choiceId);
+      return;
+    }
+    setLockedMessage(false);
+    setSelectedLessonId(choiceId);
+    refreshPaperTexture(texture, choiceId, choiceId);
+    changeLaptopTab("pipeline");
+    void prepareGameLessonRun().catch(() => {
+      // The laptop pipeline tab carries the actionable error for the user.
+    });
   }
 
   useEffect(() => {
@@ -537,6 +637,11 @@ export function GameShell({
       const laptop = createDeskLaptop(THREE);
       const laptopScreen = createLaptopScreen(CSS3DObject, {
         error: loginError,
+        onCreateRun: () => {
+          void prepareGameLessonRun().catch(() => {
+            // The laptop pipeline tab renders the failure inline.
+          });
+        },
         musicMuted: musicMutedRef.current,
         onSignIn: signInFromLaptop,
         onSignOut: signOutFromLaptop,
@@ -545,6 +650,7 @@ export function GameShell({
         onTabChange: setLaptopTab,
         origin: window.location.origin,
         selectedMusicId: selectedMusicRef.current,
+        pipeline: {error: gamePipelineError, loading: gamePipelineLoading, run: gameRunRef.current},
         tab: laptopTab,
         user: userRef.current
       });
@@ -736,9 +842,7 @@ export function GameShell({
           refreshPaperTexture(paperTexture, null, choice.id);
           return;
         }
-        setLockedMessage(false);
-        setSelectedLessonId(choice.id);
-        refreshPaperTexture(paperTexture, choice.id, choice.id);
+        startGameLesson(choice.id, paperTexture);
       }
 
       renderer.domElement.addEventListener("pointermove", updatePointer);
@@ -1004,7 +1108,7 @@ export function GameShell({
 
       {lockedMessage ? (
         <div className="pointer-events-none absolute bottom-6 left-1/2 w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 rounded border border-amber-300/40 bg-[#211307]/85 px-4 py-3 text-sm text-amber-50 shadow-2xl backdrop-blur-md">
-          Lesson 2 is locked while the generated worksheet pipeline is being designed.
+          {user ? "Lesson 2 is locked while the generated worksheet pipeline is being designed." : "Login on the laptop to start this lesson."}
         </div>
       ) : null}
 
@@ -1030,6 +1134,12 @@ export function GameShell({
       {focusedMode === "laptop" ? (
         <LaptopFocusPanel
           error={loginError}
+          onCreateRun={() => {
+            void prepareGameLessonRun().catch(() => {
+              // The focused laptop tab renders the failure inline.
+            });
+          }}
+          pipeline={{error: gamePipelineError, loading: gamePipelineLoading, run: gameRun}}
           loading={laptopLoginLoading}
           musicMuted={musicMuted}
           onSignIn={handleLaptopLoginSubmit}
@@ -1133,24 +1243,28 @@ function LaptopFocusPanel({
   error,
   loading,
   musicMuted,
+  onCreateRun,
   onSignIn,
   onSignOut,
   onMusicChange,
   onMusicMutedChange,
   onTabChange,
   selectedMusicId,
+  pipeline,
   tab,
   user
 }: {
   error: string | null;
   loading: boolean;
   musicMuted: boolean;
+  onCreateRun: () => void;
   onSignIn: (event: FormEvent<HTMLFormElement>) => void;
   onSignOut: () => void;
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
   onTabChange: (tab: LaptopTab) => void;
   selectedMusicId: MusicOptionId;
+  pipeline: LaptopPipelineState;
   tab: LaptopTab;
   user: CurrentUser | null;
 }) {
@@ -1254,33 +1368,9 @@ function LaptopFocusPanel({
                   </button>
                 </div>
               ) : tab === "pipeline" ? (
-                <div className="grid h-full content-start gap-4 rounded-2xl border border-emerald-200/15 bg-[#050b10] p-6">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/65">worksheet pipeline</p>
-                    <h2 className="mt-3 text-2xl font-black text-zinc-50">Lesson run not started</h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                      Click Lesson 1 on the paper to create the signed-in worksheet run. Script, speech markup, narration, and handwriting artifacts will appear here.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-4 gap-3">
-                    {["template", "script", "speech_markup", "narration"].map((stage) => (
-                      <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4" key={stage}>
-                        <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">{stage}</p>
-                        <p className="mt-3 text-sm font-semibold text-zinc-300">pending</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <FocusedPipelinePanel onCreateRun={onCreateRun} pipeline={pipeline} />
               ) : tab === "costs" ? (
-                <div className="grid h-full content-start gap-4 rounded-2xl border border-cyan-200/15 bg-[#050b10] p-6">
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/65">game costs</p>
-                    <h2 className="mt-3 text-2xl font-black text-zinc-50">$0.00</h2>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-                      Game worksheet costs are tracked separately from the quadratic video pipeline and will populate after paid lesson stages run.
-                    </p>
-                  </div>
-                </div>
+                <FocusedCostsPanel pipeline={pipeline} />
               ) : tab === "settings" ? (
                 <div className="grid max-w-xl gap-5">
                   <div>
@@ -1309,6 +1399,121 @@ function LaptopFocusPanel({
       </div>
     </div>
   );
+}
+
+function FocusedPipelinePanel({
+  onCreateRun,
+  pipeline
+}: {
+  onCreateRun: () => void;
+  pipeline: LaptopPipelineState;
+}) {
+  return (
+    <div className="grid h-full content-start gap-4 overflow-auto rounded-2xl border border-emerald-200/15 bg-[#050b10] p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/65">worksheet pipeline</p>
+          <h2 className="mt-3 text-2xl font-black text-zinc-50">{pipeline.run ? pipeline.run.templateTitle : "Lesson run not started"}</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+            {pipeline.run
+              ? `Run ${shortRunId(pipeline.run.id)} is ready for the approval-gated worksheet pipeline.`
+              : "Click Lesson 1 on the paper to create the signed-in worksheet run. Script, speech markup, narration, and handwriting artifacts will appear here."}
+          </p>
+        </div>
+        <button
+          className="rounded-lg border border-emerald-300/55 bg-emerald-950/45 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/50 disabled:cursor-wait disabled:opacity-60"
+          disabled={pipeline.loading}
+          onClick={onCreateRun}
+          type="button"
+        >
+          {pipeline.loading ? "Starting" : pipeline.run ? "Refresh template" : "Create run"}
+        </button>
+      </div>
+      {pipeline.error ? (
+        <div className="rounded-lg border border-red-400/40 bg-red-950/35 px-3 py-2 text-sm text-red-100">{pipeline.error}</div>
+      ) : null}
+      <div className="grid grid-cols-3 gap-3">
+        {GAME_LESSON_STAGES.map(({label, stage}) => {
+          const artifact = artifactForStage(pipeline.run, stage);
+          return (
+            <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4" key={stage}>
+              <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
+              <p className={`mt-3 text-sm font-semibold ${statusTextClass(artifact?.status)}`}>{artifact?.status ?? (stage === "template" ? "ready" : "waiting")}</p>
+              {artifact?.summary ? <p className="mt-2 line-clamp-3 text-xs leading-5 text-zinc-500">{artifact.summary}</p> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FocusedCostsPanel({pipeline}: {pipeline: LaptopPipelineState}) {
+  return (
+    <div className="grid h-full content-start gap-4 rounded-2xl border border-cyan-200/15 bg-[#050b10] p-6">
+      <div>
+        <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/65">game costs</p>
+        <h2 className="mt-3 text-2xl font-black text-zinc-50">$0.00</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+          Game worksheet costs are tracked separately from the quadratic video pipeline. The template stage is deterministic and free; OpenAI and ElevenLabs usage will appear here after those stages are implemented.
+        </p>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4">
+          <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Current run</p>
+          <p className="mt-3 text-sm font-semibold text-zinc-300">{pipeline.run ? shortRunId(pipeline.run.id) : "none"}</p>
+        </div>
+        <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4">
+          <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Paid events</p>
+          <p className="mt-3 text-sm font-semibold text-zinc-300">0</p>
+        </div>
+        <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4">
+          <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">Scope</p>
+          <p className="mt-3 text-sm font-semibold text-zinc-300">game only</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function artifactForStage(run: GameWorksheetRunSnapshot | null, stage: GameLessonStage): GameLessonArtifact | null {
+  return run?.artifacts.find((artifact) => artifact.stage === stage && artifact.isCurrent) ?? null;
+}
+
+function shortRunId(id: string) {
+  return id.slice(0, 8);
+}
+
+function statusTextClass(status?: string) {
+  if (status === "completed" || status === "approved") {
+    return "text-emerald-200";
+  }
+  if (status === "failed" || status === "rejected") {
+    return "text-red-200";
+  }
+  if (status === "stale") {
+    return "text-amber-200";
+  }
+  if (status === "running") {
+    return "text-cyan-200";
+  }
+  return "text-zinc-300";
+}
+
+function statusColor(status?: string) {
+  if (status === "completed" || status === "approved") {
+    return "#a7f3d0";
+  }
+  if (status === "failed" || status === "rejected") {
+    return "#fecaca";
+  }
+  if (status === "stale") {
+    return "#fde68a";
+  }
+  if (status === "running") {
+    return "#a5f3fc";
+  }
+  return "#d4d4d8";
 }
 
 function usernameToAuthEmail(username: string) {
@@ -2149,12 +2354,14 @@ function createLaptopScreen(
   options: {
     error: string | null;
     musicMuted: boolean;
+    onCreateRun: () => void;
     onSignIn: (formData: FormData) => Promise<void>;
     onSignOut: () => Promise<void>;
     onMusicChange: (selectedMusicId: MusicOptionId) => void;
     onMusicMutedChange: (muted: boolean) => void;
     onTabChange: (tab: LaptopTab) => void;
     origin: string;
+    pipeline: LaptopPipelineState;
     selectedMusicId: MusicOptionId;
     tab: LaptopTab;
     user: CurrentUser | null;
@@ -2186,6 +2393,7 @@ function createLaptopScreen(
   let currentError = options.error;
   let currentMusicId = options.selectedMusicId;
   let currentMusicMuted = options.musicMuted;
+  let currentPipeline = options.pipeline;
   let loading = false;
 
   function refreshMusicSource() {
@@ -2202,6 +2410,7 @@ function createLaptopScreen(
       iframe,
       musicMuted: currentMusicMuted,
       onSignOut: options.onSignOut,
+      onCreateRun: options.onCreateRun,
       onMusicChange: (selectedMusicId) => {
         currentMusicId = selectedMusicId;
         refreshMusicSource();
@@ -2220,6 +2429,7 @@ function createLaptopScreen(
         options.onTabChange(tab);
       },
       selectedMusicId: currentMusicId,
+      pipeline: currentPipeline,
       tab: currentTab,
       user: currentUser
     }));
@@ -2245,6 +2455,10 @@ function createLaptopScreen(
         currentMusicId = state.selectedMusicId;
         currentMusicMuted = state.muted;
         refreshMusicSource();
+        render();
+      },
+      setPipelineState(state: LaptopPipelineState) {
+        currentPipeline = state;
         render();
       },
       setTab(tab: LaptopTab) {
@@ -2363,16 +2577,123 @@ function createLaptopSectionLabel(text: string) {
   return label;
 }
 
-function renderLaptopPlaceholder(title: string, detail: string) {
-  const placeholder = document.createElement("div");
-  placeholder.style.height = "100%";
-  placeholder.style.display = "grid";
-  placeholder.style.placeItems = "center";
-  placeholder.style.border = "1px solid rgba(127,255,230,.18)";
-  placeholder.style.borderRadius = "16px";
-  placeholder.style.background = "rgba(2,7,18,0.52)";
-  placeholder.innerHTML = `<div style="max-width:560px;text-align:center"><div style="font-size:24px;font-weight:900;color:#f4fff9">${escapeHtml(title)}</div><div style="margin-top:10px;font-size:13px;line-height:1.6;color:rgba(212,212,216,.62)">${escapeHtml(detail)}</div></div>`;
-  return placeholder;
+function renderLaptopPipeline({
+  onCreateRun,
+  pipeline
+}: {
+  onCreateRun: () => void;
+  pipeline: LaptopPipelineState;
+}) {
+  const wrap = document.createElement("div");
+  wrap.style.height = "100%";
+  wrap.style.overflow = "auto";
+  wrap.style.display = "grid";
+  wrap.style.alignContent = "start";
+  wrap.style.gap = "14px";
+  wrap.style.border = "1px solid rgba(127,255,230,.18)";
+  wrap.style.borderRadius = "16px";
+  wrap.style.background = "rgba(2,7,18,0.52)";
+  wrap.style.padding = "18px";
+
+  const header = document.createElement("div");
+  header.style.display = "flex";
+  header.style.alignItems = "start";
+  header.style.justifyContent = "space-between";
+  header.style.gap = "18px";
+  const copy = document.createElement("div");
+  copy.innerHTML = `
+    <div style="font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(167,243,208,.72)">worksheet pipeline</div>
+    <div style="margin-top:10px;font-size:23px;font-weight:900;color:#f4fff9">${escapeHtml(pipeline.run?.templateTitle ?? "Lesson run not started")}</div>
+    <div style="margin-top:8px;max-width:610px;font-size:13px;line-height:1.55;color:rgba(212,212,216,.62)">${
+      pipeline.run
+        ? `Run ${escapeHtml(shortRunId(pipeline.run.id))} is ready for approval-gated worksheet generation.`
+        : "Click Lesson 1 on the paper to create the signed-in worksheet run."
+    }</div>
+  `;
+  const action = document.createElement("button");
+  action.type = "button";
+  action.textContent = pipeline.loading ? "STARTING" : pipeline.run ? "REFRESH TEMPLATE" : "CREATE RUN";
+  action.disabled = pipeline.loading;
+  action.style.border = "1px solid rgba(52,211,153,0.62)";
+  action.style.background = "rgba(6,78,59,0.48)";
+  action.style.color = "#a7f3d0";
+  action.style.borderRadius = "10px";
+  action.style.padding = "11px 13px";
+  action.style.fontWeight = "900";
+  action.style.fontSize = "11px";
+  action.style.letterSpacing = ".08em";
+  action.addEventListener("pointerdown", (event) => event.stopPropagation());
+  action.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onCreateRun();
+  });
+  header.append(copy, action);
+  wrap.append(header);
+
+  if (pipeline.error) {
+    const error = document.createElement("div");
+    error.textContent = pipeline.error;
+    error.style.border = "1px solid rgba(248,113,113,0.42)";
+    error.style.background = "rgba(127,29,29,0.36)";
+    error.style.color = "#fecaca";
+    error.style.borderRadius = "10px";
+    error.style.padding = "10px 12px";
+    error.style.fontSize = "12px";
+    wrap.append(error);
+  }
+
+  const grid = document.createElement("div");
+  grid.style.display = "grid";
+  grid.style.gridTemplateColumns = "repeat(3, minmax(0, 1fr))";
+  grid.style.gap = "10px";
+  for (const {label, stage} of GAME_LESSON_STAGES) {
+    const artifact = artifactForStage(pipeline.run, stage);
+    const card = document.createElement("div");
+    card.style.minHeight = "92px";
+    card.style.border = "1px solid rgba(63,63,70,0.86)";
+    card.style.background = "rgba(2,7,18,0.55)";
+    card.style.borderRadius = "10px";
+    card.style.padding = "12px";
+    const status = artifact?.status ?? (stage === "template" ? "ready" : "waiting");
+    card.innerHTML = `
+      <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">${escapeHtml(label)}</div>
+      <div style="margin-top:12px;font-size:13px;font-weight:800;color:${statusColor(status)}">${escapeHtml(status)}</div>
+      ${
+        artifact?.summary
+          ? `<div style="margin-top:8px;font-size:11px;line-height:1.45;color:rgba(161,161,170,.76)">${escapeHtml(artifact.summary)}</div>`
+          : ""
+      }
+    `;
+    grid.append(card);
+  }
+  wrap.append(grid);
+  return wrap;
+}
+
+function renderLaptopCosts(pipeline: LaptopPipelineState) {
+  const wrap = document.createElement("div");
+  wrap.style.height = "100%";
+  wrap.style.display = "grid";
+  wrap.style.alignContent = "start";
+  wrap.style.gap = "16px";
+  wrap.style.border = "1px solid rgba(103,232,249,.17)";
+  wrap.style.borderRadius = "16px";
+  wrap.style.background = "rgba(2,7,18,0.52)";
+  wrap.style.padding = "20px";
+  wrap.innerHTML = `
+    <div>
+      <div style="font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:rgba(165,243,252,.7)">game costs</div>
+      <div style="margin-top:10px;font-size:25px;font-weight:900;color:#f4fff9">$0.00</div>
+      <div style="margin-top:8px;max-width:680px;font-size:13px;line-height:1.55;color:rgba(212,212,216,.62)">Game worksheet costs are tracked separately from quadratic video generation. The deterministic template stage is free; paid LLM and ElevenLabs events will populate here in the next pipeline slice.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+      <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Current run</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">${escapeHtml(pipeline.run ? shortRunId(pipeline.run.id) : "none")}</div></div>
+      <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Paid events</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">0</div></div>
+      <div style="border:1px solid rgba(63,63,70,.86);background:rgba(2,7,18,.55);border-radius:10px;padding:12px"><div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(161,161,170,.7)">Scope</div><div style="margin-top:12px;font-size:13px;font-weight:800;color:#d4d4d8">game only</div></div>
+    </div>
+  `;
+  return wrap;
 }
 
 function musicEmbedUrl(selectedMusicId: MusicOptionId, muted: boolean, origin: string) {
@@ -2397,20 +2718,24 @@ function musicLabel(selectedMusicId: MusicOptionId) {
 function renderLaptopBrowser({
   iframe,
   musicMuted,
+  onCreateRun,
   onMusicChange,
   onMusicMutedChange,
   onSignOut,
   onTabChange,
+  pipeline,
   selectedMusicId,
   tab,
   user
 }: {
   iframe: HTMLIFrameElement;
   musicMuted: boolean;
+  onCreateRun: () => void;
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
   onSignOut: () => Promise<void>;
   onTabChange: (tab: LaptopTab) => void;
+  pipeline: LaptopPipelineState;
   selectedMusicId: MusicOptionId;
   tab: LaptopTab;
   user: CurrentUser;
@@ -2514,9 +2839,9 @@ function renderLaptopBrowser({
     player.append(iframe);
     body.append(controls, player);
   } else if (tab === "pipeline") {
-    body.append(renderLaptopPlaceholder("Worksheet pipeline", "Click Lesson 1 on the paper to start a signed-in pipeline run."));
+    body.append(renderLaptopPipeline({onCreateRun, pipeline}));
   } else if (tab === "costs") {
-    body.append(renderLaptopPlaceholder("Game costs", "Usage for worksheet lessons is tracked separately from quadratic video generation."));
+    body.append(renderLaptopCosts(pipeline));
   } else if (tab === "settings") {
     body.innerHTML = `<div style="display:grid;gap:18px;max-width:520px"><div><div style="font-size:24px;font-weight:900;color:#f4fff9">Settings</div><div style="margin-top:6px;color:rgba(212,212,216,.62)">Signed in as ${escapeHtml(accountDisplayName(user))}</div></div></div>`;
     const button = document.createElement("button");

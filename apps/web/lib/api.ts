@@ -104,6 +104,101 @@ export type PublicLatestRenderVideosResponse = {
   videos: PublicLatestRenderVideo[];
 };
 
+export type GameLessonStage =
+  | "template"
+  | "section_script"
+  | "speech_markup"
+  | "narration"
+  | "handwriting"
+  | "interactive_bundle";
+
+export type GameLessonArtifactStatus = "pending" | "running" | "completed" | "failed" | "stale" | "approved" | "rejected";
+
+export type GameLessonArtifact = {
+  id: string;
+  runId: string;
+  stage: GameLessonStage;
+  status: GameLessonArtifactStatus;
+  version: number;
+  payload: Record<string, unknown>;
+  summary: string | null;
+  errorMessage: string | null;
+  isCurrent: boolean;
+  staleReason: string | null;
+  providerName: string | null;
+  modelName: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+export type GameWorksheetRunSnapshot = {
+  id: string;
+  templateId: string;
+  userId: string;
+  selectedInstructorId: string | null;
+  status: "created" | "running" | "completed" | "failed";
+  templateTitle: string;
+  createdAt: string;
+  updatedAt: string;
+  artifacts: GameLessonArtifact[];
+};
+
+export async function createGameLessonRun(params: {
+  accessToken: string;
+  selectedInstructorId?: string | null;
+  templateId: string;
+}): Promise<GameWorksheetRunSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/game/lessons/${params.templateId}/runs`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({selectedInstructorId: params.selectedInstructorId ?? null})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not create the worksheet run");
+  }
+  return response.json() as Promise<GameWorksheetRunSnapshot>;
+}
+
+export async function getGameLessonRun(params: {
+  accessToken: string;
+  runId: string;
+}): Promise<GameWorksheetRunSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/game/lesson-runs/${params.runId}`, {
+    headers: {Authorization: `Bearer ${params.accessToken}`},
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not load the worksheet run");
+  }
+  return response.json() as Promise<GameWorksheetRunSnapshot>;
+}
+
+export async function runGameLessonStage(params: {
+  accessToken: string;
+  force?: boolean;
+  runId: string;
+  stage: GameLessonStage;
+}): Promise<GameWorksheetRunSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/game/lesson-runs/${params.runId}/stages/${params.stage}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({force: params.force ?? false})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? `Could not run ${params.stage}`);
+  }
+  return response.json() as Promise<GameWorksheetRunSnapshot>;
+}
+
 export async function getLatestGenerationVideos(accessToken: string): Promise<LatestGenerationVideosResponse> {
   const response = await fetch(`${apiUrl}/api/v1/generations/latest/videos`, {
     headers: {Authorization: `Bearer ${accessToken}`},
