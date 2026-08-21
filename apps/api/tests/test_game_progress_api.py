@@ -130,7 +130,11 @@ async def test_game_progress_persists_reward_and_easter_metadata(authenticated_c
     )
     egg = await authenticated_client.put(
         "/api/v1/game/me/progress",
-        json={"action": "claim_easter_egg", "lessonId": "volume-cubes-lesson-1", "easterEggId": "lesson_1_phone_reward"},
+        json={
+            "action": "claim_easter_egg",
+            "lessonId": "volume-cubes-lesson-1",
+            "easterEggId": "lesson_1_phone_reward",
+        },
     )
     cleared = await authenticated_client.put(
         "/api/v1/game/me/progress",
@@ -146,4 +150,6 @@ async def test_game_progress_persists_reward_and_easter_metadata(authenticated_c
     }
     assert cleared.status_code == 200
     assert cleared.json()["lessons"][0]["metadata"]["phoneRewardPending"] is False
-    assert cleared.json()["lessons"][0]["metadata"]["easterEggs"]["discoveredIds"] == ["lesson_1_phone_reward"]
+    assert cleared.json()["lessons"][0]["metadata"]["easterEggs"]["discoveredIds"] == [
+        "lesson_1_phone_reward"
+    ]

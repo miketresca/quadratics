@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import json
 import base64
+import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Protocol
+from typing import Any, Protocol
 
 from app.services.narration.base import NarrationProvider, NarrationRequest
 from app.services.storage.media_store import MediaStore
@@ -170,7 +171,9 @@ class OpenAIGameLessonStageProvider:
         client: Any | None = None,
     ) -> None:
         if not api_key and client is None:
-            raise GameLessonProviderConfigurationError("OPENAI_API_KEY is required for game lesson generation")
+            raise GameLessonProviderConfigurationError(
+                "OPENAI_API_KEY is required for game lesson generation"
+            )
         self.model = model
         self._input_unit_cost = input_token_cost_per_million_usd / 1_000_000
         self._output_unit_cost = output_token_cost_per_million_usd / 1_000_000
@@ -200,9 +203,9 @@ class OpenAIGameLessonStageProvider:
                     "role": "system",
                     "content": (
                         "Write concise narration for an interactive sixth-grade worksheet lesson. "
-                        "Use only the supplied worksheet template, regions, questions, answers, and "
-                        "fill targets as source material. Do not invent new math, new answers, new "
-                        "sections, or new worksheet IDs. Split narration by the existing major "
+                        "Use only the supplied worksheet template, regions, questions, answers, "
+                        "and fill targets as source material. Do not invent new math, new answers, "
+                        "new sections, or new worksheet IDs. Split narration by the existing major "
                         "sections. The complete lesson should target about three minutes or less."
                     ),
                 },
@@ -248,9 +251,10 @@ class OpenAIGameLessonStageProvider:
                     "role": "system",
                     "content": (
                         "Convert interactive worksheet narration into ElevenLabs-friendly speech. "
-                        "Keep the same section IDs, order, meaning, and approximate duration. Write "
-                        "conversational spoken text, avoid raw math symbols when words are clearer, "
-                        "and use SSML break tags sparingly. Do not add examples or new answers."
+                        "Keep the same section IDs, order, meaning, and approximate duration. "
+                        "Write conversational spoken text, avoid raw math symbols when words are "
+                        "clearer, and use SSML break tags sparingly. Do not add examples or new "
+                        "answers."
                     ),
                 },
                 {"role": "user", "content": json.dumps(section_script_payload)},
@@ -326,7 +330,9 @@ class ElevenLabsGameLessonNarrationProvider:
     ) -> GameLessonProviderResult:
         voice_id = await self._voice_id_resolver(selected_instructor_id)
         if not voice_id:
-            raise GameLessonProviderConfigurationError("Selected instructor does not have an ElevenLabs voice ID")
+            raise GameLessonProviderConfigurationError(
+                "Selected instructor does not have an ElevenLabs voice ID"
+            )
 
         sections: list[dict[str, Any]] = []
         storage_refs: list[dict[str, Any]] = []
@@ -364,7 +370,10 @@ class ElevenLabsGameLessonNarrationProvider:
                 "metadata": reference.metadata,
             }
             storage_refs.append(storage_ref)
-            duration_seconds = round(result.duration_seconds or _estimated_speech_duration_seconds(speech_text), 2)
+            duration_seconds = round(
+                result.duration_seconds or _estimated_speech_duration_seconds(speech_text),
+                2,
+            )
             sections.append(
                 {
                     "sectionId": section_id,
@@ -375,7 +384,9 @@ class ElevenLabsGameLessonNarrationProvider:
                     "durationSeconds": duration_seconds,
                     "startSeconds": round(elapsed_seconds, 2),
                     "endSeconds": round(elapsed_seconds + duration_seconds, 2),
-                    "alignment": _alignment_payload(result.normalized_alignment or result.alignment),
+                    "alignment": _alignment_payload(
+                        result.normalized_alignment or result.alignment
+                    ),
                     "providerMetadata": result.provider_metadata or {},
                 }
             )
@@ -393,7 +404,10 @@ class ElevenLabsGameLessonNarrationProvider:
 
         return GameLessonProviderResult(
             payload={
-                "summary": "ElevenLabs narration audio generated section by section for worksheet playback.",
+                "summary": (
+                    "ElevenLabs narration audio generated section by section "
+                    "for worksheet playback."
+                ),
                 "narrationVersion": 1,
                 "provider": "elevenlabs",
                 "model": self._model_id,

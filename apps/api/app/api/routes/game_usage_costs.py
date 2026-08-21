@@ -36,7 +36,8 @@ async def get_game_usage_events(
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> GameUsageEventsResponse:
     try:
-        return GameUsageEventsResponse(events=await _repository(settings).events(current_user.id, limit=limit))
+        events = await _repository(settings).events(current_user.id, limit=limit)
+        return GameUsageEventsResponse(events=events)
     except GameUsageCostStorageError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

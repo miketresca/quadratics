@@ -39,9 +39,19 @@ class GameProgressRepository(Protocol):
         playback: GameWorksheetPlaybackProgress,
     ) -> GameProgress: ...
 
-    async def set_phone_reward(self, user_id: str, lesson_id: str, pending: bool) -> GameProgress: ...
+    async def set_phone_reward(
+        self,
+        user_id: str,
+        lesson_id: str,
+        pending: bool,
+    ) -> GameProgress: ...
 
-    async def claim_easter_egg(self, user_id: str, lesson_id: str, easter_egg_id: str) -> GameProgress: ...
+    async def claim_easter_egg(
+        self,
+        user_id: str,
+        lesson_id: str,
+        easter_egg_id: str,
+    ) -> GameProgress: ...
 
     async def reset(self, user_id: str) -> GameProgress: ...
 
@@ -117,7 +127,12 @@ class InMemoryGameProgressRepository:
         stored.lessons[lesson_id] = _copy_lesson_progress(current, metadata=metadata)
         return _to_response(stored)
 
-    async def claim_easter_egg(self, user_id: str, lesson_id: str, easter_egg_id: str) -> GameProgress:
+    async def claim_easter_egg(
+        self,
+        user_id: str,
+        lesson_id: str,
+        easter_egg_id: str,
+    ) -> GameProgress:
         _validate_unlocked_lesson(lesson_id)
         stored, current = _ensure_started_lesson(self._users, user_id, lesson_id)
         metadata = _metadata_dict(current)
@@ -216,7 +231,12 @@ class SupabaseGameProgressRepository:
         await self._upsert_lesson_progress(user_id, lesson_id, {"metadata": metadata})
         return await self.get(user_id)
 
-    async def claim_easter_egg(self, user_id: str, lesson_id: str, easter_egg_id: str) -> GameProgress:
+    async def claim_easter_egg(
+        self,
+        user_id: str,
+        lesson_id: str,
+        easter_egg_id: str,
+    ) -> GameProgress:
         _validate_unlocked_lesson(lesson_id)
         current = await self._require_started_lesson(user_id, lesson_id)
         metadata = _metadata_dict(current)
@@ -385,8 +405,13 @@ def _easter_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(value, dict):
         return {"discoveredIds": [], "total": 1}
     discovered = value.get("discoveredIds")
+    discovered_ids = (
+        [item for item in discovered if isinstance(item, str)]
+        if isinstance(discovered, list)
+        else []
+    )
     return {
-        "discoveredIds": [item for item in discovered if isinstance(item, str)] if isinstance(discovered, list) else [],
+        "discoveredIds": discovered_ids,
         "total": 1,
     }
 

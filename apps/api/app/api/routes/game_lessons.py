@@ -14,6 +14,15 @@ from app.schemas.game_lessons import (
     GameWorksheetRunCreateRequest,
     GameWorksheetRunSnapshot,
 )
+from app.services.game_lessons.costs import (
+    InMemoryGameUsageCostRepository,
+    SupabaseGameUsageCostRepository,
+)
+from app.services.game_lessons.providers import (
+    ElevenLabsGameLessonNarrationProvider,
+    GameLessonProviderConfigurationError,
+    OpenAIGameLessonStageProvider,
+)
 from app.services.game_lessons.repository import (
     GameLessonArtifactNotFound,
     GameLessonRepository,
@@ -23,15 +32,6 @@ from app.services.game_lessons.repository import (
     GameLessonTemplateNotFound,
     InMemoryGameLessonRepository,
     SupabaseGameLessonRepository,
-)
-from app.services.game_lessons.costs import (
-    InMemoryGameUsageCostRepository,
-    SupabaseGameUsageCostRepository,
-)
-from app.services.game_lessons.providers import (
-    ElevenLabsGameLessonNarrationProvider,
-    GameLessonProviderConfigurationError,
-    OpenAIGameLessonStageProvider,
 )
 from app.services.storage.media_store import InMemoryMediaStore, SupabaseMediaStore
 
@@ -54,7 +54,10 @@ async def create_game_lesson_run(
     except GameLessonTemplateNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except GameLessonProviderConfigurationError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except GameLessonStorageError as exc:
         raise _storage_http_error(exc) from exc
 
@@ -70,7 +73,10 @@ async def get_game_lesson_run(
     except GameLessonRunNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except GameLessonProviderConfigurationError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except GameLessonStorageError as exc:
         raise _storage_http_error(exc) from exc
 
@@ -101,7 +107,10 @@ async def run_game_lesson_stage(
         )
         raise HTTPException(status_code=status_code, detail=message) from exc
     except GameLessonProviderConfigurationError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except GameLessonStorageError as exc:
         raise _storage_http_error(exc) from exc
 
@@ -122,7 +131,10 @@ async def approve_game_lesson_artifact(
     except GameLessonStageBlocked as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except GameLessonProviderConfigurationError as exc:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
     except GameLessonStorageError as exc:
         raise _storage_http_error(exc) from exc
 
@@ -151,7 +163,9 @@ def _stage_provider(settings: Settings) -> OpenAIGameLessonStageProvider | None:
     )
 
 
-def _usage_repository(settings: Settings) -> InMemoryGameUsageCostRepository | SupabaseGameUsageCostRepository:
+def _usage_repository(
+    settings: Settings,
+) -> InMemoryGameUsageCostRepository | SupabaseGameUsageCostRepository:
     if settings.supabase_url and settings.supabase_service_role_key:
         return SupabaseGameUsageCostRepository(settings)
     return _fallback_game_usage_costs

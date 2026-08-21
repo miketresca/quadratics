@@ -218,7 +218,9 @@ def _summary_from_events(
     for event in events:
         if event.run_id is None or event.run_id not in completed_run_ids:
             continue
-        completed_run_costs[event.run_id] = completed_run_costs.get(event.run_id, 0) + event.total_cost_usd
+        completed_run_costs[event.run_id] = (
+            completed_run_costs.get(event.run_id, 0) + event.total_cost_usd
+        )
     average = (
         sum(completed_run_costs.values()) / len(completed_run_costs)
         if completed_run_costs
@@ -296,4 +298,6 @@ def _event_from_row(row: dict[str, Any]) -> GameUsageCostEvent:
 def _raise_for_storage_error(response: httpx.Response) -> None:
     if response.is_success:
         return
-    raise GameUsageCostStorageError(f"Game usage cost storage request failed: {response.status_code}")
+    raise GameUsageCostStorageError(
+        f"Game usage cost storage request failed: {response.status_code}"
+    )
