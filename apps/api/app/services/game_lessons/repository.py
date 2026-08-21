@@ -43,7 +43,6 @@ APPROVED_UPSTREAM_REQUIRED: dict[str, tuple[str, ...]] = {
     "speech_markup": ("section_script",),
     "narration": ("speech_markup",),
 }
-UNIMPLEMENTED_PROVIDER_STAGES = {"narration"}
 _TEMPLATE_COLUMNS = "id,title,version,payload"
 _RUN_COLUMNS = "id,user_id,template_id,selected_instructor_id,status,metadata,created_at,updated_at"
 _ARTIFACT_COLUMNS = (
@@ -197,16 +196,13 @@ class InMemoryGameLessonRepository:
         self._validate_stage(stage)
         if stage != "template":
             self._assert_upstream_ready(run.id, stage)
-            if stage in UNIMPLEMENTED_PROVIDER_STAGES:
-                raise GameLessonStageBlocked(
-                    f"{stage} is not implemented yet; approval-gated provider stages "
-                    "will run in the next pipeline slice."
-                )
         current = self._current_artifact(run.id, stage)
         if current and current.status in ("completed", "approved") and not request.force:
             return self._snapshot(run)
         self._create_artifact(run, stage)
         self._mark_descendants_stale(run.id, stage)
+        if stage == "interactive_bundle":
+            run.status = "completed"
         run.updated_at = _now()
         return self._snapshot(run)
 
@@ -270,6 +266,21 @@ class InMemoryGameLessonRepository:
         if stage == "speech_markup":
             section_script = self._current_artifact(run.id, "section_script")
             return _speech_markup_payload(section_script.payload if section_script else {})
+        if stage == "narration":
+            speech_markup = self._current_artifact(run.id, "speech_markup")
+            return _narration_payload(run, speech_markup.payload if speech_markup else {})
+        if stage == "handwriting":
+            narration = self._current_artifact(run.id, "narration")
+            return _handwriting_payload(template_payload, narration.payload if narration else {})
+        if stage == "interactive_bundle":
+            narration = self._current_artifact(run.id, "narration")
+            handwriting = self._current_artifact(run.id, "handwriting")
+            return _interactive_bundle_payload(
+                run,
+                template_payload,
+                narration.payload if narration else {},
+                handwriting.payload if handwriting else {},
+            )
         return {"stage": stage}
 
     def _assert_upstream_ready(self, run_id: str, stage: str) -> None:
@@ -401,17 +412,13 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         self._validate_stage(stage)
         if stage != "template":
             await self._assert_upstream_ready(run.id, stage)
-            if stage in UNIMPLEMENTED_PROVIDER_STAGES:
-                raise GameLessonStageBlocked(
-                    f"{stage} is not implemented yet; approval-gated provider stages "
-                    "will run in the next pipeline slice."
-                )
         current = await self._current_artifact(run.id, stage)
         if current and current.status in ("completed", "approved") and not request.force:
             return await self._snapshot(run)
         await self._create_artifact(run, stage)
         await self._mark_descendants_stale(run.id, stage)
-        await self._touch_run(run.id)
+        run_status = "completed" if stage == "interactive_bundle" else None
+        await self._touch_run(run.id, status_value=run_status)
         return await self._snapshot(await self._get_run_for_user(user_id, run.id))
 
     async def approve_artifact(
@@ -611,6 +618,21 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         if stage == "speech_markup":
             section_script = await self._current_artifact(run.id, "section_script")
             return _speech_markup_payload(section_script.payload if section_script else {})
+        if stage == "narration":
+            speech_markup = await self._current_artifact(run.id, "speech_markup")
+            return _narration_payload(run, speech_markup.payload if speech_markup else {})
+        if stage == "handwriting":
+            narration = await self._current_artifact(run.id, "narration")
+            return _handwriting_payload(template.payload, narration.payload if narration else {})
+        if stage == "interactive_bundle":
+            narration = await self._current_artifact(run.id, "narration")
+            handwriting = await self._current_artifact(run.id, "handwriting")
+            return _interactive_bundle_payload(
+                run,
+                template.payload,
+                narration.payload if narration else {},
+                handwriting.payload if handwriting else {},
+            )
         return {"stage": stage}
 
     async def _assert_upstream_ready(self, run_id: str, stage: str) -> None:  # type: ignore[override]
@@ -645,13 +667,16 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
                 )
                 _raise_for_storage_error(response)
 
-    async def _touch_run(self, run_id: str) -> None:
+    async def _touch_run(self, run_id: str, *, status_value: str | None = None) -> None:
+        payload: dict[str, Any] = {"updated_at": _now()}
+        if status_value is not None:
+            payload["status"] = status_value
         async with httpx.AsyncClient() as client:
             response = await client.patch(
                 f"{self._base_url}/rest/v1/game_worksheet_runs",
                 headers=self._headers,
                 params={"id": f"eq.{run_id}"},
-                json={"updated_at": _now()},
+                json=payload,
             )
         _raise_for_storage_error(response)
 
@@ -771,6 +796,145 @@ def _speech_markup_payload(section_script_payload: dict[str, Any]) -> dict[str, 
     }
 
 
+def _narration_payload(run: _StoredRun, speech_markup_payload: dict[str, Any]) -> dict[str, Any]:
+    sections = []
+    elapsed_seconds = 0.0
+    for index, section in enumerate(speech_markup_payload.get("sections", []), start=1):
+        if not isinstance(section, dict):
+            continue
+        speech_text = str(section.get("speechText", "")).strip()
+        duration_seconds = _estimated_speech_duration_seconds(speech_text)
+        section_id = str(section.get("sectionId", f"section_{index}"))
+        sections.append(
+            {
+                "sectionId": section_id,
+                "audioMode": "development_preview",
+                "audioUrl": None,
+                "storageRef": None,
+                "speechText": speech_text,
+                "durationSeconds": duration_seconds,
+                "startSeconds": round(elapsed_seconds, 2),
+                "endSeconds": round(elapsed_seconds + duration_seconds, 2),
+                "alignment": _estimated_alignment(speech_text, elapsed_seconds, duration_seconds),
+            }
+        )
+        elapsed_seconds += duration_seconds
+    return {
+        "summary": (
+            "Development narration timeline generated from approved speech markup. "
+            "ElevenLabs audio will replace these preview timings in the provider slice."
+        ),
+        "narrationVersion": 1,
+        "provider": "development",
+        "model": None,
+        "selectedInstructorId": run.selected_instructor_id,
+        "durationSeconds": round(elapsed_seconds, 2),
+        "sections": sections,
+    }
+
+
+def _handwriting_payload(
+    template_payload: dict[str, Any],
+    narration_payload: dict[str, Any],
+) -> dict[str, Any]:
+    narration_sections = {
+        str(section.get("sectionId")): section
+        for section in narration_payload.get("sections", [])
+        if isinstance(section, dict)
+    }
+    actions = []
+    for target in template_payload.get("fillTargets", []):
+        if not isinstance(target, dict):
+            continue
+        section_id = str(target.get("sectionId"))
+        section_timing = narration_sections.get(section_id, {})
+        section_start = float(section_timing.get("startSeconds", 0))
+        section_duration = float(section_timing.get("durationSeconds", 8))
+        section_targets = [
+            candidate
+            for candidate in template_payload.get("fillTargets", [])
+            if isinstance(candidate, dict) and str(candidate.get("sectionId")) == section_id
+        ]
+        target_index = max(_target_index(section_targets, str(target.get("id"))), 0)
+        slot_duration = max(section_duration / max(len(section_targets), 1), 1.25)
+        start_seconds = section_start + target_index * slot_duration
+        text = str(target.get("expectedText", ""))
+        actions.append(
+            {
+                "id": f"write_{target.get('id')}",
+                "type": "write_text",
+                "sectionId": section_id,
+                "pageId": target.get("pageId"),
+                "fillTargetId": target.get("id"),
+                "text": text,
+                "rect": target.get("rect"),
+                "startSeconds": round(start_seconds, 2),
+                "endSeconds": round(
+                    start_seconds + max(min(len(text) * 0.055, slot_duration), 1.0),
+                    2,
+                ),
+                "style": {
+                    "fontFamily": "handwritten_pen",
+                    "inkColor": "#1f4f8f",
+                    "reveal": "left_to_right",
+                },
+            }
+        )
+    return {
+        "summary": (
+            "Deterministic handwriting action plan mapped to worksheet fill targets "
+            "and preview narration timings."
+        ),
+        "handwritingVersion": 1,
+        "actions": actions,
+    }
+
+
+def _interactive_bundle_payload(
+    run: _StoredRun,
+    template_payload: dict[str, Any],
+    narration_payload: dict[str, Any],
+    handwriting_payload: dict[str, Any],
+) -> dict[str, Any]:
+    actions_by_section: dict[str, list[dict[str, Any]]] = {}
+    for action in handwriting_payload.get("actions", []):
+        if isinstance(action, dict):
+            actions_by_section.setdefault(str(action.get("sectionId")), []).append(action)
+    narration_by_section = {
+        str(section.get("sectionId")): section
+        for section in narration_payload.get("sections", [])
+        if isinstance(section, dict)
+    }
+    sections = []
+    for section in template_payload.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        section_id = str(section.get("id"))
+        sections.append(
+            {
+                "sectionId": section_id,
+                "title": section.get("title"),
+                "regionId": section.get("regionId"),
+                "clickTarget": section.get("clickTarget"),
+                "narration": narration_by_section.get(section_id),
+                "handwritingActions": actions_by_section.get(section_id, []),
+                "completionMode": "section_click",
+            }
+        )
+    return {
+        "summary": (
+            "Playable worksheet bundle for the browser. Sections can be clicked to "
+            "play narration and reveal mapped handwriting actions."
+        ),
+        "bundleVersion": 1,
+        "templateId": run.template_id,
+        "selectedInstructorId": run.selected_instructor_id,
+        "pages": template_payload.get("pages", []),
+        "sections": sections,
+        "completedSections": [],
+    }
+
+
 def _section_narration(section_id: str, title: str, answers: list[str]) -> str:
     if section_id == "do_now":
         return (
@@ -798,6 +962,36 @@ def _speech_ready_text(narration: str) -> str:
         sentence.strip() for sentence in narration.replace("\n", " ").split(".") if sentence.strip()
     ]
     return '<break time="0.5s" /> '.join(f"{sentence}." for sentence in sentences)
+
+
+def _estimated_speech_duration_seconds(speech_text: str) -> float:
+    stripped_text = speech_text.replace('<break time="0.5s" />', " ")
+    word_count = len([word for word in stripped_text.split() if word.strip()])
+    break_count = speech_text.count('<break time="0.5s" />')
+    return round(max(word_count / 2.65 + break_count * 0.5, 4.0), 2)
+
+
+def _estimated_alignment(
+    speech_text: str,
+    offset_seconds: float,
+    duration_seconds: float,
+) -> dict[str, list[float]]:
+    character_count = max(len(speech_text), 1)
+    step = duration_seconds / character_count
+    starts = [round(offset_seconds + index * step, 3) for index in range(character_count)]
+    ends = [round(start + step, 3) for start in starts]
+    return {
+        "characters": list(speech_text),
+        "characterStartTimesSeconds": starts,
+        "characterEndTimesSeconds": ends,
+    }
+
+
+def _target_index(section_targets: list[dict[str, Any]], target_id: str) -> int:
+    for index, target in enumerate(section_targets):
+        if str(target.get("id")) == target_id:
+            return index
+    return 0
 
 
 def _questions_by_section(template_payload: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:

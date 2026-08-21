@@ -171,3 +171,95 @@ async def test_game_lesson_runs_speech_markup_after_script_approval():
     markup = next(artifact for artifact in snapshot.artifacts if artifact.stage == "speech_markup")
     assert markup.status == "awaiting_approval"
     assert markup.payload["sections"][0]["speechText"].count('<break time="0.5s" />') >= 1
+
+
+@pytest.mark.asyncio
+async def test_game_lesson_requires_markup_approval_before_narration():
+    repository = InMemoryGameLessonRepository()
+    run = await repository.create_or_get_run(
+        "user-a",
+        "volume-cubes-lesson-1",
+        GameWorksheetRunCreateRequest(),
+    )
+    await repository.run_stage("user-a", run.id, "template", GameLessonRunStageRequest())
+    scripted = await repository.run_stage(
+        "user-a", run.id, "section_script", GameLessonRunStageRequest()
+    )
+    script_artifact = next(
+        artifact for artifact in scripted.artifacts if artifact.stage == "section_script"
+    )
+    await repository.approve_artifact(
+        "user-a",
+        script_artifact.id,
+        GameLessonArtifactApprovalRequest(decision="approved"),
+    )
+    await repository.run_stage("user-a", run.id, "speech_markup", GameLessonRunStageRequest())
+
+    with pytest.raises(GameLessonStageBlocked, match="requires approved speech_markup"):
+        await repository.run_stage("user-a", run.id, "narration", GameLessonRunStageRequest())
+
+
+@pytest.mark.asyncio
+async def test_game_lesson_builds_preview_narration_handwriting_and_bundle():
+    repository = InMemoryGameLessonRepository()
+    run = await repository.create_or_get_run(
+        "user-a",
+        "volume-cubes-lesson-1",
+        GameWorksheetRunCreateRequest(selected_instructor_id="teacher-1"),
+    )
+    await repository.run_stage("user-a", run.id, "template", GameLessonRunStageRequest())
+    scripted = await repository.run_stage(
+        "user-a", run.id, "section_script", GameLessonRunStageRequest()
+    )
+    script_artifact = next(
+        artifact for artifact in scripted.artifacts if artifact.stage == "section_script"
+    )
+    await repository.approve_artifact(
+        "user-a",
+        script_artifact.id,
+        GameLessonArtifactApprovalRequest(decision="approved"),
+    )
+    marked_up = await repository.run_stage(
+        "user-a", run.id, "speech_markup", GameLessonRunStageRequest()
+    )
+    markup_artifact = next(
+        artifact for artifact in marked_up.artifacts if artifact.stage == "speech_markup"
+    )
+    await repository.approve_artifact(
+        "user-a",
+        markup_artifact.id,
+        GameLessonArtifactApprovalRequest(decision="approved"),
+    )
+
+    narrated = await repository.run_stage(
+        "user-a", run.id, "narration", GameLessonRunStageRequest()
+    )
+    narration = next(artifact for artifact in narrated.artifacts if artifact.stage == "narration")
+    assert narration.status == "completed"
+    assert narration.payload["provider"] == "development"
+    assert narration.payload["selectedInstructorId"] == "teacher-1"
+    assert len(narration.payload["sections"]) == 3
+
+    planned = await repository.run_stage(
+        "user-a", run.id, "handwriting", GameLessonRunStageRequest()
+    )
+    handwriting = next(
+        artifact for artifact in planned.artifacts if artifact.stage == "handwriting"
+    )
+    assert handwriting.payload["actions"][0]["type"] == "write_text"
+    assert handwriting.payload["actions"][0]["rect"]["width"] > 0
+
+    bundled = await repository.run_stage(
+        "user-a", run.id, "interactive_bundle", GameLessonRunStageRequest()
+    )
+    bundle = next(
+        artifact for artifact in bundled.artifacts if artifact.stage == "interactive_bundle"
+    )
+    assert bundled.status == "completed"
+    assert bundle.payload["selectedInstructorId"] == "teacher-1"
+    assert [section["sectionId"] for section in bundle.payload["sections"]] == [
+        "do_now",
+        "vocabulary",
+        "guided_practice",
+    ]
+    assert bundle.payload["sections"][0]["handwritingActions"]
