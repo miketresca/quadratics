@@ -19,10 +19,18 @@ type LessonChoice = {
 type SceneTunableName = "laptop" | "clock" | "coffee" | "paper" | "map" | "phone";
 type FocusMode = "room" | "paper" | "laptop" | "clock" | "map" | "phone";
 type InteractiveTarget = "paper" | "laptop" | "clock" | "map" | "phone" | null;
-type LaptopTab = "demo" | "music" | "settings";
+type LaptopTab = "demo" | "pipeline" | "costs" | "music" | "settings";
+type MusicOptionId = "lofi" | "techno" | "classical";
+type MusicOption = {
+  id: MusicOptionId;
+  label: string;
+  subtitle: string;
+  videoId: string;
+};
 type LaptopScreenApi = {
   setError: (message: string | null) => void;
   setLoading: (loading: boolean) => void;
+  setMusicState: (state: {muted: boolean; selectedMusicId: MusicOptionId}) => void;
   setTab: (tab: LaptopTab) => void;
   updateUser: (user: CurrentUser | null) => void;
 };
@@ -65,9 +73,29 @@ const DESK_RIG_Z = -1.18;
 const SEATED_CAMERA_Z = 5.45 + DESK_RIG_Z;
 const WORKSHEET_CANVAS_WIDTH = 1200;
 const WORKSHEET_CANVAS_HEIGHT = 1600;
-const LOFI_GIRL_EMBED_URL =
-  "https://www.youtube.com/embed/0muHFBSiybw?enablejsapi=1&autoplay=1&mute=0&playsinline=1&controls=0&rel=0&modestbranding=1";
+const MUSIC_OPTIONS: MusicOption[] = [
+  {
+    id: "lofi",
+    label: "Lo-Fi Girl",
+    subtitle: "steady study radio",
+    videoId: "0muHFBSiybw"
+  },
+  {
+    id: "techno",
+    label: "Techno",
+    subtitle: "faster work session",
+    videoId: "34H1XIjnfKM"
+  },
+  {
+    id: "classical",
+    label: "Classical",
+    subtitle: "quiet focus",
+    videoId: "y6TZHLAzg5o"
+  }
+];
 const POMODORO_STORAGE_KEY = "quadratics.game.pomodoro.v1";
+const MUSIC_STORAGE_KEY = "quadratics.game.music.v1";
+const ALARM_SOUND_URL = "/game/assets/audio/alarm_sound.wav";
 const ROOM = {
   width: 10.6,
   depth: 9.4,
@@ -128,6 +156,9 @@ export function GameShell({
   const laptopScreenRef = useRef<LaptopScreenApi | null>(null);
   const userRef = useRef<CurrentUser | null>(initialUser);
   const pomodoroRef = useRef<PomodoroState>(initialUser ? readPomodoroState() : {endsAt: null, minutes: 25});
+  const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
+  const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
+  const musicMutedRef = useRef(readMusicState().muted);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
   const [lockedMessage, setLockedMessage] = useState(false);
   const [started, setStarted] = useState(false);
@@ -141,6 +172,8 @@ export function GameShell({
   const [user, setUser] = useState<CurrentUser | null>(initialUser);
   const [pomodoro, setPomodoro] = useState<PomodoroState>(() => initialUser ? readPomodoroState() : {endsAt: null, minutes: 25});
   const [pomodoroNow, setPomodoroNow] = useState(() => Date.now());
+  const [selectedMusicId, setSelectedMusicId] = useState<MusicOptionId>(() => readMusicState().selectedMusicId);
+  const [musicMuted, setMusicMuted] = useState(() => readMusicState().muted);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [sceneEditorHud, setSceneEditorHud] = useState<string | null>(null);
   const selectedLesson = selectedLessonId ? getGameLesson(selectedLessonId) : null;
@@ -149,6 +182,8 @@ export function GameShell({
 
   userRef.current = user;
   pomodoroRef.current = pomodoro;
+  selectedMusicRef.current = selectedMusicId;
+  musicMutedRef.current = musicMuted;
 
   function updateFocusMode(mode: FocusMode) {
     focusModeRef.current = mode;
@@ -221,6 +256,32 @@ export function GameShell({
     laptopScreenRef.current?.setTab(tab);
   }
 
+  function changeMusic(selectedMusicId: MusicOptionId) {
+    const next = {muted: musicMutedRef.current, selectedMusicId};
+    setSelectedMusicId(selectedMusicId);
+    writeMusicState(next);
+    laptopScreenRef.current?.setMusicState(next);
+  }
+
+  function changeMusicMuted(muted: boolean) {
+    const next = {muted, selectedMusicId: selectedMusicRef.current};
+    setMusicMuted(muted);
+    writeMusicState(next);
+    laptopScreenRef.current?.setMusicState(next);
+  }
+
+  function playPomodoroAlarm() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const audio = alarmAudioRef.current ?? new Audio(ALARM_SOUND_URL);
+    alarmAudioRef.current = audio;
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+      // Browsers can block playback without recent user activation; the visual timer state still completes.
+    });
+  }
+
   function handleLaptopLoginSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void signInFromLaptop(new FormData(event.currentTarget));
@@ -241,7 +302,7 @@ export function GameShell({
     let rainStreaks: Mesh[] = [];
     let clockTexture: Texture | null = null;
     let phoneScreenTexture: Texture | null = null;
-    let lofiIframe: HTMLIFrameElement | null = null;
+    let musicIframe: HTMLIFrameElement | null = null;
     let laptopScreenApi: LaptopScreenApi | null = null;
     let hoveredChoiceId: GameLessonId | null = null;
     let phoneQuoteIndex = -1;
@@ -255,15 +316,15 @@ export function GameShell({
     let laptopInteractionTimer: number | null = null;
     let clockPanelTimer: number | null = null;
 
-    function postLofiCommand(command: "playVideo" | "pauseVideo" | "unMute") {
-      lofiIframe?.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args: []}), "https://www.youtube.com");
+    function postMusicCommand(command: "mute" | "pauseVideo" | "playVideo" | "unMute") {
+      musicIframe?.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args: []}), "https://www.youtube.com");
     }
 
     function startExperience() {
       startedRef.current = true;
       setStarted(true);
-      postLofiCommand("playVideo");
-      postLofiCommand("unMute");
+      postMusicCommand("playVideo");
+      postMusicCommand(musicMutedRef.current ? "mute" : "unMute");
       void renderer?.domElement.requestPointerLock();
     }
 
@@ -272,7 +333,7 @@ export function GameShell({
       setStarted(false);
       setFocusMode("room");
       document.exitPointerLock?.();
-      postLofiCommand("pauseVideo");
+      postMusicCommand("pauseVideo");
     }
 
     function setFocusMode(mode: FocusMode) {
@@ -476,16 +537,20 @@ export function GameShell({
       const laptop = createDeskLaptop(THREE);
       const laptopScreen = createLaptopScreen(CSS3DObject, {
         error: loginError,
+        musicMuted: musicMutedRef.current,
         onSignIn: signInFromLaptop,
         onSignOut: signOutFromLaptop,
+        onMusicChange: changeMusic,
+        onMusicMutedChange: changeMusicMuted,
         onTabChange: setLaptopTab,
         origin: window.location.origin,
+        selectedMusicId: selectedMusicRef.current,
         tab: laptopTab,
         user: userRef.current
       });
       laptopScreenApi = laptopScreen.api;
       laptopScreenRef.current = laptopScreen.api;
-      lofiIframe = laptopScreen.iframe;
+      musicIframe = laptopScreen.iframe;
       laptop.add(laptopScreen.object);
       sceneTunables.laptop = laptop;
       deskRig.add(laptop);
@@ -495,6 +560,7 @@ export function GameShell({
         const currentPomodoro = pomodoroRef.current;
         if (currentPomodoro.endsAt !== null && currentPomodoro.endsAt <= now) {
           const next = {endsAt: null, minutes: currentPomodoro.minutes};
+          playPomodoroAlarm();
           setPomodoro(next);
           writePomodoroState(next);
           refreshClockTexture(clockTexture, next);
@@ -703,9 +769,7 @@ export function GameShell({
           if (focusModeRef.current !== "room") {
             event.preventDefault();
             setFocusMode("room");
-            return;
           }
-          document.exitPointerLock?.();
         }
       }
       window.addEventListener("keydown", handleKeyDown);
@@ -908,7 +972,7 @@ export function GameShell({
         <p className="mt-1 text-xs text-amber-50/70">
           {worksheetFocused
             ? "Click a checkbox to choose a lesson. Press Escape to look around."
-            : pointerLocked
+              : pointerLocked
               ? "Look around with the mouse. Center an object and click to focus. Space pauses."
               : "Press Space to resume seated look mode."}
         </p>
@@ -926,7 +990,7 @@ export function GameShell({
 
       {pointerLocked && !worksheetFocused ? (
         <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 rounded border border-white/10 bg-zinc-950/45 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-zinc-300/75 backdrop-blur-sm">
-          Space pauses / Esc exits focus
+          Space pauses / Esc leaves object focus
         </div>
       ) : null}
 
@@ -967,9 +1031,13 @@ export function GameShell({
         <LaptopFocusPanel
           error={loginError}
           loading={laptopLoginLoading}
+          musicMuted={musicMuted}
           onSignIn={handleLaptopLoginSubmit}
           onSignOut={() => void signOutFromLaptop()}
+          onMusicChange={changeMusic}
+          onMusicMutedChange={changeMusicMuted}
           onTabChange={changeLaptopTab}
+          selectedMusicId={selectedMusicId}
           tab={laptopTab}
           user={user}
         />
@@ -1027,7 +1095,7 @@ function ClockFocusPanel({
     <div className="absolute bottom-8 right-8 z-30 w-[min(25rem,calc(100vw-2rem))] rounded border border-cyan-200/25 bg-[#050911]/90 p-4 shadow-2xl shadow-black/70 backdrop-blur-md">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-100/60">Desk timer</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-cyan-100/60">Pomodoro timer</p>
           <h2 className="mt-1 font-mono text-3xl font-bold text-cyan-100 drop-shadow-[0_0_14px_rgba(103,232,249,0.35)]">
             {running ? formatPomodoroClock(remainingMs) : "READY"}
           </h2>
@@ -1064,17 +1132,25 @@ function ClockFocusPanel({
 function LaptopFocusPanel({
   error,
   loading,
+  musicMuted,
   onSignIn,
   onSignOut,
+  onMusicChange,
+  onMusicMutedChange,
   onTabChange,
+  selectedMusicId,
   tab,
   user
 }: {
   error: string | null;
   loading: boolean;
+  musicMuted: boolean;
   onSignIn: (event: FormEvent<HTMLFormElement>) => void;
   onSignOut: () => void;
+  onMusicChange: (selectedMusicId: MusicOptionId) => void;
+  onMusicMutedChange: (muted: boolean) => void;
   onTabChange: (tab: LaptopTab) => void;
+  selectedMusicId: MusicOptionId;
   tab: LaptopTab;
   user: CurrentUser | null;
 }) {
@@ -1130,6 +1206,8 @@ function LaptopFocusPanel({
             <div className="flex items-end gap-2 border-b border-zinc-700/70 bg-[#111318] px-3 pt-2">
               {([
                 ["demo", "Demo"],
+                ["pipeline", "Pipeline"],
+                ["costs", "Costs"],
                 ["music", "Music"],
                 ["settings", "Settings"]
               ] as Array<[LaptopTab, string]>).map(([value, label]) => (
@@ -1146,12 +1224,60 @@ function LaptopFocusPanel({
             </div>
             <div className="min-h-0 bg-gradient-to-br from-[#071018] to-[#090d14] p-5">
               {tab === "music" ? (
-                <div className="grid h-full place-items-center rounded-2xl border border-cyan-200/20 bg-[#020711] text-center shadow-[inset_0_0_54px_rgba(20,184,166,0.12)]">
+                <div className="grid h-full content-center gap-5 rounded-2xl border border-cyan-200/20 bg-[#020711] p-8 shadow-[inset_0_0_54px_rgba(20,184,166,0.12)]">
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/70">single player active</p>
-                    <h2 className="mt-3 text-3xl font-black text-zinc-50">Lo-Fi Girl</h2>
-                    <p className="mt-3 max-w-md text-sm leading-6 text-zinc-400">
-                      Music is routed through the laptop's persistent player so it cannot duplicate when you enter or leave focus.
+                    <h2 className="mt-3 text-3xl font-black text-zinc-50">{musicLabel(selectedMusicId)}</h2>
+                    <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-400">
+                      Pick one stream for the room laptop. The player stays mounted once, so switching focus cannot stack audio.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {MUSIC_OPTIONS.map((option) => (
+                      <button
+                        className={`rounded-xl border px-4 py-4 text-left ${selectedMusicId === option.id ? "border-emerald-300/70 bg-emerald-950/45 text-emerald-100" : "border-zinc-700 bg-zinc-950/50 text-zinc-300 hover:border-cyan-200/35"}`}
+                        key={option.id}
+                        onClick={() => onMusicChange(option.id)}
+                        type="button"
+                      >
+                        <span className="block text-sm font-black">{option.label}</span>
+                        <span className="mt-2 block text-xs text-zinc-500">{option.subtitle}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    className={`w-fit rounded-lg border px-4 py-2 text-sm font-black uppercase tracking-widest ${musicMuted ? "border-zinc-600 bg-zinc-950 text-zinc-400" : "border-cyan-300/50 bg-cyan-950/30 text-cyan-100"}`}
+                    onClick={() => onMusicMutedChange(!musicMuted)}
+                    type="button"
+                  >
+                    {musicMuted ? "Muted" : "Mute"}
+                  </button>
+                </div>
+              ) : tab === "pipeline" ? (
+                <div className="grid h-full content-start gap-4 rounded-2xl border border-emerald-200/15 bg-[#050b10] p-6">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/65">worksheet pipeline</p>
+                    <h2 className="mt-3 text-2xl font-black text-zinc-50">Lesson run not started</h2>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+                      Click Lesson 1 on the paper to create the signed-in worksheet run. Script, speech markup, narration, and handwriting artifacts will appear here.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {["template", "script", "speech_markup", "narration"].map((stage) => (
+                      <div className="rounded border border-zinc-700/80 bg-zinc-950/50 p-4" key={stage}>
+                        <p className="font-mono text-[11px] uppercase tracking-wide text-zinc-500">{stage}</p>
+                        <p className="mt-3 text-sm font-semibold text-zinc-300">pending</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : tab === "costs" ? (
+                <div className="grid h-full content-start gap-4 rounded-2xl border border-cyan-200/15 bg-[#050b10] p-6">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-200/65">game costs</p>
+                    <h2 className="mt-3 text-2xl font-black text-zinc-50">$0.00</h2>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
+                      Game worksheet costs are tracked separately from the quadratic video pipeline and will populate after paid lesson stages run.
                     </p>
                   </div>
                 </div>
@@ -1229,6 +1355,30 @@ function writePomodoroState(state: PomodoroState) {
     return;
   }
   window.localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(state));
+}
+
+function readMusicState(): {muted: boolean; selectedMusicId: MusicOptionId} {
+  if (typeof window === "undefined") {
+    return {muted: false, selectedMusicId: "lofi"};
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(MUSIC_STORAGE_KEY) ?? "null") as Partial<{muted: boolean; selectedMusicId: MusicOptionId}> | null;
+    const storedMusicId = parsed?.selectedMusicId;
+    let selectedMusicId: MusicOptionId = "lofi";
+    if (storedMusicId && MUSIC_OPTIONS.some((option) => option.id === storedMusicId)) {
+      selectedMusicId = storedMusicId;
+    }
+    return {muted: parsed?.muted === true, selectedMusicId};
+  } catch {
+    return {muted: false, selectedMusicId: "lofi"};
+  }
+}
+
+function writeMusicState(state: {muted: boolean; selectedMusicId: MusicOptionId}) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(MUSIC_STORAGE_KEY, JSON.stringify(state));
 }
 
 function formatPomodoroClock(ms: number) {
@@ -1998,10 +2148,14 @@ function createLaptopScreen(
   CSS3DObject: typeof import("three/examples/jsm/renderers/CSS3DRenderer.js").CSS3DObject,
   options: {
     error: string | null;
+    musicMuted: boolean;
     onSignIn: (formData: FormData) => Promise<void>;
     onSignOut: () => Promise<void>;
+    onMusicChange: (selectedMusicId: MusicOptionId) => void;
+    onMusicMutedChange: (muted: boolean) => void;
     onTabChange: (tab: LaptopTab) => void;
     origin: string;
+    selectedMusicId: MusicOptionId;
     tab: LaptopTab;
     user: CurrentUser | null;
   }
@@ -2017,8 +2171,8 @@ function createLaptopScreen(
   screen.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, monospace";
 
   const iframe = document.createElement("iframe");
-  iframe.src = `${LOFI_GIRL_EMBED_URL}&origin=${encodeURIComponent(options.origin)}`;
-  iframe.title = "Lo-Fi Girl livestream";
+  iframe.src = musicEmbedUrl(options.selectedMusicId, options.musicMuted, options.origin);
+  iframe.title = "Study music livestream";
   iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
   iframe.allowFullscreen = true;
   iframe.referrerPolicy = "strict-origin-when-cross-origin";
@@ -2030,7 +2184,13 @@ function createLaptopScreen(
   let currentUser = options.user;
   let currentTab = options.tab;
   let currentError = options.error;
+  let currentMusicId = options.selectedMusicId;
+  let currentMusicMuted = options.musicMuted;
   let loading = false;
+
+  function refreshMusicSource() {
+    iframe.src = musicEmbedUrl(currentMusicId, currentMusicMuted, options.origin);
+  }
 
   function render() {
     screen.replaceChildren();
@@ -2040,12 +2200,26 @@ function createLaptopScreen(
     }
     screen.append(renderLaptopBrowser({
       iframe,
+      musicMuted: currentMusicMuted,
       onSignOut: options.onSignOut,
+      onMusicChange: (selectedMusicId) => {
+        currentMusicId = selectedMusicId;
+        refreshMusicSource();
+        render();
+        options.onMusicChange(selectedMusicId);
+      },
+      onMusicMutedChange: (muted) => {
+        currentMusicMuted = muted;
+        iframe.contentWindow?.postMessage(JSON.stringify({event: "command", func: muted ? "mute" : "unMute", args: []}), "https://www.youtube.com");
+        render();
+        options.onMusicMutedChange(muted);
+      },
       onTabChange: (tab) => {
         currentTab = tab;
         render();
         options.onTabChange(tab);
       },
+      selectedMusicId: currentMusicId,
       tab: currentTab,
       user: currentUser
     }));
@@ -2065,6 +2239,12 @@ function createLaptopScreen(
       },
       setLoading(value: boolean) {
         loading = value;
+        render();
+      },
+      setMusicState(state: {muted: boolean; selectedMusicId: MusicOptionId}) {
+        currentMusicId = state.selectedMusicId;
+        currentMusicMuted = state.muted;
+        refreshMusicSource();
         render();
       },
       setTab(tab: LaptopTab) {
@@ -2173,16 +2353,65 @@ function createLaptopInput(name: string, type: string, labelText: string) {
   return {input, label};
 }
 
+function createLaptopSectionLabel(text: string) {
+  const label = document.createElement("div");
+  label.textContent = text;
+  label.style.fontSize = "11px";
+  label.style.letterSpacing = ".22em";
+  label.style.textTransform = "uppercase";
+  label.style.color = "rgba(167,243,208,0.72)";
+  return label;
+}
+
+function renderLaptopPlaceholder(title: string, detail: string) {
+  const placeholder = document.createElement("div");
+  placeholder.style.height = "100%";
+  placeholder.style.display = "grid";
+  placeholder.style.placeItems = "center";
+  placeholder.style.border = "1px solid rgba(127,255,230,.18)";
+  placeholder.style.borderRadius = "16px";
+  placeholder.style.background = "rgba(2,7,18,0.52)";
+  placeholder.innerHTML = `<div style="max-width:560px;text-align:center"><div style="font-size:24px;font-weight:900;color:#f4fff9">${escapeHtml(title)}</div><div style="margin-top:10px;font-size:13px;line-height:1.6;color:rgba(212,212,216,.62)">${escapeHtml(detail)}</div></div>`;
+  return placeholder;
+}
+
+function musicEmbedUrl(selectedMusicId: MusicOptionId, muted: boolean, origin: string) {
+  const option = MUSIC_OPTIONS.find((candidate) => candidate.id === selectedMusicId) ?? MUSIC_OPTIONS[0];
+  const params = new URLSearchParams({
+    autoplay: "1",
+    controls: "0",
+    enablejsapi: "1",
+    modestbranding: "1",
+    mute: muted ? "1" : "0",
+    origin,
+    playsinline: "1",
+    rel: "0"
+  });
+  return `https://www.youtube.com/embed/${option.videoId}?${params.toString()}`;
+}
+
+function musicLabel(selectedMusicId: MusicOptionId) {
+  return MUSIC_OPTIONS.find((option) => option.id === selectedMusicId)?.label ?? MUSIC_OPTIONS[0].label;
+}
+
 function renderLaptopBrowser({
   iframe,
+  musicMuted,
+  onMusicChange,
+  onMusicMutedChange,
   onSignOut,
   onTabChange,
+  selectedMusicId,
   tab,
   user
 }: {
   iframe: HTMLIFrameElement;
+  musicMuted: boolean;
+  onMusicChange: (selectedMusicId: MusicOptionId) => void;
+  onMusicMutedChange: (muted: boolean) => void;
   onSignOut: () => Promise<void>;
   onTabChange: (tab: LaptopTab) => void;
+  selectedMusicId: MusicOptionId;
   tab: LaptopTab;
   user: CurrentUser;
 }) {
@@ -2201,6 +2430,8 @@ function renderLaptopBrowser({
   tabs.style.background = "#111318";
   for (const item of [
     ["demo", "◼ Demo"],
+    ["pipeline", "▣ Pipeline"],
+    ["costs", "$ Costs"],
     ["music", "▶ Music"],
     ["settings", "⚙ Settings"]
   ] as Array<[LaptopTab, string]>) {
@@ -2233,8 +2464,59 @@ function renderLaptopBrowser({
   body.style.padding = "20px";
   body.style.background = "linear-gradient(135deg,#071018,#090d14)";
   if (tab === "music") {
-    body.style.padding = "0";
-    body.append(iframe);
+    body.style.display = "grid";
+    body.style.gridTemplateColumns = "260px 1fr";
+    body.style.gap = "16px";
+    const controls = document.createElement("div");
+    controls.style.display = "grid";
+    controls.style.alignContent = "start";
+    controls.style.gap = "10px";
+    controls.append(createLaptopSectionLabel("Music"));
+    for (const option of MUSIC_OPTIONS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${option.label} / ${option.subtitle}`;
+      button.style.border = `1px solid ${selectedMusicId === option.id ? "rgba(52,211,153,0.74)" : "rgba(63,63,70,0.9)"}`;
+      button.style.background = selectedMusicId === option.id ? "rgba(6,78,59,0.45)" : "rgba(2,7,18,0.58)";
+      button.style.color = selectedMusicId === option.id ? "#a7f3d0" : "#d4d4d8";
+      button.style.borderRadius = "10px";
+      button.style.padding = "12px";
+      button.style.fontWeight = "800";
+      button.style.textAlign = "left";
+      button.addEventListener("pointerdown", (event) => event.stopPropagation());
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onMusicChange(option.id);
+      });
+      controls.append(button);
+    }
+    const mute = document.createElement("button");
+    mute.type = "button";
+    mute.textContent = musicMuted ? "MUTED" : "MUTE";
+    mute.style.border = "1px solid rgba(34,211,238,0.48)";
+    mute.style.background = musicMuted ? "rgba(24,24,27,0.8)" : "rgba(8,47,73,0.48)";
+    mute.style.color = musicMuted ? "#a1a1aa" : "#cffafe";
+    mute.style.borderRadius = "10px";
+    mute.style.padding = "12px";
+    mute.style.fontWeight = "900";
+    mute.addEventListener("pointerdown", (event) => event.stopPropagation());
+    mute.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onMusicMutedChange(!musicMuted);
+    });
+    controls.append(mute);
+    const player = document.createElement("div");
+    player.style.overflow = "hidden";
+    player.style.border = "1px solid rgba(127,255,230,0.18)";
+    player.style.borderRadius = "14px";
+    player.append(iframe);
+    body.append(controls, player);
+  } else if (tab === "pipeline") {
+    body.append(renderLaptopPlaceholder("Worksheet pipeline", "Click Lesson 1 on the paper to start a signed-in pipeline run."));
+  } else if (tab === "costs") {
+    body.append(renderLaptopPlaceholder("Game costs", "Usage for worksheet lessons is tracked separately from quadratic video generation."));
   } else if (tab === "settings") {
     body.innerHTML = `<div style="display:grid;gap:18px;max-width:520px"><div><div style="font-size:24px;font-weight:900;color:#f4fff9">Settings</div><div style="margin-top:6px;color:rgba(212,212,216,.62)">Signed in as ${escapeHtml(accountDisplayName(user))}</div></div></div>`;
     const button = document.createElement("button");
