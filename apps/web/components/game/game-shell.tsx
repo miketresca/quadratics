@@ -97,7 +97,7 @@ const MUSIC_OPTIONS: MusicOption[] = [
     id: "techno",
     label: "Techno",
     subtitle: "faster work session",
-    videoId: "34H1XIjnfKM"
+    videoId: "G-u5OhIeln4"
   },
   {
     id: "classical",
