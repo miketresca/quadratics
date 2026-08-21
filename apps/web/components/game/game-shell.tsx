@@ -55,7 +55,10 @@ type LaptopPipelineState = {
 };
 type WorksheetRect = {height: number; width: number; x: number; y: number};
 type WorksheetSection = {
+  completionMode?: string;
+  handwritingActions?: WorksheetHandwritingAction[];
   id: string;
+  narration?: WorksheetNarrationSection;
   pageId?: string;
   regionId?: string;
   summary?: string;
@@ -69,6 +72,20 @@ type WorksheetFillTarget = {
   rect: WorksheetRect;
   sectionId?: string;
 };
+type WorksheetHandwritingAction = {
+  endSeconds?: number;
+  fillTargetId?: string;
+  id: string;
+  sectionId?: string;
+  startSeconds?: number;
+  text?: string;
+};
+type WorksheetNarrationSection = {
+  audioUrl?: string | null;
+  durationSeconds?: number;
+  sectionId?: string;
+  speechText?: string;
+};
 type InteractiveWorksheetBundle = {
   fillTargets?: WorksheetFillTarget[];
   pages?: Array<{id: string; pageNumber?: number}>;
@@ -76,6 +93,7 @@ type InteractiveWorksheetBundle = {
 };
 type WorksheetPlaybackState = {
   activeSectionId: string | null;
+  activeSectionStartedAt: number | null;
   completedSectionIds: string[];
   currentPageId: string | null;
   lessonCompletedAt: number | null;
@@ -122,6 +140,7 @@ const WORKSHEET_CANVAS_WIDTH = 1200;
 const WORKSHEET_CANVAS_HEIGHT = 1600;
 const DEFAULT_WORKSHEET_PLAYBACK: WorksheetPlaybackState = {
   activeSectionId: null,
+  activeSectionStartedAt: null,
   completedSectionIds: [],
   currentPageId: null,
   lessonCompletedAt: null
@@ -225,6 +244,9 @@ export function GameShell({
   const userRef = useRef<CurrentUser | null>(initialUser);
   const pomodoroRef = useRef<PomodoroState>(initialUser ? readPomodoroState() : {endsAt: null, minutes: 25});
   const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sectionAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sectionCompletionTimerRef = useRef<number | null>(null);
+  const sectionSpeechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const phoneVibrationAudioRef = useRef<HTMLAudioElement | null>(null);
   const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
   const musicMutedRef = useRef(readMusicState().muted);
@@ -334,6 +356,7 @@ export function GameShell({
     const supabase = createClient();
     await supabase.auth.signOut();
     gamePipelineRequestRef.current += 1;
+    clearSectionPlayback();
     window.localStorage.removeItem(POMODORO_STORAGE_KEY);
     setPhoneRewardSnapshot(false);
     setPomodoro({endsAt: null, minutes: 25});
@@ -462,6 +485,78 @@ export function GameShell({
       writeWorksheetPlaybackState(gameRunRef.current.id, nextPlayback);
     }
     refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, gameRunRef.current, nextPlayback);
+  }
+
+  function clearSectionPlayback() {
+    if (sectionCompletionTimerRef.current !== null) {
+      window.clearTimeout(sectionCompletionTimerRef.current);
+      sectionCompletionTimerRef.current = null;
+    }
+    const audio = sectionAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    sectionAudioRef.current = null;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    sectionSpeechUtteranceRef.current = null;
+  }
+
+  function startWorksheetSectionPlayback(run: GameWorksheetRunSnapshot, sectionId: string) {
+    clearSectionPlayback();
+    const startedAt = Date.now();
+    const durationMs = sectionPlaybackDurationMs(run, sectionId);
+    const nextPlayback: WorksheetPlaybackState = {
+      ...worksheetPlaybackRef.current,
+      activeSectionId: sectionId,
+      activeSectionStartedAt: startedAt,
+      completedSectionIds: worksheetPlaybackRef.current.completedSectionIds.filter((id) => id !== sectionId),
+      lessonCompletedAt: null
+    };
+    setWorksheetPlaybackSnapshot(nextPlayback);
+    playWorksheetSectionNarration(run, sectionId);
+    sectionCompletionTimerRef.current = window.setTimeout(() => {
+      const current = worksheetPlaybackRef.current;
+      if (current.activeSectionId !== sectionId || current.activeSectionStartedAt !== startedAt) {
+        return;
+      }
+      setWorksheetPlaybackSnapshot({
+        ...current,
+        activeSectionId: null,
+        activeSectionStartedAt: null,
+        completedSectionIds: [...new Set([...current.completedSectionIds, sectionId])]
+      });
+    }, durationMs);
+  }
+
+  function playWorksheetSectionNarration(run: GameWorksheetRunSnapshot, sectionId: string) {
+    const narration = worksheetNarrationForSection(run, sectionId);
+    if (!narration?.speechText && !narration?.audioUrl) {
+      return;
+    }
+    if (narration.audioUrl) {
+      const audio = new Audio(narration.audioUrl);
+      sectionAudioRef.current = audio;
+      void audio.play().catch(() => {
+        playWorksheetSpeechPreview(narration.speechText ?? "");
+      });
+      return;
+    }
+    playWorksheetSpeechPreview(narration.speechText ?? "");
+  }
+
+  function playWorksheetSpeechPreview(speechText: string) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window) || !speechText.trim()) {
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(speechText.replaceAll(/<break[^>]*\/>/g, ". "));
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    utterance.volume = musicMutedRef.current ? 0.85 : 0.72;
+    sectionSpeechUtteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
   }
 
   function handleLaptopLoginSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1215,13 +1310,15 @@ export function GameShell({
           const action = worksheetActionAtCanvasPoint(canvasX, canvasY, gameRunRef.current, worksheetPlaybackRef.current);
           if (action?.type === "section") {
             setLockedMessage(false);
-            setWorksheetPlaybackSnapshot(nextPlaybackState(worksheetPlaybackRef.current, action.section.id));
+            startWorksheetSectionPlayback(gameRunRef.current, action.section.id);
             changeLaptopTab("pipeline");
           } else if (action?.type === "next_page") {
             setLockedMessage(false);
-            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeSectionId: null, currentPageId: action.pageId});
+            clearSectionPlayback();
+            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeSectionId: null, activeSectionStartedAt: null, currentPageId: action.pageId});
           } else if (action?.type === "complete_lesson") {
             setLockedMessage(false);
+            clearSectionPlayback();
             const nextPlayback = {...worksheetPlaybackRef.current, lessonCompletedAt: Date.now()};
             setWorksheetPlaybackSnapshot(nextPlayback);
             void updateGameLessonProgress("complete_lesson");
@@ -1404,6 +1501,9 @@ export function GameShell({
         if (deskPen) {
           deskPen.visible = !worksheetFocusedRef.current;
         }
+        if (worksheetPlaybackRef.current.activeSectionId && selectedLessonIdRef.current === GAME_LESSON_TEMPLATE_ID) {
+          refreshPaperTexture(paperTexture, selectedLessonIdRef.current, null, gameRunRef.current, worksheetPlaybackRef.current);
+        }
         if (steamGroup) {
           const elapsed = performance.now() / 1000;
           for (const [index, child] of steamGroup.children.entries()) {
@@ -1436,6 +1536,7 @@ export function GameShell({
       if (animationFrame !== null) {
         cancelAnimationFrame(animationFrame);
       }
+      clearSectionPlayback();
       resizeObserver?.disconnect();
       if (renderer) {
         renderer.dispose();
@@ -2228,9 +2329,10 @@ function readWorksheetPlaybackState(runId: string): WorksheetPlaybackState {
       ? parsed.completedSectionIds.filter((sectionId): sectionId is string => typeof sectionId === "string")
       : [];
     const activeSectionId = typeof parsed?.activeSectionId === "string" ? parsed.activeSectionId : null;
+    const activeSectionStartedAt = typeof parsed?.activeSectionStartedAt === "number" ? parsed.activeSectionStartedAt : null;
     const currentPageId = typeof parsed?.currentPageId === "string" ? parsed.currentPageId : null;
     const lessonCompletedAt = typeof parsed?.lessonCompletedAt === "number" ? parsed.lessonCompletedAt : null;
-    return {activeSectionId, completedSectionIds: [...new Set(completedSectionIds)], currentPageId, lessonCompletedAt};
+    return {activeSectionId, activeSectionStartedAt, completedSectionIds: [...new Set(completedSectionIds)], currentPageId, lessonCompletedAt};
   } catch {
     return DEFAULT_WORKSHEET_PLAYBACK;
   }
@@ -2268,15 +2370,6 @@ function writePhoneRewardState(userId: string, pending: boolean) {
 
 function phoneRewardStorageKey(userId: string) {
   return `${PHONE_REWARD_STORAGE_PREFIX}.${userId}`;
-}
-
-function nextPlaybackState(current: WorksheetPlaybackState, sectionId: string): WorksheetPlaybackState {
-  return {
-    ...current,
-    activeSectionId: sectionId,
-    completedSectionIds: [...new Set([...current.completedSectionIds, sectionId])],
-    lessonCompletedAt: null
-  };
 }
 
 function formatPomodoroClock(ms: number) {
@@ -3173,9 +3266,9 @@ function createLaptopScreen(
   keepMusicMounted();
 
   function render() {
+    keepMusicMounted();
     appRoot.replaceChildren();
     if (!currentUser) {
-      keepMusicMounted();
       appRoot.append(renderLaptopLogin({error: currentError, loading, onSignIn: options.onSignIn}));
       return;
     }
@@ -3216,9 +3309,6 @@ function createLaptopScreen(
       tab: currentTab,
       user: currentUser
     }));
-    if (currentTab !== "music") {
-      keepMusicMounted();
-    }
     applyMusicPlaybackState();
   }
   render();
@@ -4561,14 +4651,14 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
   let rowY = 710;
   const pageTargets = fillTargets.filter((target) => (target.pageId ?? "page_1") === currentPageId);
   for (const target of pageTargets) {
-    const sectionReady = Boolean(target.sectionId && completedSections.has(target.sectionId));
+    const revealedText = worksheetTargetRevealText(run, playback, target);
     context.beginPath();
     context.moveTo(110, rowY + 30);
     context.lineTo(1090, rowY + 30);
     context.stroke();
-    context.fillStyle = sectionReady ? "#1e3a8a" : "#9a8973";
-    context.font = sectionReady ? "30px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif" : "26px ui-rounded, system-ui, sans-serif";
-    context.fillText(sectionReady ? target.expectedText ?? target.id : complete ? "click a section to reveal" : "waiting for interactive bundle", 120, rowY);
+    context.fillStyle = revealedText ? "#1e3a8a" : "#9a8973";
+    context.font = revealedText ? "30px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif" : "26px ui-rounded, system-ui, sans-serif";
+    context.fillText(revealedText || (complete ? "click a section to reveal" : "waiting for interactive bundle"), 120, rowY);
     rowY += 72;
   }
 
@@ -4664,17 +4754,61 @@ function worksheetSectionsForRun(run: GameWorksheetRunSnapshot): WorksheetSectio
   if (!bundle?.sections?.length) {
     return templateSections;
   }
-  const bundleSections = bundle.sections;
-  if (bundleSections.every((section) => section.pageId)) {
-    return bundleSections;
-  }
-  return templateSections;
+  const templateById = new Map(templateSections.map((section) => [section.id, section]));
+  return bundle.sections.map((section) => ({...templateById.get(section.id), ...section}));
 }
 
 function worksheetFillTargetsForRun(run: GameWorksheetRunSnapshot): WorksheetFillTarget[] {
   const bundle = interactiveBundleForRun(run);
   const template = templatePayloadForRun(run);
   return bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
+}
+
+function worksheetNarrationForSection(run: GameWorksheetRunSnapshot, sectionId: string): WorksheetNarrationSection | null {
+  return worksheetSectionsForRun(run).find((section) => section.id === sectionId)?.narration ?? null;
+}
+
+function worksheetActionsForSection(run: GameWorksheetRunSnapshot, sectionId: string): WorksheetHandwritingAction[] {
+  const section = worksheetSectionsForRun(run).find((candidate) => candidate.id === sectionId);
+  if (section?.handwritingActions?.length) {
+    return section.handwritingActions;
+  }
+  return worksheetHandwritingActionsFromPayload(artifactForStage(run, "handwriting")?.payload?.actions).filter((action) => action.sectionId === sectionId);
+}
+
+function sectionPlaybackDurationMs(run: GameWorksheetRunSnapshot, sectionId: string) {
+  const narration = worksheetNarrationForSection(run, sectionId);
+  if (typeof narration?.durationSeconds === "number" && narration.durationSeconds > 0) {
+    return Math.max(2_500, narration.durationSeconds * 1000);
+  }
+  const maxActionEnd = worksheetActionsForSection(run, sectionId).reduce((max, action) => Math.max(max, action.endSeconds ?? 0), 0);
+  return Math.max(3_500, maxActionEnd > 0 ? maxActionEnd * 1000 : 5_500);
+}
+
+function worksheetTargetRevealText(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, target: WorksheetFillTarget) {
+  const sectionId = target.sectionId;
+  if (!sectionId) {
+    return "";
+  }
+  if (playback.completedSectionIds.includes(sectionId)) {
+    return target.expectedText ?? target.id;
+  }
+  if (playback.activeSectionId !== sectionId || !playback.activeSectionStartedAt) {
+    return "";
+  }
+  const action = worksheetActionsForSection(run, sectionId).find((candidate) => candidate.fillTargetId === target.id);
+  const sourceText = action?.text ?? target.expectedText ?? "";
+  if (!sourceText) {
+    return "";
+  }
+  const elapsedSeconds = Math.max(0, (Date.now() - playback.activeSectionStartedAt) / 1000);
+  const startSeconds = action?.startSeconds ?? 0;
+  const endSeconds = action?.endSeconds ?? Math.max(startSeconds + 1.4, startSeconds + sourceText.length * 0.055);
+  if (elapsedSeconds <= startSeconds) {
+    return "";
+  }
+  const progress = Math.max(0, Math.min(1, (elapsedSeconds - startSeconds) / Math.max(0.1, endSeconds - startSeconds)));
+  return sourceText.slice(0, Math.max(1, Math.ceil(sourceText.length * progress)));
 }
 
 function currentWorksheetPageId(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
@@ -4723,10 +4857,44 @@ function worksheetSectionsFromPayload(payload: Record<string, unknown> | null | 
     return [
       {
         id,
+        completionMode: typeof section.completionMode === "string" ? section.completionMode : undefined,
+        handwritingActions: worksheetHandwritingActionsFromPayload(section.handwritingActions),
+        narration: worksheetNarrationFromPayload(section.narration),
         pageId: typeof section.pageId === "string" ? section.pageId : undefined,
         regionId: typeof section.regionId === "string" ? section.regionId : undefined,
         summary: typeof section.summary === "string" ? section.summary : undefined,
         title: section.title
+      }
+    ];
+  });
+}
+
+function worksheetNarrationFromPayload(value: unknown): WorksheetNarrationSection | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return {
+    audioUrl: typeof value.audioUrl === "string" ? value.audioUrl : null,
+    durationSeconds: typeof value.durationSeconds === "number" ? value.durationSeconds : undefined,
+    sectionId: typeof value.sectionId === "string" ? value.sectionId : undefined,
+    speechText: typeof value.speechText === "string" ? value.speechText : undefined
+  };
+}
+
+function worksheetHandwritingActionsFromPayload(value: unknown): WorksheetHandwritingAction[] {
+  const actions = Array.isArray(value) ? value : [];
+  return actions.flatMap((action) => {
+    if (!isRecord(action) || typeof action.id !== "string") {
+      return [];
+    }
+    return [
+      {
+        endSeconds: typeof action.endSeconds === "number" ? action.endSeconds : undefined,
+        fillTargetId: typeof action.fillTargetId === "string" ? action.fillTargetId : undefined,
+        id: action.id,
+        sectionId: typeof action.sectionId === "string" ? action.sectionId : undefined,
+        startSeconds: typeof action.startSeconds === "number" ? action.startSeconds : undefined,
+        text: typeof action.text === "string" ? action.text : undefined
       }
     ];
   });

@@ -946,6 +946,7 @@ def _interactive_bundle_payload(
         "templateId": run.template_id,
         "selectedInstructorId": run.selected_instructor_id,
         "pages": template_payload.get("pages", []),
+        "fillTargets": template_payload.get("fillTargets", []),
         "sections": sections,
         "completedSections": [],
     }
