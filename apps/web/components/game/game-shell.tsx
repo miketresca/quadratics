@@ -22,7 +22,7 @@ type LessonChoice = {
   box: {x: number; y: number; width: number; height: number};
 };
 
-type SceneTunableName = "laptop" | "clock" | "coffee" | "paper" | "map" | "phone";
+type SceneTunableName = "laptop" | "clock" | "coffee" | "paper" | "map" | "phone" | "pen";
 type FocusMode = "room" | "paper" | "laptop" | "clock" | "map" | "phone";
 type InteractiveTarget = "paper" | "laptop" | "clock" | "map" | "phone" | null;
 type LaptopTab = "demo" | "pipeline" | "costs" | "music" | "settings";
@@ -605,6 +605,7 @@ export function GameShell({
 
       const THREE = await import("three");
       const {CSS3DObject, CSS3DRenderer} = await import("three/examples/jsm/renderers/CSS3DRenderer.js");
+      const {GLTFLoader} = await import("three/examples/jsm/loaders/GLTFLoader.js");
       if (disposed || !mountRef.current) {
         return;
       }
@@ -749,6 +750,29 @@ export function GameShell({
       penGroup = createPenHand(THREE);
       penGroup.visible = worksheetFocusedRef.current;
       scene.add(penGroup);
+      const fallbackPenGroup = penGroup;
+      const penLoader = new GLTFLoader();
+      void penLoader
+        .loadAsync("/game/assets/models/office-pack/Pens.glb")
+        .then((gltf) => {
+          if (disposed || !scene) {
+            return;
+          }
+          const tablePen = createDeskPenModel(THREE, gltf.scene);
+          const cursorPen = createCursorPenModel(THREE, gltf.scene);
+          tablePen.visible = !worksheetFocusedRef.current;
+          cursorPen.visible = worksheetFocusedRef.current;
+          deskRig.add(tablePen);
+          scene.add(cursorPen);
+          scene.remove(fallbackPenGroup);
+          penGroup = cursorPen;
+          sceneTunables.pen = tablePen;
+        })
+        .catch((error: unknown) => {
+          if (process.env.NODE_ENV === "development") {
+            console.warn("[quadratics] could not load office pen model", error);
+          }
+        });
 
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2();
@@ -953,7 +977,7 @@ export function GameShell({
           return false;
         }
         const selected = sceneTunables[sceneEditorSelection];
-        const orderedNames: SceneTunableName[] = ["laptop", "clock", "coffee", "paper", "map", "phone"];
+        const orderedNames: SceneTunableName[] = ["laptop", "clock", "coffee", "paper", "map", "phone", "pen"];
         if (event.key === "Tab") {
           event.preventDefault();
           const currentIndex = orderedNames.indexOf(sceneEditorSelection);
@@ -1057,8 +1081,13 @@ export function GameShell({
         if (penGroup) {
           penGroup.visible = worksheetFocusedRef.current;
           penGroup.position.x += (pointerTarget.x - penGroup.position.x) * 0.18;
+          penGroup.position.y += (DESK_SURFACE_Y + 0.34 - penGroup.position.y) * 0.18;
           penGroup.position.z += (pointerTarget.z - penGroup.position.z) * 0.18;
-          penGroup.rotation.z = -0.5 + (pointerTarget.x - 0.6) * 0.018;
+          penGroup.rotation.z = -0.42 + (pointerTarget.x - 0.6) * 0.018;
+        }
+        const deskPen = sceneTunables.pen;
+        if (deskPen) {
+          deskPen.visible = !worksheetFocusedRef.current;
         }
         if (steamGroup) {
           const elapsed = performance.now() / 1000;
@@ -3380,6 +3409,77 @@ function createPaper(THREE: typeof import("three"), paperTexture: Texture) {
   paper.position.set(0, PAPER_Y, -0.15);
   paper.receiveShadow = true;
   return paper;
+}
+
+function createDeskPenModel(THREE: typeof import("three"), source: Object3D) {
+  const group = new THREE.Group();
+  group.name = "desk-pen";
+  group.position.set(2.16, DESK_SURFACE_Y + 0.082, 0.72);
+  group.rotation.set(0, 0.04, -0.7);
+
+  const model = createNormalizedBlueOfficePen(THREE, source, 0.82);
+  model.rotation.set(Math.PI / 2, 0, 0.1);
+  group.add(model);
+  return group;
+}
+
+function createCursorPenModel(THREE: typeof import("three"), source: Object3D) {
+  const group = new THREE.Group();
+  group.name = "worksheet-cursor-pen";
+  group.position.set(2.18, DESK_SURFACE_Y + 0.12, 0.78 + DESK_RIG_Z);
+  group.rotation.set(-0.55, 0.12, -0.72);
+
+  const model = createNormalizedBlueOfficePen(THREE, source, 0.95);
+  // Offset the model so the visible writing tip sits at the group's origin,
+  // which is the same point the old crosshair used for worksheet hit tests.
+  model.position.set(0.36, -0.04, -0.1);
+  model.rotation.set(Math.PI / 2.18, 0.08, -0.72);
+  group.add(model);
+  return group;
+}
+
+function createNormalizedBlueOfficePen(THREE: typeof import("three"), source: Object3D, targetLength: number) {
+  const wrapper = new THREE.Group();
+  const model = cloneBlueOfficePen(THREE, source);
+  model.traverse((child) => {
+    const mesh = child as Mesh & {castShadow?: boolean; receiveShadow?: boolean};
+    if (mesh.isMesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+    }
+  });
+
+  const bounds = new THREE.Box3().setFromObject(model);
+  const size = bounds.getSize(new THREE.Vector3());
+  const center = bounds.getCenter(new THREE.Vector3());
+  const longestSide = Math.max(size.x, size.y, size.z, 0.001);
+  const scale = targetLength / longestSide;
+  model.scale.setScalar(scale);
+  model.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+  wrapper.add(model);
+  return wrapper;
+}
+
+function cloneBlueOfficePen(THREE: typeof import("three"), source: Object3D) {
+  const allowedMeshNames = new Set(["Cylinder006_1", "Cylinder006_1_1", "Box006", "Object003"]);
+  const group = new THREE.Group();
+  source.updateMatrixWorld(true);
+  source.traverse((child) => {
+    const mesh = child as Mesh;
+    if (!mesh.isMesh || !allowedMeshNames.has(mesh.name)) {
+      return;
+    }
+    const clonedMesh = mesh.clone();
+    clonedMesh.geometry = mesh.geometry.clone();
+    if (Array.isArray(mesh.material)) {
+      clonedMesh.material = mesh.material.map((material) => material.clone());
+    } else {
+      clonedMesh.material = mesh.material.clone();
+    }
+    clonedMesh.applyMatrix4(mesh.matrixWorld);
+    group.add(clonedMesh);
+  });
+  return group;
 }
 
 function createPenHand(THREE: typeof import("three")) {
