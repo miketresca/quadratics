@@ -115,6 +115,28 @@ A user-owned credential for an external provider, stored so the API can call tha
 A legacy scaffold ledger entry from the initial app shape.
 *Avoid:* treating credit transactions as the current billing or quota model.
 
+## Game Worksheet Model
+
+### Worksheet Template
+A versioned, manually mapped worksheet definition for the `/game` experience.
+
+The template owns source PDF pages, page images, normalized clickable regions, expected fill targets, and section metadata. It is deterministic context for LLMs, not generated output.
+
+### Worksheet Region
+A normalized area on a worksheet page that can be focused, clicked, explained, or filled by the interactive lesson.
+
+Regions are the bridge between a static PDF and runtime actions because they tell the app where content belongs and what section or question it represents.
+
+### Worksheet Run
+A user-owned game lesson build for one worksheet template, selected instructor voice, artifacts, approvals, generated audio, and completion state.
+
+Worksheet runs are separate from quadratic generation jobs so the game pipeline can evolve without overloading the original equation-video pipeline.
+
+### Interactive Lesson Bundle
+The final playable artifact for a worksheet run.
+
+It combines the source worksheet, approved scripts, generated narration, handwriting actions, timing metadata, and per-region completion state needed for the browser to run the lesson without exporting an MP4.
+
 ## Relationships
 
 A Generation Job owns the artifacts for one lesson build. A Lesson contains Teaching Steps, and Teaching Steps contain Math Lines. Scripts and Narration Segments follow the Teaching Step structure, while Animation Plans and Resolved Animation Timelines reference the same lesson material to keep visuals aligned with deterministic math. Provider Usage Events describe paid calls made while producing artifacts, but they do not replace artifacts as the pipeline source of truth. Real-World Context attaches to a Lesson; HeyGen Avatar attaches to Narration Segments; both are optional paid branches around the standard Base Video path.
