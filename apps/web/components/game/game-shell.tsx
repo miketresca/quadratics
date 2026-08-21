@@ -158,6 +158,8 @@ const DEFAULT_WORKSHEET_PLAYBACK: WorksheetPlaybackState = {
 };
 const WORKSHEET_NEXT_PAGE_RECT = {height: 74, width: 312, x: 792, y: 1402};
 const WORKSHEET_COMPLETE_RECT = {height: 74, width: 348, x: 756, y: 1402};
+const GAME_LESSON_DEFAULT_INSTRUCTOR_ID = "male";
+const GAME_LESSON_DEFAULT_INSTRUCTOR_LABEL = "Male Instructor";
 const MUSIC_OPTIONS: MusicOption[] = [
   {
     id: "lofi",
@@ -710,7 +712,7 @@ export function GameShell({
           ? existingRun
           : await createGameLessonRun({
               accessToken,
-              selectedInstructorId: null,
+              selectedInstructorId: GAME_LESSON_DEFAULT_INSTRUCTOR_ID,
               templateId: GAME_LESSON_TEMPLATE_ID
             });
       const snapshot = await runGameLessonStage({
@@ -757,7 +759,7 @@ export function GameShell({
           ? gameRunRef.current
           : await createGameLessonRun({
               accessToken,
-              selectedInstructorId: null,
+              selectedInstructorId: GAME_LESSON_DEFAULT_INSTRUCTOR_ID,
               templateId: GAME_LESSON_TEMPLATE_ID
             });
       const snapshot = await runGameLessonStage({
@@ -2119,6 +2121,9 @@ function FocusedPipelinePanel({
             {pipeline.run
               ? `Run ${shortRunId(pipeline.run.id)} is ready for the approval-gated worksheet pipeline.`
               : "Click Lesson 1 on the paper to create the signed-in worksheet run. Script, speech markup, narration, and handwriting artifacts will appear here."}
+          </p>
+          <p className="mt-3 w-fit rounded border border-emerald-300/20 bg-emerald-950/20 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-emerald-100/80">
+            Voice / {GAME_LESSON_DEFAULT_INSTRUCTOR_LABEL}
           </p>
           <a
             className="mt-3 inline-flex w-fit rounded border border-cyan-300/30 bg-cyan-950/20 px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-cyan-100 hover:bg-cyan-900/35"
@@ -3727,6 +3732,7 @@ function renderLaptopPipeline({
         ? `Run ${escapeHtml(shortRunId(pipeline.run.id))} is ready for approval-gated worksheet generation.`
         : "Click Lesson 1 on the paper to create the signed-in worksheet run."
     }</div>
+    <div style="display:inline-flex;margin-top:10px;border:1px solid rgba(52,211,153,.24);background:rgba(6,78,59,.22);border-radius:8px;padding:7px 10px;color:rgba(209,250,229,.82);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase">Voice / ${GAME_LESSON_DEFAULT_INSTRUCTOR_LABEL}</div>
     <a href="/game/lessons/volume-cubes/task-lesson.pdf" target="_blank" rel="noreferrer" style="display:inline-flex;margin-top:10px;border:1px solid rgba(103,232,249,.32);background:rgba(8,47,73,.22);border-radius:8px;padding:7px 10px;color:#cffafe;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;text-decoration:none">Open template PDF</a>
   `;
   const actions = document.createElement("div");
