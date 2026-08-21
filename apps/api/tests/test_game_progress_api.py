@@ -83,3 +83,67 @@ async def test_game_progress_starts_completes_and_resets_lesson(authenticated_cl
     assert completed.json()["lessons"][0]["completedAt"] is not None
     assert reset.status_code == 200
     assert reset.json() == {"selectedFighterId": None, "lessons": []}
+
+
+@pytest.mark.asyncio
+async def test_game_progress_persists_worksheet_playback_metadata(authenticated_client):
+    await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "start_lesson", "lessonId": "volume-cubes-lesson-1"},
+    )
+
+    updated = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={
+            "action": "update_lesson_playback",
+            "lessonId": "volume-cubes-lesson-1",
+            "worksheetPlayback": {
+                "completedSectionIds": ["do_now", "vocabulary"],
+                "currentPageId": "page_2",
+                "lessonCompletedAt": 1770000000000,
+            },
+        },
+    )
+    completed = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "complete_lesson", "lessonId": "volume-cubes-lesson-1"},
+    )
+
+    assert updated.status_code == 200
+    metadata = updated.json()["lessons"][0]["metadata"]
+    assert metadata["worksheetPlayback"]["completedSectionIds"] == ["do_now", "vocabulary"]
+    assert metadata["worksheetPlayback"]["currentPageId"] == "page_2"
+    assert completed.status_code == 200
+    assert completed.json()["lessons"][0]["metadata"] == metadata
+
+
+@pytest.mark.asyncio
+async def test_game_progress_persists_reward_and_easter_metadata(authenticated_client):
+    await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "start_lesson", "lessonId": "volume-cubes-lesson-1"},
+    )
+
+    reward = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "set_phone_reward", "lessonId": "volume-cubes-lesson-1"},
+    )
+    egg = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "claim_easter_egg", "lessonId": "volume-cubes-lesson-1", "easterEggId": "lesson_1_phone_reward"},
+    )
+    cleared = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "clear_phone_reward", "lessonId": "volume-cubes-lesson-1"},
+    )
+
+    assert reward.status_code == 200
+    assert reward.json()["lessons"][0]["metadata"]["phoneRewardPending"] is True
+    assert egg.status_code == 200
+    assert egg.json()["lessons"][0]["metadata"]["easterEggs"] == {
+        "discoveredIds": ["lesson_1_phone_reward"],
+        "total": 1,
+    }
+    assert cleared.status_code == 200
+    assert cleared.json()["lessons"][0]["metadata"]["phoneRewardPending"] is False
+    assert cleared.json()["lessons"][0]["metadata"]["easterEggs"]["discoveredIds"] == ["lesson_1_phone_reward"]

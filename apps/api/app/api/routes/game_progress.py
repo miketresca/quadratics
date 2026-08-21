@@ -50,6 +50,34 @@ async def update_game_progress(
             if request.lesson_id is None:
                 raise InvalidGameProgressAction("lessonId is required")
             return await repository.complete_lesson(current_user.id, request.lesson_id)
+        if request.action == "update_lesson_playback":
+            if request.lesson_id is None:
+                raise InvalidGameProgressAction("lessonId is required")
+            if request.worksheet_playback is None:
+                raise InvalidGameProgressAction("worksheetPlayback is required")
+            return await repository.update_lesson_playback(
+                current_user.id,
+                request.lesson_id,
+                request.worksheet_playback,
+            )
+        if request.action == "set_phone_reward":
+            if request.lesson_id is None:
+                raise InvalidGameProgressAction("lessonId is required")
+            return await repository.set_phone_reward(current_user.id, request.lesson_id, True)
+        if request.action == "clear_phone_reward":
+            if request.lesson_id is None:
+                raise InvalidGameProgressAction("lessonId is required")
+            return await repository.set_phone_reward(current_user.id, request.lesson_id, False)
+        if request.action == "claim_easter_egg":
+            if request.lesson_id is None:
+                raise InvalidGameProgressAction("lessonId is required")
+            if request.easter_egg_id is None:
+                raise InvalidGameProgressAction("easterEggId is required")
+            return await repository.claim_easter_egg(
+                current_user.id,
+                request.lesson_id,
+                request.easter_egg_id,
+            )
     except InvalidGameProgressAction as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except GameProgressStorageError as exc:

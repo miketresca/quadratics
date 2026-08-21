@@ -1,6 +1,6 @@
 "use client";
 
-import type {CurrentUser, GameLessonId} from "@quadratics/types";
+import type {CurrentUser, GameLessonId, GameProgress, GameWorksheetPlaybackProgress} from "@quadratics/types";
 import {useEffect, useRef, useState, type FormEvent} from "react";
 import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, Vector3, WebGLRenderer} from "three";
 import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
@@ -17,7 +17,7 @@ import {
   type GameUsageSummary,
   type GameWorksheetRunSnapshot
 } from "@/lib/api";
-import {updateGameProgress} from "@/lib/game/progress-client";
+import {getGameProgress, resetGameProgress, updateGameProgress} from "@/lib/game/progress-client";
 import {createClient} from "@/lib/supabase/client";
 
 type LessonChoice = {
@@ -323,15 +323,14 @@ export function GameShell({
   selectedLessonIdRef.current = selectedLessonId;
 
   useEffect(() => {
-    const pending = user ? readPhoneRewardState(user.id) : false;
-    phoneRewardPendingRef.current = pending;
-    setPhoneRewardPending(pending);
-    setPhoneScreenMode(pending ? "reward" : "off");
-    if (pending) {
-      startPhoneRewardVibration();
-    } else {
-      stopPhoneRewardVibration();
+    if (!user) {
+      setPhoneRewardSnapshot(false, {persist: false});
+      return;
     }
+    void refreshGameProgressFromApi().catch(() => {
+      const pending = readPhoneRewardState(user.id);
+      setPhoneRewardSnapshot(pending, {persist: false});
+    });
   }, [user]);
 
   useEffect(() => {
@@ -378,6 +377,9 @@ export function GameShell({
     laptopScreenRef.current?.updateUser(nextUser);
     setGamePipelineError(null);
     laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, run: gameRunRef.current});
+    if (data.session?.access_token) {
+      void refreshGameProgressFromApi(data.session.access_token);
+    }
     void refreshGameUsageCosts();
   }
 
@@ -387,7 +389,7 @@ export function GameShell({
     gamePipelineRequestRef.current += 1;
     clearSectionPlayback();
     window.localStorage.removeItem(POMODORO_STORAGE_KEY);
-    setPhoneRewardSnapshot(false);
+    setPhoneRewardSnapshot(false, {persist: false});
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
     setGameRun(null);
@@ -483,7 +485,7 @@ export function GameShell({
     audio.currentTime = 0;
   }
 
-  function setPhoneRewardSnapshot(pending: boolean) {
+  function setPhoneRewardSnapshot(pending: boolean, options: {persist: boolean} = {persist: true}) {
     phoneRewardPendingRef.current = pending;
     setPhoneRewardPending(pending);
     if (userRef.current) {
@@ -495,6 +497,12 @@ export function GameShell({
     } else {
       stopPhoneRewardVibration();
       setPhoneScreenModeSnapshot(focusModeRef.current === "phone" ? "quote" : "off");
+    }
+    if (options.persist && userRef.current) {
+      void persistGameProgress({
+        action: pending ? "set_phone_reward" : "clear_phone_reward",
+        lessonId: GAME_LESSON_TEMPLATE_ID
+      });
     }
   }
 
@@ -510,6 +518,9 @@ export function GameShell({
     setWorksheetPlayback(nextPlayback);
     laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
     refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, snapshot, nextPlayback);
+    if (snapshot && userRef.current) {
+      void refreshGameProgressFromApi();
+    }
   }
 
   function setGameCostSnapshot(snapshot: LaptopCostState) {
@@ -552,6 +563,13 @@ export function GameShell({
       writeWorksheetPlaybackState(gameRunRef.current.id, nextPlayback);
     }
     refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, gameRunRef.current, nextPlayback);
+    if (userRef.current) {
+      void persistGameProgress({
+        action: "update_lesson_playback",
+        lessonId: GAME_LESSON_TEMPLATE_ID,
+        worksheetPlayback: toApiWorksheetPlayback(nextPlayback)
+      });
+    }
   }
 
   function clearSectionPlayback() {
@@ -644,19 +662,34 @@ export function GameShell({
 
   async function updateGameLessonProgress(action: "start_lesson" | "complete_lesson") {
     try {
-      const accessToken = await getLaptopAccessToken();
-      await updateGameProgress({
-        accessToken,
-        request: {
-          action,
-          lessonId: GAME_LESSON_TEMPLATE_ID
-        }
-      });
+      await persistGameProgress({action, lessonId: GAME_LESSON_TEMPLATE_ID});
     } catch (error) {
       if (process.env.NODE_ENV === "development") {
         console.warn("[quadratics] could not update game lesson progress", error);
       }
     }
+  }
+
+  async function persistGameProgress(request: Parameters<typeof updateGameProgress>[0]["request"]) {
+    const accessToken = await getLaptopAccessToken();
+    return updateGameProgress({accessToken, request});
+  }
+
+  async function refreshGameProgressFromApi(accessTokenOverride?: string) {
+    const accessToken = accessTokenOverride ?? await getLaptopAccessToken();
+    const progress = await getGameProgress(accessToken);
+    applyGameProgress(progress);
+  }
+
+  function applyGameProgress(progress: GameProgress) {
+    const lesson = progress.lessons.find((entry) => entry.lessonId === GAME_LESSON_TEMPLATE_ID);
+    const nextPlayback = worksheetPlaybackFromApi(lesson?.metadata?.worksheetPlayback);
+    setWorksheetPlayback(nextPlayback);
+    if (gameRunRef.current) {
+      writeWorksheetPlaybackState(gameRunRef.current.id, nextPlayback);
+    }
+    refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, gameRunRef.current, nextPlayback);
+    setPhoneRewardSnapshot(lesson?.metadata?.phoneRewardPending === true, {persist: false});
   }
 
   async function prepareGameLessonRun(params: {forceTemplate?: boolean} = {}) {
@@ -751,6 +784,32 @@ export function GameShell({
       if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
         setGamePipelineLoading(false);
       }
+    }
+  }
+
+  async function resetGameLessonProgress() {
+    if (!userRef.current) {
+      throw new Error("Login on the laptop to reset progress.");
+    }
+    setGamePipelineError(null);
+    laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, run: gameRunRef.current});
+    try {
+      const accessToken = await getLaptopAccessToken();
+      await resetGameProgress(accessToken);
+      clearSectionPlayback();
+      setWorksheetPlayback(DEFAULT_WORKSHEET_PLAYBACK);
+      if (gameRunRef.current) {
+        writeWorksheetPlaybackState(gameRunRef.current.id, DEFAULT_WORKSHEET_PLAYBACK);
+      }
+      setPhoneRewardSnapshot(false, {persist: false});
+      selectedLessonIdRef.current = null;
+      setSelectedLessonId(null);
+      refreshPaperTexture(paperTextureRef.current, null, null, gameRunRef.current, DEFAULT_WORKSHEET_PLAYBACK);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not reset lesson progress.";
+      setGamePipelineError(message);
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, run: gameRunRef.current});
+      throw error;
     }
   }
 
@@ -1142,6 +1201,11 @@ export function GameShell({
             // The laptop pipeline tab renders the failure inline.
           });
         },
+        onResetProgress: () => {
+          void resetGameLessonProgress().catch(() => {
+            // The laptop pipeline tab renders the failure inline.
+          });
+        },
         musicMuted: musicMutedRef.current,
         onSignIn: signInFromLaptop,
         onSignOut: signOutFromLaptop,
@@ -1316,6 +1380,11 @@ export function GameShell({
         if (focusModeRef.current === "phone") {
           if (phoneScreenModeRef.current === "reward") {
             setPhoneScreenModeSnapshot("rickroll");
+            void persistGameProgress({
+              action: "claim_easter_egg",
+              easterEggId: "lesson_1_phone_reward",
+              lessonId: GAME_LESSON_TEMPLATE_ID
+            });
           }
           return;
         }
@@ -1736,6 +1805,11 @@ export function GameShell({
               // The focused laptop tab renders the failure inline.
             });
           }}
+          onResetProgress={() => {
+            void resetGameLessonProgress().catch(() => {
+              // The focused laptop tab renders the failure inline.
+            });
+          }}
           pipeline={{error: gamePipelineError, loading: gamePipelineLoading, run: gameRun}}
           loading={laptopLoginLoading}
           musicMuted={musicMuted}
@@ -1837,6 +1911,7 @@ function LaptopFocusPanel({
   onMusicChange,
   onMusicMutedChange,
   onMusicVolumeChange,
+  onResetProgress,
   onRunStage,
   onSignIn,
   onSignOut,
@@ -1856,6 +1931,7 @@ function LaptopFocusPanel({
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
   onMusicVolumeChange: (volume: number) => void;
+  onResetProgress: () => void;
   onRunStage: (stage: GameLessonStage) => void;
   onSignIn: (event: FormEvent<HTMLFormElement>) => void;
   onSignOut: () => void;
@@ -1981,7 +2057,13 @@ function LaptopFocusPanel({
                   </label>
                 </div>
               ) : tab === "pipeline" ? (
-                <FocusedPipelinePanel onApproveArtifact={onApproveArtifact} onCreateRun={onCreateRun} onRunStage={onRunStage} pipeline={pipeline} />
+                <FocusedPipelinePanel
+                  onApproveArtifact={onApproveArtifact}
+                  onCreateRun={onCreateRun}
+                  onResetProgress={onResetProgress}
+                  onRunStage={onRunStage}
+                  pipeline={pipeline}
+                />
               ) : tab === "costs" ? (
                 <FocusedCostsPanel costs={costs} pipeline={pipeline} />
               ) : tab === "settings" ? (
@@ -2017,11 +2099,13 @@ function LaptopFocusPanel({
 function FocusedPipelinePanel({
   onApproveArtifact,
   onCreateRun,
+  onResetProgress,
   onRunStage,
   pipeline
 }: {
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
+  onResetProgress: () => void;
   onRunStage: (stage: GameLessonStage) => void;
   pipeline: LaptopPipelineState;
 }) {
@@ -2045,14 +2129,24 @@ function FocusedPipelinePanel({
             Open template PDF
           </a>
         </div>
-        <button
-          className="rounded-lg border border-emerald-300/55 bg-emerald-950/45 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/50 disabled:cursor-wait disabled:opacity-60"
-          disabled={pipeline.loading}
-          onClick={onCreateRun}
-          type="button"
-        >
-          {pipeline.loading ? "Starting" : pipeline.run ? "Refresh template" : "Create run"}
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            className="rounded-lg border border-emerald-300/55 bg-emerald-950/45 px-4 py-2 text-xs font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/50 disabled:cursor-wait disabled:opacity-60"
+            disabled={pipeline.loading}
+            onClick={onCreateRun}
+            type="button"
+          >
+            {pipeline.loading ? "Starting" : pipeline.run ? "Refresh template" : "Create run"}
+          </button>
+          <button
+            className="rounded-lg border border-amber-300/35 bg-amber-950/20 px-4 py-2 text-xs font-black uppercase tracking-widest text-amber-100 hover:bg-amber-900/30 disabled:cursor-wait disabled:opacity-60"
+            disabled={pipeline.loading}
+            onClick={onResetProgress}
+            type="button"
+          >
+            Reset progress
+          </button>
+        </div>
       </div>
       {pipeline.error ? (
         <div className="rounded-lg border border-red-400/40 bg-red-950/35 px-3 py-2 text-sm text-red-100">{pipeline.error}</div>
@@ -2293,8 +2387,9 @@ function artifactPreviewRows(artifact: GameLessonArtifact | null, stage: GameLes
     ];
   }
   if (stage === "narration") {
+    const segmentCount = countPayloadArray(payload, "sections") || countPayloadArray(payload, "segments");
     return [
-      {label: "segments", value: String(countPayloadArray(payload, "segments"))},
+      {label: "segments", value: String(segmentCount)},
       {label: "provider", value: typeof payload.provider === "string" ? payload.provider : "preview"}
     ];
   }
@@ -2447,6 +2542,27 @@ function writeWorksheetPlaybackState(runId: string, state: WorksheetPlaybackStat
     return;
   }
   window.localStorage.setItem(worksheetPlaybackStorageKey(runId), JSON.stringify(state));
+}
+
+function toApiWorksheetPlayback(state: WorksheetPlaybackState): GameWorksheetPlaybackProgress {
+  return {
+    completedSectionIds: state.completedSectionIds,
+    currentPageId: state.currentPageId,
+    lessonCompletedAt: state.lessonCompletedAt
+  };
+}
+
+function worksheetPlaybackFromApi(progress: GameWorksheetPlaybackProgress | null | undefined): WorksheetPlaybackState {
+  if (!progress) {
+    return DEFAULT_WORKSHEET_PLAYBACK;
+  }
+  return {
+    activeSectionId: null,
+    activeSectionStartedAt: null,
+    completedSectionIds: Array.isArray(progress.completedSectionIds) ? [...new Set(progress.completedSectionIds)] : [],
+    currentPageId: typeof progress.currentPageId === "string" ? progress.currentPageId : null,
+    lessonCompletedAt: typeof progress.lessonCompletedAt === "number" ? progress.lessonCompletedAt : null
+  };
 }
 
 function worksheetPlaybackStorageKey(runId: string) {
@@ -3284,6 +3400,7 @@ function createLaptopScreen(
     musicMuted: boolean;
     onApproveArtifact: (artifact: GameLessonArtifact) => void;
     onCreateRun: () => void;
+    onResetProgress: () => void;
     onRunStage: (stage: GameLessonStage) => void;
     onSignIn: (formData: FormData) => Promise<void>;
     onSignOut: () => Promise<void>;
@@ -3386,6 +3503,7 @@ function createLaptopScreen(
       onApproveArtifact: options.onApproveArtifact,
       onCreateRun: options.onCreateRun,
       onRunStage: options.onRunStage,
+      onResetProgress: options.onResetProgress,
       onMusicChange: (selectedMusicId) => {
         currentMusicId = selectedMusicId;
         refreshMusicSource();
@@ -3574,11 +3692,13 @@ function createLaptopSectionLabel(text: string) {
 function renderLaptopPipeline({
   onApproveArtifact,
   onCreateRun,
+  onResetProgress,
   onRunStage,
   pipeline
 }: {
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
+  onResetProgress: () => void;
   onRunStage: (stage: GameLessonStage) => void;
   pipeline: LaptopPipelineState;
 }) {
@@ -3609,6 +3729,9 @@ function renderLaptopPipeline({
     }</div>
     <a href="/game/lessons/volume-cubes/task-lesson.pdf" target="_blank" rel="noreferrer" style="display:inline-flex;margin-top:10px;border:1px solid rgba(103,232,249,.32);background:rgba(8,47,73,.22);border-radius:8px;padding:7px 10px;color:#cffafe;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;text-decoration:none">Open template PDF</a>
   `;
+  const actions = document.createElement("div");
+  actions.style.display = "grid";
+  actions.style.gap = "8px";
   const action = document.createElement("button");
   action.type = "button";
   action.textContent = pipeline.loading ? "STARTING" : pipeline.run ? "REFRESH TEMPLATE" : "CREATE RUN";
@@ -3627,7 +3750,26 @@ function renderLaptopPipeline({
     event.stopPropagation();
     onCreateRun();
   });
-  header.append(copy, action);
+  const resetAction = document.createElement("button");
+  resetAction.type = "button";
+  resetAction.textContent = "RESET PROGRESS";
+  resetAction.disabled = pipeline.loading;
+  resetAction.style.border = "1px solid rgba(252,211,77,0.34)";
+  resetAction.style.background = "rgba(113,63,18,0.20)";
+  resetAction.style.color = "#fde68a";
+  resetAction.style.borderRadius = "10px";
+  resetAction.style.padding = "11px 13px";
+  resetAction.style.fontWeight = "900";
+  resetAction.style.fontSize = "11px";
+  resetAction.style.letterSpacing = ".08em";
+  resetAction.addEventListener("pointerdown", (event) => event.stopPropagation());
+  resetAction.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onResetProgress();
+  });
+  actions.append(action, resetAction);
+  header.append(copy, actions);
   wrap.append(header);
 
   if (pipeline.error) {
@@ -3839,6 +3981,7 @@ function renderLaptopBrowser({
   onMusicChange,
   onMusicMutedChange,
   onMusicVolumeChange,
+  onResetProgress,
   onRunStage,
   onSignOut,
   onTabChange,
@@ -3856,6 +3999,7 @@ function renderLaptopBrowser({
   onMusicChange: (selectedMusicId: MusicOptionId) => void;
   onMusicMutedChange: (muted: boolean) => void;
   onMusicVolumeChange: (volume: number) => void;
+  onResetProgress: () => void;
   onRunStage: (stage: GameLessonStage) => void;
   onSignOut: () => Promise<void>;
   onTabChange: (tab: LaptopTab) => void;
@@ -3987,7 +4131,7 @@ function renderLaptopBrowser({
     player.append(iframe);
     body.append(controls, player);
   } else if (tab === "pipeline") {
-    body.append(renderLaptopPipeline({onApproveArtifact, onCreateRun, onRunStage, pipeline}));
+    body.append(renderLaptopPipeline({onApproveArtifact, onCreateRun, onResetProgress, onRunStage, pipeline}));
   } else if (tab === "costs") {
     body.append(renderLaptopCosts(pipeline, costs));
   } else if (tab === "settings") {

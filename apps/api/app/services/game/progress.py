@@ -7,7 +7,7 @@ from typing import Any, Protocol
 import httpx
 
 from app.core.config import Settings
-from app.schemas.game import GameLessonProgress, GameProgress
+from app.schemas.game import GameLessonProgress, GameProgress, GameWorksheetPlaybackProgress
 from app.services.game.catalog import get_lesson, is_allowed_fighter
 
 
@@ -31,6 +31,17 @@ class GameProgressRepository(Protocol):
     async def start_lesson(self, user_id: str, lesson_id: str) -> GameProgress: ...
 
     async def complete_lesson(self, user_id: str, lesson_id: str) -> GameProgress: ...
+
+    async def update_lesson_playback(
+        self,
+        user_id: str,
+        lesson_id: str,
+        playback: GameWorksheetPlaybackProgress,
+    ) -> GameProgress: ...
+
+    async def set_phone_reward(self, user_id: str, lesson_id: str, pending: bool) -> GameProgress: ...
+
+    async def claim_easter_egg(self, user_id: str, lesson_id: str, easter_egg_id: str) -> GameProgress: ...
 
     async def reset(self, user_id: str) -> GameProgress: ...
 
@@ -65,6 +76,7 @@ class InMemoryGameProgressRepository:
             lesson_id=lesson_id,
             status="started",
             started_at=current.started_at if current else now,
+            metadata=current.metadata if current else None,
         )
         return _to_response(stored)
 
@@ -80,7 +92,40 @@ class InMemoryGameProgressRepository:
             status="completed",
             started_at=current.started_at,
             completed_at=now,
+            metadata=current.metadata,
         )
+        return _to_response(stored)
+
+    async def update_lesson_playback(
+        self,
+        user_id: str,
+        lesson_id: str,
+        playback: GameWorksheetPlaybackProgress,
+    ) -> GameProgress:
+        _validate_unlocked_lesson(lesson_id)
+        stored, current = _ensure_started_lesson(self._users, user_id, lesson_id)
+        metadata = _metadata_dict(current)
+        metadata["worksheetPlayback"] = playback.model_dump(by_alias=True)
+        stored.lessons[lesson_id] = _copy_lesson_progress(current, metadata=metadata)
+        return _to_response(stored)
+
+    async def set_phone_reward(self, user_id: str, lesson_id: str, pending: bool) -> GameProgress:
+        _validate_unlocked_lesson(lesson_id)
+        stored, current = _ensure_started_lesson(self._users, user_id, lesson_id)
+        metadata = _metadata_dict(current)
+        metadata["phoneRewardPending"] = pending
+        stored.lessons[lesson_id] = _copy_lesson_progress(current, metadata=metadata)
+        return _to_response(stored)
+
+    async def claim_easter_egg(self, user_id: str, lesson_id: str, easter_egg_id: str) -> GameProgress:
+        _validate_unlocked_lesson(lesson_id)
+        stored, current = _ensure_started_lesson(self._users, user_id, lesson_id)
+        metadata = _metadata_dict(current)
+        easter = _easter_metadata(metadata)
+        if easter_egg_id not in easter["discoveredIds"]:
+            easter["discoveredIds"].append(easter_egg_id)
+        metadata["easterEggs"] = easter
+        stored.lessons[lesson_id] = _copy_lesson_progress(current, metadata=metadata)
         return _to_response(stored)
 
     async def reset(self, user_id: str) -> GameProgress:
@@ -126,6 +171,7 @@ class SupabaseGameProgressRepository:
                 "started_at": current.started_at if current else now,
                 "completed_at": None,
                 "source": "game_sprint_1",
+                "metadata": _metadata_dict(current) if current else {},
             },
         )
         return await self.get(user_id)
@@ -144,8 +190,41 @@ class SupabaseGameProgressRepository:
                 "started_at": current.started_at,
                 "completed_at": now,
                 "source": "game_sprint_1",
+                "metadata": _metadata_dict(current),
             },
         )
+        return await self.get(user_id)
+
+    async def update_lesson_playback(
+        self,
+        user_id: str,
+        lesson_id: str,
+        playback: GameWorksheetPlaybackProgress,
+    ) -> GameProgress:
+        _validate_unlocked_lesson(lesson_id)
+        current = await self._require_started_lesson(user_id, lesson_id)
+        metadata = _metadata_dict(current)
+        metadata["worksheetPlayback"] = playback.model_dump(by_alias=True)
+        await self._upsert_lesson_progress(user_id, lesson_id, {"metadata": metadata})
+        return await self.get(user_id)
+
+    async def set_phone_reward(self, user_id: str, lesson_id: str, pending: bool) -> GameProgress:
+        _validate_unlocked_lesson(lesson_id)
+        current = await self._require_started_lesson(user_id, lesson_id)
+        metadata = _metadata_dict(current)
+        metadata["phoneRewardPending"] = pending
+        await self._upsert_lesson_progress(user_id, lesson_id, {"metadata": metadata})
+        return await self.get(user_id)
+
+    async def claim_easter_egg(self, user_id: str, lesson_id: str, easter_egg_id: str) -> GameProgress:
+        _validate_unlocked_lesson(lesson_id)
+        current = await self._require_started_lesson(user_id, lesson_id)
+        metadata = _metadata_dict(current)
+        easter = _easter_metadata(metadata)
+        if easter_egg_id not in easter["discoveredIds"]:
+            easter["discoveredIds"].append(easter_egg_id)
+        metadata["easterEggs"] = easter
+        await self._upsert_lesson_progress(user_id, lesson_id, {"metadata": metadata})
         return await self.get(user_id)
 
     async def reset(self, user_id: str) -> GameProgress:
@@ -186,7 +265,7 @@ class SupabaseGameProgressRepository:
                 headers=self._headers,
                 params={
                     "user_id": f"eq.{user_id}",
-                    "select": "lesson_id,status,started_at,completed_at",
+                    "select": "lesson_id,status,started_at,completed_at,metadata",
                     "order": "created_at.asc",
                 },
             )
@@ -205,13 +284,19 @@ class SupabaseGameProgressRepository:
                 params={
                     "user_id": f"eq.{user_id}",
                     "lesson_id": f"eq.{lesson_id}",
-                    "select": "lesson_id,status,started_at,completed_at",
+                    "select": "lesson_id,status,started_at,completed_at,metadata",
                     "limit": "1",
                 },
             )
         _raise_for_storage_error(response)
         rows = response.json()
         return GameLessonProgress.model_validate(rows[0]) if rows else None
+
+    async def _require_started_lesson(self, user_id: str, lesson_id: str) -> GameLessonProgress:
+        current = await self._get_one_lesson_progress(user_id, lesson_id)
+        if current is None:
+            raise InvalidGameProgressAction("Lesson has not been started")
+        return current
 
     async def _upsert_user_progress(self, user_id: str, values: dict[str, Any]) -> None:
         payload = {"user_id": user_id, **values}
@@ -259,6 +344,51 @@ def _to_response(progress: _StoredProgress) -> GameProgress:
         selected_fighter_id=progress.selected_fighter_id,
         lessons=list(progress.lessons.values()),
     )
+
+
+def _ensure_started_lesson(
+    users: dict[str, _StoredProgress],
+    user_id: str,
+    lesson_id: str,
+) -> tuple[_StoredProgress, GameLessonProgress]:
+    stored = users.setdefault(user_id, _StoredProgress(None, {}))
+    current = stored.lessons.get(lesson_id)
+    if current is None:
+        now = _now()
+        current = GameLessonProgress(lesson_id=lesson_id, status="started", started_at=now)
+        stored.lessons[lesson_id] = current
+    return stored, current
+
+
+def _copy_lesson_progress(
+    current: GameLessonProgress,
+    *,
+    metadata: dict[str, Any],
+) -> GameLessonProgress:
+    return GameLessonProgress(
+        lesson_id=current.lesson_id,
+        status=current.status,
+        started_at=current.started_at,
+        completed_at=current.completed_at,
+        metadata=metadata,
+    )
+
+
+def _metadata_dict(current: GameLessonProgress) -> dict[str, Any]:
+    if current.metadata is None:
+        return {}
+    return current.metadata.model_dump(by_alias=True, exclude_none=True)
+
+
+def _easter_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    value = metadata.get("easterEggs")
+    if not isinstance(value, dict):
+        return {"discoveredIds": [], "total": 1}
+    discovered = value.get("discoveredIds")
+    return {
+        "discoveredIds": [item for item in discovered if isinstance(item, str)] if isinstance(discovered, list) else [],
+        "total": 1,
+    }
 
 
 def _now() -> str:
