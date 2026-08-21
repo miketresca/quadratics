@@ -68,6 +68,10 @@ type InteractiveWorksheetBundle = {
   pages?: Array<{id: string; pageNumber?: number}>;
   sections?: WorksheetSection[];
 };
+type WorksheetPlaybackState = {
+  activeSectionId: string | null;
+  completedSectionIds: string[];
+};
 type PomodoroState = {
   endsAt: number | null;
   minutes: number;
@@ -129,6 +133,7 @@ const MUSIC_OPTIONS: MusicOption[] = [
 ];
 const POMODORO_STORAGE_KEY = "quadratics.game.pomodoro.v1";
 const MUSIC_STORAGE_KEY = "quadratics.game.music.v1";
+const WORKSHEET_PLAYBACK_STORAGE_PREFIX = "quadratics.game.worksheet-playback.v1";
 const ALARM_SOUND_URL = "/game/assets/audio/alarm_sound.wav";
 const ROOM = {
   width: 10.6,
@@ -204,6 +209,7 @@ export function GameShell({
   const musicMutedRef = useRef(readMusicState().muted);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
   const paperTextureRef = useRef<Texture | null>(null);
+  const worksheetPlaybackRef = useRef<WorksheetPlaybackState>({activeSectionId: null, completedSectionIds: []});
   const selectedLessonIdRef = useRef<GameLessonId | null>(null);
   const gamePipelineRequestRef = useRef(0);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
@@ -222,6 +228,7 @@ export function GameShell({
   const [selectedMusicId, setSelectedMusicId] = useState<MusicOptionId>(() => readMusicState().selectedMusicId);
   const [musicMuted, setMusicMuted] = useState(() => readMusicState().muted);
   const [gameRun, setGameRun] = useState<GameWorksheetRunSnapshot | null>(null);
+  const [worksheetPlayback, setWorksheetPlayback] = useState<WorksheetPlaybackState>({activeSectionId: null, completedSectionIds: []});
   const [gamePipelineLoading, setGamePipelineLoading] = useState(false);
   const [gamePipelineError, setGamePipelineError] = useState<string | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
@@ -234,6 +241,7 @@ export function GameShell({
   selectedMusicRef.current = selectedMusicId;
   musicMutedRef.current = musicMuted;
   gameRunRef.current = gameRun;
+  worksheetPlaybackRef.current = worksheetPlayback;
   selectedLessonIdRef.current = selectedLessonId;
 
   function updateFocusMode(mode: FocusMode) {
@@ -286,12 +294,13 @@ export function GameShell({
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
     setGameRun(null);
+    setWorksheetPlayback({activeSectionId: null, completedSectionIds: []});
     selectedLessonIdRef.current = null;
     setSelectedLessonId(null);
     setGamePipelineError(null);
     laptopScreenRef.current?.updateUser(null);
     laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: null});
-    refreshPaperTexture(paperTextureRef.current, null, null, null);
+    refreshPaperTexture(paperTextureRef.current, null, null, null, worksheetPlaybackRef.current);
   }
 
   function setPomodoroMinutes(minutes: number) {
@@ -345,8 +354,18 @@ export function GameShell({
 
   function setGameRunSnapshot(snapshot: GameWorksheetRunSnapshot | null) {
     setGameRun(snapshot);
+    const nextPlayback = snapshot ? readWorksheetPlaybackState(snapshot.id) : {activeSectionId: null, completedSectionIds: []};
+    setWorksheetPlayback(nextPlayback);
     laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
-    refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, snapshot);
+    refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, snapshot, nextPlayback);
+  }
+
+  function setWorksheetPlaybackSnapshot(nextPlayback: WorksheetPlaybackState) {
+    setWorksheetPlayback(nextPlayback);
+    if (gameRunRef.current) {
+      writeWorksheetPlaybackState(gameRunRef.current.id, nextPlayback);
+    }
+    refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, gameRunRef.current, nextPlayback);
   }
 
   function handleLaptopLoginSubmit(event: FormEvent<HTMLFormElement>) {
@@ -514,13 +533,13 @@ export function GameShell({
         loading: false,
         run: gameRunRef.current
       });
-      refreshPaperTexture(texture, null, choiceId, gameRunRef.current);
+      refreshPaperTexture(texture, null, choiceId, gameRunRef.current, worksheetPlaybackRef.current);
       return;
     }
     setLockedMessage(false);
     selectedLessonIdRef.current = choiceId;
     setSelectedLessonId(choiceId);
-    refreshPaperTexture(texture, choiceId, choiceId, gameRunRef.current);
+    refreshPaperTexture(texture, choiceId, choiceId, gameRunRef.current, worksheetPlaybackRef.current);
     changeLaptopTab("pipeline");
     void prepareGameLessonRun().catch(() => {
       // The laptop pipeline tab carries the actionable error for the user.
@@ -658,7 +677,7 @@ export function GameShell({
       setLockedMessage(false);
       if (mode !== "paper") {
         hoveredChoiceId = null;
-        refreshPaperTexture(paperTexture, selectedLessonIdRef.current, null, gameRunRef.current);
+        refreshPaperTexture(paperTexture, selectedLessonIdRef.current, null, gameRunRef.current, worksheetPlaybackRef.current);
       }
     }
     focusModeSetterRef.current = setFocusMode;
@@ -876,7 +895,7 @@ export function GameShell({
       }, 1_000);
       cleanupCallbacks.push(() => window.clearInterval(clockTimer));
 
-      paperTexture = createWorksheetTexture(THREE, selectedLessonIdRef.current, null, gameRunRef.current);
+      paperTexture = createWorksheetTexture(THREE, selectedLessonIdRef.current, null, gameRunRef.current, worksheetPlaybackRef.current);
       paperTextureRef.current = paperTexture;
       paperMesh = createPaper(THREE, paperTexture);
       sceneTunables.paper = paperMesh;
@@ -976,7 +995,7 @@ export function GameShell({
         const [hit] = raycaster.intersectObject(paperMesh);
         if (!hit || !hit.uv || focusModeRef.current !== "paper") {
           hoveredChoiceId = null;
-          refreshPaperTexture(paperTexture, selectedLessonIdRef.current, hoveredChoiceId, gameRunRef.current);
+          refreshPaperTexture(paperTexture, selectedLessonIdRef.current, hoveredChoiceId, gameRunRef.current, worksheetPlaybackRef.current);
           return;
         }
         pointerTarget.x = hit.point.x;
@@ -986,14 +1005,14 @@ export function GameShell({
         if (selectedLessonIdRef.current === GAME_LESSON_TEMPLATE_ID && gameRunRef.current?.templateId === GAME_LESSON_TEMPLATE_ID) {
           if (hoveredChoiceId !== null) {
             hoveredChoiceId = null;
-            refreshPaperTexture(paperTexture, selectedLessonIdRef.current, null, gameRunRef.current);
+            refreshPaperTexture(paperTexture, selectedLessonIdRef.current, null, gameRunRef.current, worksheetPlaybackRef.current);
           }
           return;
         }
         const nextHover = choiceAtCanvasPoint(canvasX, canvasY)?.id ?? null;
         if (nextHover !== hoveredChoiceId) {
           hoveredChoiceId = nextHover;
-          refreshPaperTexture(paperTexture, selectedLessonIdRef.current, hoveredChoiceId, gameRunRef.current);
+          refreshPaperTexture(paperTexture, selectedLessonIdRef.current, hoveredChoiceId, gameRunRef.current, worksheetPlaybackRef.current);
         }
       }
 
@@ -1064,6 +1083,7 @@ export function GameShell({
           const section = sectionAtCanvasPoint(canvasX, canvasY, gameRunRef.current);
           if (section) {
             setLockedMessage(false);
+            setWorksheetPlaybackSnapshot(nextPlaybackState(worksheetPlaybackRef.current, section.id));
             changeLaptopTab("pipeline");
           }
           return;
@@ -1076,7 +1096,7 @@ export function GameShell({
           setLockedMessage(true);
           selectedLessonIdRef.current = null;
           setSelectedLessonId(null);
-          refreshPaperTexture(paperTexture, null, choice.id, gameRunRef.current);
+          refreshPaperTexture(paperTexture, null, choice.id, gameRunRef.current, worksheetPlaybackRef.current);
           return;
         }
         startGameLesson(choice.id, paperTexture);
@@ -1874,6 +1894,40 @@ function writeMusicState(state: {muted: boolean; selectedMusicId: MusicOptionId}
     return;
   }
   window.localStorage.setItem(MUSIC_STORAGE_KEY, JSON.stringify(state));
+}
+
+function readWorksheetPlaybackState(runId: string): WorksheetPlaybackState {
+  if (typeof window === "undefined") {
+    return {activeSectionId: null, completedSectionIds: []};
+  }
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(worksheetPlaybackStorageKey(runId)) ?? "null") as Partial<WorksheetPlaybackState> | null;
+    const completedSectionIds = Array.isArray(parsed?.completedSectionIds)
+      ? parsed.completedSectionIds.filter((sectionId): sectionId is string => typeof sectionId === "string")
+      : [];
+    const activeSectionId = typeof parsed?.activeSectionId === "string" ? parsed.activeSectionId : null;
+    return {activeSectionId, completedSectionIds: [...new Set(completedSectionIds)]};
+  } catch {
+    return {activeSectionId: null, completedSectionIds: []};
+  }
+}
+
+function writeWorksheetPlaybackState(runId: string, state: WorksheetPlaybackState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(worksheetPlaybackStorageKey(runId), JSON.stringify(state));
+}
+
+function worksheetPlaybackStorageKey(runId: string) {
+  return `${WORKSHEET_PLAYBACK_STORAGE_PREFIX}.${runId}`;
+}
+
+function nextPlaybackState(current: WorksheetPlaybackState, sectionId: string): WorksheetPlaybackState {
+  return {
+    activeSectionId: sectionId,
+    completedSectionIds: [...new Set([...current.completedSectionIds, sectionId])]
+  };
 }
 
 function formatPomodoroClock(ms: number) {
@@ -3846,12 +3900,13 @@ function createWorksheetTexture(
   THREE: typeof import("three"),
   checkedLessonId: GameLessonId | null,
   hoveredChoiceId: GameLessonId | null,
-  run: GameWorksheetRunSnapshot | null
+  run: GameWorksheetRunSnapshot | null,
+  playback: WorksheetPlaybackState
 ) {
   const canvas = document.createElement("canvas");
   canvas.width = WORKSHEET_CANVAS_WIDTH;
   canvas.height = WORKSHEET_CANVAS_HEIGHT;
-  drawWorksheet(canvas, checkedLessonId, hoveredChoiceId, run);
+  drawWorksheet(canvas, checkedLessonId, hoveredChoiceId, run, playback);
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 8;
   texture.needsUpdate = true;
@@ -3862,12 +3917,13 @@ function refreshPaperTexture(
   texture: Texture | null,
   checkedLessonId: GameLessonId | null,
   hoveredChoiceId: GameLessonId | null,
-  run: GameWorksheetRunSnapshot | null
+  run: GameWorksheetRunSnapshot | null,
+  playback: WorksheetPlaybackState
 ) {
   if (!texture?.image || !(texture.image instanceof HTMLCanvasElement)) {
     return;
   }
-  drawWorksheet(texture.image, checkedLessonId, hoveredChoiceId, run);
+  drawWorksheet(texture.image, checkedLessonId, hoveredChoiceId, run, playback);
   texture.needsUpdate = true;
 }
 
@@ -3875,7 +3931,8 @@ function drawWorksheet(
   canvas: HTMLCanvasElement,
   checkedLessonId: GameLessonId | null,
   hoveredChoiceId: GameLessonId | null,
-  run: GameWorksheetRunSnapshot | null
+  run: GameWorksheetRunSnapshot | null,
+  playback: WorksheetPlaybackState
 ) {
   const context = canvas.getContext("2d");
   if (!context) {
@@ -3889,7 +3946,7 @@ function drawWorksheet(
   context.strokeRect(34, 34, canvas.width - 68, canvas.height - 68);
 
   if (checkedLessonId === GAME_LESSON_TEMPLATE_ID && run?.templateId === GAME_LESSON_TEMPLATE_ID) {
-    drawGeneratedWorksheet(context, run);
+    drawGeneratedWorksheet(context, run, playback);
     return;
   }
 
@@ -3949,12 +4006,13 @@ function drawWorksheet(
   context.fillText("Notes", 118, 892);
 }
 
-function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWorksheetRunSnapshot) {
+function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
   const bundle = interactiveBundleForRun(run);
   const template = templatePayloadForRun(run);
   const sections = bundle?.sections?.length ? bundle.sections : worksheetSectionsFromPayload(template);
   const fillTargets = bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
   const complete = artifactForStage(run, "interactive_bundle")?.status === "completed";
+  const completedSections = new Set(playback.completedSectionIds);
 
   context.fillStyle = "#24313f";
   context.font = "800 50px ui-rounded, system-ui, sans-serif";
@@ -3981,8 +4039,10 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
     if (!rect) {
       continue;
     }
-    context.fillStyle = "#fffdf8";
-    context.strokeStyle = complete ? "#2f9d65" : "#cdbfaa";
+    const active = playback.activeSectionId === section.id;
+    const completed = completedSections.has(section.id);
+    context.fillStyle = active ? "#eefcf4" : completed ? "#f7fff9" : "#fffdf8";
+    context.strokeStyle = active ? "#0f9f6e" : completed ? "#2f9d65" : complete ? "#8fb99d" : "#cdbfaa";
     context.lineWidth = 4;
     roundRect(context, rect.x, rect.y, rect.width, rect.height, 22);
     context.fill();
@@ -3990,6 +4050,15 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
     context.fillStyle = "#1f2937";
     context.font = "800 34px ui-rounded, system-ui, sans-serif";
     context.fillText(section.title, rect.x + 30, rect.y + 55);
+    if (completed) {
+      context.strokeStyle = "#15803d";
+      context.lineWidth = 8;
+      context.beginPath();
+      context.moveTo(rect.x + rect.width - 72, rect.y + 50);
+      context.lineTo(rect.x + rect.width - 48, rect.y + 76);
+      context.lineTo(rect.x + rect.width - 20, rect.y + 30);
+      context.stroke();
+    }
     if (section.summary) {
       context.font = "24px ui-rounded, system-ui, sans-serif";
       context.fillStyle = "#64748b";
@@ -4004,13 +4073,14 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
   context.lineWidth = 3;
   let rowY = 710;
   for (const target of pageOneTargets) {
+    const sectionReady = Boolean(target.sectionId && completedSections.has(target.sectionId));
     context.beginPath();
     context.moveTo(110, rowY + 30);
     context.lineTo(1090, rowY + 30);
     context.stroke();
-    context.fillStyle = complete ? "#1e3a8a" : "#9a8973";
-    context.font = complete ? "30px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif" : "26px ui-rounded, system-ui, sans-serif";
-    context.fillText(complete ? target.expectedText ?? target.id : "waiting for interactive bundle", 120, rowY);
+    context.fillStyle = sectionReady ? "#1e3a8a" : "#9a8973";
+    context.font = sectionReady ? "30px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif" : "26px ui-rounded, system-ui, sans-serif";
+    context.fillText(sectionReady ? target.expectedText ?? target.id : complete ? "click a section to reveal" : "waiting for interactive bundle", 120, rowY);
     rowY += 72;
   }
 
