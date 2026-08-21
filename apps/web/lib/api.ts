@@ -146,6 +146,7 @@ export type GameWorksheetRunSnapshot = {
   selectedInstructorId: string | null;
   status: "created" | "running" | "completed" | "failed";
   templateTitle: string;
+  templatePayload: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   artifacts: GameLessonArtifact[];
@@ -192,6 +193,7 @@ function normalizeGameLessonRun(snapshot: ApiGameWorksheetRunSnapshot): GameWork
     selectedInstructorId: snapshot.selectedInstructorId,
     status: snapshot.status === "active" ? "running" : snapshot.status,
     templateTitle: snapshot.template.title,
+    templatePayload: snapshot.template.payload,
     createdAt: snapshot.createdAt,
     updatedAt: snapshot.updatedAt,
     artifacts: snapshot.artifacts.map((artifact) => ({
