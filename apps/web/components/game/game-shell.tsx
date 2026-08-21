@@ -12,7 +12,6 @@ import {
   type GameLessonStage,
   type GameWorksheetRunSnapshot
 } from "@/lib/api";
-import {getGameLesson} from "@/lib/game/lessons";
 import {createClient} from "@/lib/supabase/client";
 
 type LessonChoice = {
@@ -203,7 +202,6 @@ export function GameShell({
   const [gamePipelineError, setGamePipelineError] = useState<string | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [sceneEditorHud, setSceneEditorHud] = useState<string | null>(null);
-  const selectedLesson = selectedLessonId ? getGameLesson(selectedLessonId) : null;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
   const pomodoroRemaining = pomodoro.endsAt ? Math.max(0, pomodoro.endsAt - pomodoroNow) : 0;
 
@@ -432,17 +430,65 @@ export function GameShell({
     const cleanupCallbacks: Array<() => void> = [];
     let laptopInteractionTimer: number | null = null;
     let clockPanelTimer: number | null = null;
+    let pointerLockRequestPending = false;
+    let lastPointerLockRequestAt = 0;
 
     function postMusicCommand(command: "mute" | "pauseVideo" | "playVideo" | "unMute") {
       musicIframe?.contentWindow?.postMessage(JSON.stringify({event: "command", func: command, args: []}), "https://www.youtube.com");
     }
 
+    function requestScenePointerLock() {
+      if (!renderer?.domElement || document.pointerLockElement === renderer.domElement || pointerLockRequestPending) {
+        return document.pointerLockElement === renderer?.domElement;
+      }
+      const now = window.performance.now();
+      if (now - lastPointerLockRequestAt < 700) {
+        return false;
+      }
+      lastPointerLockRequestAt = now;
+      pointerLockRequestPending = true;
+      try {
+        const lockRequest = renderer.domElement.requestPointerLock();
+        void Promise.resolve(lockRequest)
+          .catch((error: unknown) => {
+            if (process.env.NODE_ENV === "development") {
+              console.warn("[quadratics] pointer lock request skipped", error);
+            }
+            if (startedRef.current && document.pointerLockElement !== renderer?.domElement) {
+              startedRef.current = false;
+              setStarted(false);
+              postMusicCommand("pauseVideo");
+            }
+          })
+          .finally(() => {
+            pointerLockRequestPending = false;
+          });
+      } catch (error) {
+        pointerLockRequestPending = false;
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[quadratics] pointer lock request skipped", error);
+        }
+        if (startedRef.current) {
+          startedRef.current = false;
+          setStarted(false);
+          postMusicCommand("pauseVideo");
+        }
+      }
+      return true;
+    }
+
     function startExperience() {
+      const didRequestPointerLock = requestScenePointerLock();
+      if (!didRequestPointerLock) {
+        startedRef.current = false;
+        setStarted(false);
+        postMusicCommand("pauseVideo");
+        return;
+      }
       startedRef.current = true;
       setStarted(true);
       postMusicCommand("playVideo");
       postMusicCommand(musicMutedRef.current ? "mute" : "unMute");
-      void renderer?.domElement.requestPointerLock();
     }
 
     function pauseExperience() {
@@ -838,7 +884,7 @@ export function GameShell({
             return;
           }
           if (!worksheetFocusedRef.current && !pointerLockedRef.current) {
-            void renderer.domElement.requestPointerLock();
+            requestScenePointerLock();
           }
           return;
         }
@@ -1170,32 +1216,6 @@ export function GameShell({
         />
       ) : null}
 
-      {selectedLesson?.pdfUrl ? (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-black/55 p-5 backdrop-blur-sm">
-          <div className="flex h-[min(86vh,900px)] w-[min(72rem,calc(100vw-2rem))] flex-col overflow-hidden rounded border border-amber-200/30 bg-[#120d08] shadow-2xl">
-            <div className="flex items-center justify-between gap-4 border-b border-amber-200/20 px-4 py-3">
-              <div>
-                <p className="font-mono text-xs uppercase tracking-wide text-amber-200/70">Selected worksheet</p>
-                <h2 className="text-lg font-semibold text-amber-50">{selectedLesson.title}</h2>
-              </div>
-              <button
-                className="rounded border border-amber-100/30 px-3 py-2 text-sm text-amber-50 hover:bg-amber-100/10"
-                onClick={() => setSelectedLessonId(null)}
-                type="button"
-              >
-                Back to desk
-              </button>
-            </div>
-            <object className="min-h-0 flex-1 bg-zinc-950" data={selectedLesson.pdfUrl} type="application/pdf">
-              <div className="grid h-full place-items-center p-8 text-center">
-                <a className="rounded border border-amber-200/50 px-4 py-3 text-amber-50" href={selectedLesson.pdfUrl} rel="noreferrer" target="_blank">
-                  Open worksheet PDF
-                </a>
-              </div>
-            </object>
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 }
