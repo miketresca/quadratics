@@ -13,6 +13,7 @@ import {
   type GameLessonStage,
   type GameWorksheetRunSnapshot
 } from "@/lib/api";
+import {updateGameProgress} from "@/lib/game/progress-client";
 import {createClient} from "@/lib/supabase/client";
 
 type LessonChoice = {
@@ -79,6 +80,7 @@ type WorksheetPlaybackState = {
   currentPageId: string | null;
   lessonCompletedAt: number | null;
 };
+type PhoneScreenMode = "off" | "quote" | "reward" | "rickroll";
 type PomodoroState = {
   endsAt: number | null;
   minutes: number;
@@ -149,7 +151,9 @@ const MUSIC_OPTIONS: MusicOption[] = [
 const POMODORO_STORAGE_KEY = "quadratics.game.pomodoro.v1";
 const MUSIC_STORAGE_KEY = "quadratics.game.music.v1";
 const WORKSHEET_PLAYBACK_STORAGE_PREFIX = "quadratics.game.worksheet-playback.v1";
+const PHONE_REWARD_STORAGE_PREFIX = "quadratics.game.phone-reward.v1";
 const ALARM_SOUND_URL = "/game/assets/audio/alarm_sound.wav";
+const PHONE_VIBRATION_SOUND_URL = "/game/assets/audio/mobile-phone-vibration.mp3";
 const ROOM = {
   width: 10.6,
   depth: 9.4,
@@ -221,12 +225,17 @@ export function GameShell({
   const userRef = useRef<CurrentUser | null>(initialUser);
   const pomodoroRef = useRef<PomodoroState>(initialUser ? readPomodoroState() : {endsAt: null, minutes: 25});
   const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
+  const phoneVibrationAudioRef = useRef<HTMLAudioElement | null>(null);
   const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
   const musicMutedRef = useRef(readMusicState().muted);
   const musicVolumeRef = useRef(readMusicState().volume);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
   const paperTextureRef = useRef<Texture | null>(null);
+  const phoneScreenTextureRef = useRef<Texture | null>(null);
+  const phoneQuoteIndexRef = useRef(-1);
   const worksheetPlaybackRef = useRef<WorksheetPlaybackState>(DEFAULT_WORKSHEET_PLAYBACK);
+  const phoneRewardPendingRef = useRef(false);
+  const phoneScreenModeRef = useRef<PhoneScreenMode>("off");
   const selectedLessonIdRef = useRef<GameLessonId | null>(null);
   const gamePipelineRequestRef = useRef(0);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
@@ -247,6 +256,8 @@ export function GameShell({
   const [musicVolume, setMusicVolume] = useState(() => readMusicState().volume);
   const [gameRun, setGameRun] = useState<GameWorksheetRunSnapshot | null>(null);
   const [worksheetPlayback, setWorksheetPlayback] = useState<WorksheetPlaybackState>(DEFAULT_WORKSHEET_PLAYBACK);
+  const [phoneRewardPending, setPhoneRewardPending] = useState(false);
+  const [phoneScreenMode, setPhoneScreenMode] = useState<PhoneScreenMode>("off");
   const [gamePipelineLoading, setGamePipelineLoading] = useState(false);
   const [gamePipelineError, setGamePipelineError] = useState<string | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
@@ -261,7 +272,21 @@ export function GameShell({
   musicVolumeRef.current = musicVolume;
   gameRunRef.current = gameRun;
   worksheetPlaybackRef.current = worksheetPlayback;
+  phoneRewardPendingRef.current = phoneRewardPending;
+  phoneScreenModeRef.current = phoneScreenMode;
   selectedLessonIdRef.current = selectedLessonId;
+
+  useEffect(() => {
+    const pending = user ? readPhoneRewardState(user.id) : false;
+    phoneRewardPendingRef.current = pending;
+    setPhoneRewardPending(pending);
+    setPhoneScreenMode(pending ? "reward" : "off");
+    if (pending) {
+      startPhoneRewardVibration();
+    } else {
+      stopPhoneRewardVibration();
+    }
+  }, [user]);
 
   function updateFocusMode(mode: FocusMode) {
     focusModeRef.current = mode;
@@ -310,6 +335,7 @@ export function GameShell({
     await supabase.auth.signOut();
     gamePipelineRequestRef.current += 1;
     window.localStorage.removeItem(POMODORO_STORAGE_KEY);
+    setPhoneRewardSnapshot(false);
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
     setGameRun(null);
@@ -379,6 +405,49 @@ export function GameShell({
     });
   }
 
+  function startPhoneRewardVibration() {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const audio = phoneVibrationAudioRef.current ?? new Audio(PHONE_VIBRATION_SOUND_URL);
+    phoneVibrationAudioRef.current = audio;
+    audio.loop = true;
+    audio.currentTime = 0;
+    void audio.play().catch(() => {
+      // Reward state is still visible if autoplay rules block the vibration audio.
+    });
+  }
+
+  function stopPhoneRewardVibration() {
+    const audio = phoneVibrationAudioRef.current;
+    if (!audio) {
+      return;
+    }
+    audio.pause();
+    audio.currentTime = 0;
+  }
+
+  function setPhoneRewardSnapshot(pending: boolean) {
+    phoneRewardPendingRef.current = pending;
+    setPhoneRewardPending(pending);
+    if (userRef.current) {
+      writePhoneRewardState(userRef.current.id, pending);
+    }
+    if (pending) {
+      setPhoneScreenModeSnapshot("reward");
+      startPhoneRewardVibration();
+    } else {
+      stopPhoneRewardVibration();
+      setPhoneScreenModeSnapshot(focusModeRef.current === "phone" ? "quote" : "off");
+    }
+  }
+
+  function setPhoneScreenModeSnapshot(mode: PhoneScreenMode) {
+    phoneScreenModeRef.current = mode;
+    setPhoneScreenMode(mode);
+    refreshPhoneScreenTexture(phoneScreenTextureRef.current, mode, PHONE_FOCUS_QUOTES[Math.max(0, phoneQuoteIndexRef.current)]);
+  }
+
   function setGameRunSnapshot(snapshot: GameWorksheetRunSnapshot | null) {
     setGameRun(snapshot);
     const nextPlayback = snapshot ? readWorksheetPlaybackState(snapshot.id) : DEFAULT_WORKSHEET_PLAYBACK;
@@ -409,6 +478,23 @@ export function GameShell({
       throw new Error("Login on the laptop to start this lesson.");
     }
     return session.access_token;
+  }
+
+  async function updateGameLessonProgress(action: "start_lesson" | "complete_lesson") {
+    try {
+      const accessToken = await getLaptopAccessToken();
+      await updateGameProgress({
+        accessToken,
+        request: {
+          action,
+          lessonId: GAME_LESSON_TEMPLATE_ID
+        }
+      });
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[quadratics] could not update game lesson progress", error);
+      }
+    }
   }
 
   async function prepareGameLessonRun(params: {forceTemplate?: boolean} = {}) {
@@ -568,6 +654,7 @@ export function GameShell({
     setSelectedLessonId(choiceId);
     refreshPaperTexture(texture, choiceId, choiceId, gameRunRef.current, worksheetPlaybackRef.current);
     changeLaptopTab("pipeline");
+    void updateGameLessonProgress("start_lesson");
     void prepareGameLessonRun().catch(() => {
       // The laptop pipeline tab carries the actionable error for the user.
     });
@@ -591,7 +678,6 @@ export function GameShell({
     let musicIframe: HTMLIFrameElement | null = null;
     let laptopScreenApi: LaptopScreenApi | null = null;
     let hoveredChoiceId: GameLessonId | null = null;
-    let phoneQuoteIndex = -1;
     let sceneEditorSelection: SceneTunableName = "laptop";
     const sceneTunables: Partial<Record<SceneTunableName, Object3D>> = {};
     const pointerTarget = {x: 1.08, z: 0.82 + DESK_RIG_Z};
@@ -680,11 +766,12 @@ export function GameShell({
         window.clearTimeout(clockPanelTimer);
         clockPanelTimer = null;
       }
-      refreshPhoneScreenTexture(
-        phoneScreenTexture,
-        mode === "phone",
-        mode === "phone" ? PHONE_FOCUS_QUOTES[Math.max(0, phoneQuoteIndex)] : undefined
-      );
+      const nextPhoneMode: PhoneScreenMode = phoneRewardPendingRef.current
+        ? "reward"
+        : mode === "phone"
+          ? "quote"
+          : "off";
+      setPhoneScreenModeSnapshot(nextPhoneMode);
       applyFocusCamera(mode, 0, 0);
       if (mode === "laptop") {
         setCssRendererVisibility(cssRenderer, false);
@@ -861,6 +948,12 @@ export function GameShell({
       steamGroup = supplies.steamGroup;
       clockTexture = supplies.clockTexture;
       phoneScreenTexture = supplies.phoneScreenTexture;
+      phoneScreenTextureRef.current = phoneScreenTexture;
+      refreshPhoneScreenTexture(
+        phoneScreenTexture,
+        phoneScreenModeRef.current,
+        PHONE_FOCUS_QUOTES[Math.max(0, phoneQuoteIndexRef.current)]
+      );
       deskRig.add(supplies.group);
       sceneTunables.clock = supplies.clock;
       sceneTunables.coffee = supplies.coffeeGroup;
@@ -1049,6 +1142,12 @@ export function GameShell({
         if (!startedRef.current) {
           return;
         }
+        if (focusModeRef.current === "phone") {
+          if (phoneScreenModeRef.current === "reward") {
+            setPhoneScreenModeSnapshot("rickroll");
+          }
+          return;
+        }
         if (worksheetFocusedRef.current) {
           const rect = renderer.domElement.getBoundingClientRect();
           pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1081,8 +1180,15 @@ export function GameShell({
         }
         const selectedPhone = sceneTunables.phone;
         if (!worksheetFocusedRef.current && selectedPhone && raycaster.intersectObject(selectedPhone, true).length > 0) {
-          phoneQuoteIndex = (phoneQuoteIndex + 1) % PHONE_FOCUS_QUOTES.length;
-          setFocusMode("phone");
+          phoneQuoteIndexRef.current = (phoneQuoteIndexRef.current + 1) % PHONE_FOCUS_QUOTES.length;
+          if (phoneRewardPendingRef.current) {
+            setPhoneRewardSnapshot(false);
+            setFocusMode("phone");
+            setPhoneScreenModeSnapshot("reward");
+          } else {
+            setFocusMode("phone");
+            setPhoneScreenModeSnapshot("quote");
+          }
           document.exitPointerLock?.();
           return;
         }
@@ -1116,7 +1222,14 @@ export function GameShell({
             setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeSectionId: null, currentPageId: action.pageId});
           } else if (action?.type === "complete_lesson") {
             setLockedMessage(false);
-            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, lessonCompletedAt: Date.now()});
+            const nextPlayback = {...worksheetPlaybackRef.current, lessonCompletedAt: Date.now()};
+            setWorksheetPlaybackSnapshot(nextPlayback);
+            void updateGameLessonProgress("complete_lesson");
+            window.setTimeout(() => {
+              if (worksheetPlaybackRef.current.lessonCompletedAt === nextPlayback.lessonCompletedAt && userRef.current) {
+                setPhoneRewardSnapshot(true);
+              }
+            }, 5_000);
           }
           return;
         }
@@ -1425,6 +1538,8 @@ export function GameShell({
         />
       ) : null}
 
+      {focusedMode === "phone" && phoneScreenMode === "rickroll" ? <PhoneRewardVideoPanel /> : null}
+
       {focusedMode === "laptop" ? (
         <LaptopFocusPanel
           error={loginError}
@@ -1515,6 +1630,21 @@ function ClockFocusPanel({
         </button>
       </div>
       <p className="mt-3 text-xs text-zinc-500">Clock uses your browser time zone: {timezone}.</p>
+    </div>
+  );
+}
+
+function PhoneRewardVideoPanel() {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center">
+      <div className="pointer-events-auto aspect-[9/16] h-[min(74vh,46rem)] overflow-hidden rounded-[2rem] border border-emerald-200/25 bg-black shadow-2xl shadow-emerald-950/30">
+        <iframe
+          allow="autoplay; encrypted-media; picture-in-picture"
+          className="h-full w-full"
+          src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&playsinline=1&rel=0&modestbranding=1"
+          title="Lesson reward"
+        />
+      </div>
     </div>
   );
 }
@@ -2117,6 +2247,29 @@ function worksheetPlaybackStorageKey(runId: string) {
   return `${WORKSHEET_PLAYBACK_STORAGE_PREFIX}.${runId}`;
 }
 
+function readPhoneRewardState(userId: string) {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.localStorage.getItem(phoneRewardStorageKey(userId)) === "pending";
+}
+
+function writePhoneRewardState(userId: string, pending: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const key = phoneRewardStorageKey(userId);
+  if (pending) {
+    window.localStorage.setItem(key, "pending");
+  } else {
+    window.localStorage.removeItem(key);
+  }
+}
+
+function phoneRewardStorageKey(userId: string) {
+  return `${PHONE_REWARD_STORAGE_PREFIX}.${userId}`;
+}
+
 function nextPlaybackState(current: WorksheetPlaybackState, sectionId: string): WorksheetPlaybackState {
   return {
     ...current,
@@ -2706,7 +2859,7 @@ function createDeskPhone(THREE: typeof import("three")) {
   edge.castShadow = true;
   group.add(edge);
 
-  const screenTexture = createPhoneScreenTexture(THREE, false);
+  const screenTexture = createPhoneScreenTexture(THREE, "off");
   const screen = new THREE.Mesh(
     new THREE.PlaneGeometry(0.48, 0.78),
     new THREE.MeshBasicMaterial({map: screenTexture, color: 0xffffff, side: THREE.DoubleSide})
@@ -2725,20 +2878,20 @@ function createDeskPhone(THREE: typeof import("three")) {
 
 function createPhoneScreenTexture(
   THREE: typeof import("three"),
-  active: boolean,
+  mode: PhoneScreenMode,
   quote?: {author: string; text: string}
 ) {
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 832;
-  drawPhoneScreen(canvas, active, quote);
+  drawPhoneScreen(canvas, mode, quote);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
 }
 
-function refreshPhoneScreenTexture(texture: Texture | null, active: boolean, quote?: {author: string; text: string}) {
+function refreshPhoneScreenTexture(texture: Texture | null, mode: PhoneScreenMode, quote?: {author: string; text: string}) {
   if (!texture) {
     return;
   }
@@ -2746,7 +2899,7 @@ function refreshPhoneScreenTexture(texture: Texture | null, active: boolean, quo
   if (!(image instanceof HTMLCanvasElement)) {
     return;
   }
-  drawPhoneScreen(image, active, quote);
+  drawPhoneScreen(image, mode, quote);
   texture.needsUpdate = true;
 }
 
@@ -2770,11 +2923,12 @@ function setCssRendererVisibility(renderer: CSS3DRenderer | null, visible: boole
   renderer.domElement.style.visibility = visible ? "visible" : "hidden";
 }
 
-function drawPhoneScreen(canvas: HTMLCanvasElement, active: boolean, quote?: {author: string; text: string}) {
+function drawPhoneScreen(canvas: HTMLCanvasElement, mode: PhoneScreenMode, quote?: {author: string; text: string}) {
   const context = canvas.getContext("2d");
   if (!context) {
     return;
   }
+  const active = mode !== "off";
   context.clearRect(0, 0, canvas.width, canvas.height);
   const glass = context.createLinearGradient(0, 0, canvas.width, canvas.height);
   glass.addColorStop(0, active ? "#071720" : "#101820");
@@ -2801,6 +2955,42 @@ function drawPhoneScreen(canvas: HTMLCanvasElement, active: boolean, quote?: {au
   context.lineWidth = 3;
   roundRect(context, 48, 80, canvas.width - 96, canvas.height - 160, 30);
   context.stroke();
+
+  if (mode === "reward" || mode === "rickroll") {
+    context.font = "700 28px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillStyle = "#7fffe6";
+    context.textAlign = "left";
+    context.fillText("LESSON COMPLETE", 76, 142);
+
+    context.font = "900 42px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillStyle = "#f8fafc";
+    wrapCanvasText(
+      context,
+      mode === "rickroll" ? "Prize unlocked." : "Tap the gift to claim your prize.",
+      76,
+      238,
+      canvas.width - 152,
+      54
+    );
+
+    context.fillStyle = mode === "rickroll" ? "#38bdf8" : "#facc15";
+    roundRect(context, 168, 500, 176, 128, 24);
+    context.fill();
+    context.strokeStyle = "rgba(255,255,255,0.6)";
+    context.lineWidth = 7;
+    context.beginPath();
+    context.moveTo(256, 500);
+    context.lineTo(256, 628);
+    context.moveTo(168, 564);
+    context.lineTo(344, 564);
+    context.stroke();
+
+    context.font = "800 24px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillStyle = mode === "rickroll" ? "#dbeafe" : "#fef9c3";
+    context.textAlign = "center";
+    context.fillText(mode === "rickroll" ? "NEVER GONNA GIVE YOU UP" : "OPEN", canvas.width / 2, 700);
+    return;
+  }
 
   context.font = "700 28px ui-monospace, SFMono-Regular, Menlo, monospace";
   context.fillStyle = "#7fffe6";
