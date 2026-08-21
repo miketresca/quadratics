@@ -76,6 +76,8 @@ type InteractiveWorksheetBundle = {
 type WorksheetPlaybackState = {
   activeSectionId: string | null;
   completedSectionIds: string[];
+  currentPageId: string | null;
+  lessonCompletedAt: number | null;
 };
 type PomodoroState = {
   endsAt: number | null;
@@ -116,6 +118,14 @@ const DESK_RIG_Z = -1.18;
 const SEATED_CAMERA_Z = 5.45 + DESK_RIG_Z;
 const WORKSHEET_CANVAS_WIDTH = 1200;
 const WORKSHEET_CANVAS_HEIGHT = 1600;
+const DEFAULT_WORKSHEET_PLAYBACK: WorksheetPlaybackState = {
+  activeSectionId: null,
+  completedSectionIds: [],
+  currentPageId: null,
+  lessonCompletedAt: null
+};
+const WORKSHEET_NEXT_PAGE_RECT = {height: 74, width: 312, x: 792, y: 1402};
+const WORKSHEET_COMPLETE_RECT = {height: 74, width: 348, x: 756, y: 1402};
 const MUSIC_OPTIONS: MusicOption[] = [
   {
     id: "lofi",
@@ -216,7 +226,7 @@ export function GameShell({
   const musicVolumeRef = useRef(readMusicState().volume);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
   const paperTextureRef = useRef<Texture | null>(null);
-  const worksheetPlaybackRef = useRef<WorksheetPlaybackState>({activeSectionId: null, completedSectionIds: []});
+  const worksheetPlaybackRef = useRef<WorksheetPlaybackState>(DEFAULT_WORKSHEET_PLAYBACK);
   const selectedLessonIdRef = useRef<GameLessonId | null>(null);
   const gamePipelineRequestRef = useRef(0);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
@@ -236,7 +246,7 @@ export function GameShell({
   const [musicMuted, setMusicMuted] = useState(() => readMusicState().muted);
   const [musicVolume, setMusicVolume] = useState(() => readMusicState().volume);
   const [gameRun, setGameRun] = useState<GameWorksheetRunSnapshot | null>(null);
-  const [worksheetPlayback, setWorksheetPlayback] = useState<WorksheetPlaybackState>({activeSectionId: null, completedSectionIds: []});
+  const [worksheetPlayback, setWorksheetPlayback] = useState<WorksheetPlaybackState>(DEFAULT_WORKSHEET_PLAYBACK);
   const [gamePipelineLoading, setGamePipelineLoading] = useState(false);
   const [gamePipelineError, setGamePipelineError] = useState<string | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
@@ -303,7 +313,7 @@ export function GameShell({
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
     setGameRun(null);
-    setWorksheetPlayback({activeSectionId: null, completedSectionIds: []});
+    setWorksheetPlayback(DEFAULT_WORKSHEET_PLAYBACK);
     selectedLessonIdRef.current = null;
     setSelectedLessonId(null);
     setGamePipelineError(null);
@@ -371,7 +381,7 @@ export function GameShell({
 
   function setGameRunSnapshot(snapshot: GameWorksheetRunSnapshot | null) {
     setGameRun(snapshot);
-    const nextPlayback = snapshot ? readWorksheetPlaybackState(snapshot.id) : {activeSectionId: null, completedSectionIds: []};
+    const nextPlayback = snapshot ? readWorksheetPlaybackState(snapshot.id) : DEFAULT_WORKSHEET_PLAYBACK;
     setWorksheetPlayback(nextPlayback);
     laptopScreenRef.current?.setPipelineState({error: null, loading: false, run: snapshot});
     refreshPaperTexture(paperTextureRef.current, selectedLessonIdRef.current, null, snapshot, nextPlayback);
@@ -1096,11 +1106,17 @@ export function GameShell({
         const canvasX = hit.uv.x * WORKSHEET_CANVAS_WIDTH;
         const canvasY = (1 - hit.uv.y) * WORKSHEET_CANVAS_HEIGHT;
         if (selectedLessonIdRef.current === GAME_LESSON_TEMPLATE_ID && gameRunRef.current?.templateId === GAME_LESSON_TEMPLATE_ID) {
-          const section = sectionAtCanvasPoint(canvasX, canvasY, gameRunRef.current);
-          if (section) {
+          const action = worksheetActionAtCanvasPoint(canvasX, canvasY, gameRunRef.current, worksheetPlaybackRef.current);
+          if (action?.type === "section") {
             setLockedMessage(false);
-            setWorksheetPlaybackSnapshot(nextPlaybackState(worksheetPlaybackRef.current, section.id));
+            setWorksheetPlaybackSnapshot(nextPlaybackState(worksheetPlaybackRef.current, action.section.id));
             changeLaptopTab("pipeline");
+          } else if (action?.type === "next_page") {
+            setLockedMessage(false);
+            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeSectionId: null, currentPageId: action.pageId});
+          } else if (action?.type === "complete_lesson") {
+            setLockedMessage(false);
+            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, lessonCompletedAt: Date.now()});
           }
           return;
         }
@@ -2074,7 +2090,7 @@ function writeMusicState(state: MusicState) {
 
 function readWorksheetPlaybackState(runId: string): WorksheetPlaybackState {
   if (typeof window === "undefined") {
-    return {activeSectionId: null, completedSectionIds: []};
+    return DEFAULT_WORKSHEET_PLAYBACK;
   }
   try {
     const parsed = JSON.parse(window.localStorage.getItem(worksheetPlaybackStorageKey(runId)) ?? "null") as Partial<WorksheetPlaybackState> | null;
@@ -2082,9 +2098,11 @@ function readWorksheetPlaybackState(runId: string): WorksheetPlaybackState {
       ? parsed.completedSectionIds.filter((sectionId): sectionId is string => typeof sectionId === "string")
       : [];
     const activeSectionId = typeof parsed?.activeSectionId === "string" ? parsed.activeSectionId : null;
-    return {activeSectionId, completedSectionIds: [...new Set(completedSectionIds)]};
+    const currentPageId = typeof parsed?.currentPageId === "string" ? parsed.currentPageId : null;
+    const lessonCompletedAt = typeof parsed?.lessonCompletedAt === "number" ? parsed.lessonCompletedAt : null;
+    return {activeSectionId, completedSectionIds: [...new Set(completedSectionIds)], currentPageId, lessonCompletedAt};
   } catch {
-    return {activeSectionId: null, completedSectionIds: []};
+    return DEFAULT_WORKSHEET_PLAYBACK;
   }
 }
 
@@ -2101,8 +2119,10 @@ function worksheetPlaybackStorageKey(runId: string) {
 
 function nextPlaybackState(current: WorksheetPlaybackState, sectionId: string): WorksheetPlaybackState {
   return {
+    ...current,
     activeSectionId: sectionId,
-    completedSectionIds: [...new Set([...current.completedSectionIds, sectionId])]
+    completedSectionIds: [...new Set([...current.completedSectionIds, sectionId])],
+    lessonCompletedAt: null
   };
 }
 
@@ -4277,19 +4297,27 @@ function drawWorksheet(
 }
 
 function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
-  const bundle = interactiveBundleForRun(run);
-  const template = templatePayloadForRun(run);
-  const sections = bundle?.sections?.length ? bundle.sections : worksheetSectionsFromPayload(template);
-  const fillTargets = bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
+  const pages = worksheetPagesForRun(run);
+  const currentPageId = currentWorksheetPageId(run, playback);
+  const currentPageIndex = Math.max(0, pages.findIndex((page) => page.id === currentPageId));
+  const sections = pageSectionsForRun(run, currentPageId);
+  const fillTargets = worksheetFillTargetsForRun(run);
   const complete = artifactForStage(run, "interactive_bundle")?.status === "completed";
   const completedSections = new Set(playback.completedSectionIds);
+  const pageComplete = isWorksheetPageComplete(run, playback, currentPageId);
+  const nextPageId = nextWorksheetPageId(run, currentPageId);
+  const allSectionsComplete = areAllWorksheetSectionsComplete(run, playback);
 
   context.fillStyle = "#24313f";
   context.font = "800 50px ui-rounded, system-ui, sans-serif";
   context.fillText("Volume With Whole-Number Cubes", 96, 150);
   context.font = "28px ui-rounded, system-ui, sans-serif";
   context.fillStyle = "#64748b";
-  context.fillText(complete ? "Interactive lesson bundle ready" : "Build the worksheet pipeline on the laptop", 96, 205);
+  context.fillText(
+    complete ? `Page ${currentPageIndex + 1} of ${pages.length} · click a section to reveal it` : "Build the worksheet pipeline on the laptop",
+    96,
+    205
+  );
 
   const status = artifactForStage(run, "interactive_bundle")?.status ?? "waiting";
   context.fillStyle = complete ? "#d9f99d" : "#fef3c7";
@@ -4302,7 +4330,6 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
   context.font = "800 22px ui-monospace, SFMono-Regular, Menlo, monospace";
   context.fillText(`bundle: ${status}`, 810, 143);
 
-  const pageOneTargets = fillTargets.filter((target) => (target.pageId ?? "page_1") === "page_1");
   const sectionRects = sectionDisplayRects(sections);
   for (const section of sections) {
     const rect = sectionRects.get(section.id);
@@ -4338,11 +4365,12 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
 
   context.fillStyle = "#1f2937";
   context.font = "800 30px ui-rounded, system-ui, sans-serif";
-  context.fillText("Page 1 answers", 96, 650);
+  context.fillText(currentPageId === "page_2" ? "Guided-practice answers" : "Section notes", 96, 650);
   context.strokeStyle = "#e7dac4";
   context.lineWidth = 3;
   let rowY = 710;
-  for (const target of pageOneTargets) {
+  const pageTargets = fillTargets.filter((target) => (target.pageId ?? "page_1") === currentPageId);
+  for (const target of pageTargets) {
     const sectionReady = Boolean(target.sectionId && completedSections.has(target.sectionId));
     context.beginPath();
     context.moveTo(110, rowY + 30);
@@ -4354,9 +4382,42 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
     rowY += 72;
   }
 
+  if (complete && pageComplete && nextPageId) {
+    context.fillStyle = "#e7f8ef";
+    context.strokeStyle = "#15803d";
+    context.lineWidth = 4;
+    roundRect(context, WORKSHEET_NEXT_PAGE_RECT.x, WORKSHEET_NEXT_PAGE_RECT.y, WORKSHEET_NEXT_PAGE_RECT.width, WORKSHEET_NEXT_PAGE_RECT.height, 18);
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#14532d";
+    context.font = "900 25px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillText("NEXT PAGE  →", WORKSHEET_NEXT_PAGE_RECT.x + 42, WORKSHEET_NEXT_PAGE_RECT.y + 47);
+  } else if (complete && allSectionsComplete) {
+    context.fillStyle = playback.lessonCompletedAt ? "#dcfce7" : "#fff7ed";
+    context.strokeStyle = playback.lessonCompletedAt ? "#16a34a" : "#ea580c";
+    context.lineWidth = 4;
+    roundRect(
+      context,
+      WORKSHEET_COMPLETE_RECT.x,
+      WORKSHEET_COMPLETE_RECT.y,
+      WORKSHEET_COMPLETE_RECT.width,
+      WORKSHEET_COMPLETE_RECT.height,
+      18
+    );
+    context.fill();
+    context.stroke();
+    context.fillStyle = playback.lessonCompletedAt ? "#14532d" : "#7c2d12";
+    context.font = "900 23px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillText(playback.lessonCompletedAt ? "LESSON COMPLETE" : "COMPLETE LESSON", WORKSHEET_COMPLETE_RECT.x + 34, WORKSHEET_COMPLETE_RECT.y + 46);
+  }
+
   context.fillStyle = "#9a8973";
   context.font = "24px ui-rounded, system-ui, sans-serif";
-  context.fillText("Pipeline state persists for this shared Lesson 1 run unless reset.", 96, 1455);
+  context.fillText(
+    playback.lessonCompletedAt ? "Progress saved. Reset will return this worksheet to page 1." : "Progress is saved locally for this lesson run.",
+    96,
+    1455
+  );
 }
 
 function roundRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -4389,15 +4450,89 @@ function templatePayloadForRun(run: GameWorksheetRunSnapshot): Record<string, un
   return artifactForStage(run, "template")?.payload ?? run.templatePayload;
 }
 
+function worksheetPagesFromPayload(payload: Record<string, unknown> | null | undefined): Array<{id: string; pageNumber?: number}> {
+  const pages = Array.isArray(payload?.pages) ? payload.pages : [];
+  return pages.flatMap((page) => {
+    if (!isRecord(page) || typeof page.id !== "string") {
+      return [];
+    }
+    return [{id: page.id, pageNumber: typeof page.pageNumber === "number" ? page.pageNumber : undefined}];
+  });
+}
+
+function worksheetPagesForRun(run: GameWorksheetRunSnapshot): Array<{id: string; pageNumber?: number}> {
+  const bundle = interactiveBundleForRun(run);
+  const template = templatePayloadForRun(run);
+  const pages = bundle?.pages?.length ? bundle.pages : worksheetPagesFromPayload(template);
+  return pages.length ? pages : [{id: "page_1", pageNumber: 1}];
+}
+
+function worksheetSectionsForRun(run: GameWorksheetRunSnapshot): WorksheetSection[] {
+  const bundle = interactiveBundleForRun(run);
+  const template = templatePayloadForRun(run);
+  const templateSections = worksheetSectionsFromPayload(template);
+  if (!bundle?.sections?.length) {
+    return templateSections;
+  }
+  const bundleSections = bundle.sections;
+  if (bundleSections.every((section) => section.pageId)) {
+    return bundleSections;
+  }
+  return templateSections;
+}
+
+function worksheetFillTargetsForRun(run: GameWorksheetRunSnapshot): WorksheetFillTarget[] {
+  const bundle = interactiveBundleForRun(run);
+  const template = templatePayloadForRun(run);
+  return bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
+}
+
+function currentWorksheetPageId(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  const pages = worksheetPagesForRun(run);
+  if (playback.currentPageId && pages.some((page) => page.id === playback.currentPageId)) {
+    return playback.currentPageId;
+  }
+  return pages[0]?.id ?? "page_1";
+}
+
+function nextWorksheetPageId(run: GameWorksheetRunSnapshot, currentPageId: string) {
+  const pages = worksheetPagesForRun(run);
+  const currentIndex = pages.findIndex((page) => page.id === currentPageId);
+  if (currentIndex < 0 || currentIndex >= pages.length - 1) {
+    return null;
+  }
+  return pages[currentIndex + 1]?.id ?? null;
+}
+
+function pageSectionsForRun(run: GameWorksheetRunSnapshot, pageId: string) {
+  return worksheetSectionsForRun(run).filter((section) => (section.pageId ?? "page_1") === pageId);
+}
+
+function isWorksheetPageComplete(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, pageId: string) {
+  const completedSections = new Set(playback.completedSectionIds);
+  const sections = pageSectionsForRun(run, pageId);
+  return sections.length > 0 && sections.every((section) => completedSections.has(section.id));
+}
+
+function areAllWorksheetSectionsComplete(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  const sections = worksheetSectionsForRun(run);
+  const completedSections = new Set(playback.completedSectionIds);
+  return sections.length > 0 && sections.every((section) => completedSections.has(section.id));
+}
+
 function worksheetSectionsFromPayload(payload: Record<string, unknown> | null | undefined): WorksheetSection[] {
   const sections = Array.isArray(payload?.sections) ? payload.sections : [];
   return sections.flatMap((section) => {
-    if (!isRecord(section) || typeof section.id !== "string" || typeof section.title !== "string") {
+    if (!isRecord(section) || typeof section.title !== "string") {
+      return [];
+    }
+    const id = typeof section.id === "string" ? section.id : typeof section.sectionId === "string" ? section.sectionId : null;
+    if (!id) {
       return [];
     }
     return [
       {
-        id: section.id,
+        id,
         pageId: typeof section.pageId === "string" ? section.pageId : undefined,
         regionId: typeof section.regionId === "string" ? section.regionId : undefined,
         summary: typeof section.summary === "string" ? section.summary : undefined,
@@ -4489,15 +4624,37 @@ function choiceAtCanvasPoint(x: number, y: number) {
   return LESSON_CHOICES.find((choice) => x >= choice.box.x && x <= choice.box.x + choice.box.width && y >= choice.box.y && y <= choice.box.y + choice.box.height) ?? null;
 }
 
-function sectionAtCanvasPoint(x: number, y: number, run: GameWorksheetRunSnapshot) {
-  const bundle = interactiveBundleForRun(run);
-  const template = templatePayloadForRun(run);
-  const sections = bundle?.sections?.length ? bundle.sections : worksheetSectionsFromPayload(template);
+function worksheetActionAtCanvasPoint(
+  x: number,
+  y: number,
+  run: GameWorksheetRunSnapshot,
+  playback: WorksheetPlaybackState
+):
+  | {pageId: string; type: "next_page"}
+  | {section: WorksheetSection; type: "section"}
+  | {type: "complete_lesson"}
+  | null {
+  if (artifactForStage(run, "interactive_bundle")?.status !== "completed") {
+    return null;
+  }
+  const currentPageId = currentWorksheetPageId(run, playback);
+  const nextPageId = nextWorksheetPageId(run, currentPageId);
+  if (isWorksheetPageComplete(run, playback, currentPageId) && nextPageId && pointInRect(x, y, WORKSHEET_NEXT_PAGE_RECT)) {
+    return {pageId: nextPageId, type: "next_page"};
+  }
+  if (areAllWorksheetSectionsComplete(run, playback) && !nextPageId && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
+    return {type: "complete_lesson"};
+  }
+  const sections = pageSectionsForRun(run, currentPageId);
   const rects = sectionDisplayRects(sections);
-  return (
+  const section =
     sections.find((section) => {
       const rect = rects.get(section.id);
-      return rect ? x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height : false;
-    }) ?? null
-  );
+      return rect ? pointInRect(x, y, rect) : false;
+    }) ?? null;
+  return section ? {section, type: "section"} : null;
+}
+
+function pointInRect(x: number, y: number, rect: {height: number; width: number; x: number; y: number}) {
+  return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
 }
