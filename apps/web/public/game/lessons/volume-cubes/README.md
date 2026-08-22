@@ -1,4 +1,4 @@
-This PDF is intentionally served as public demo content for the Sprint 1 game lesson placeholder.
+This PDF is intentionally served as public reference material for the Lesson 1 built-in worksheet.
 
 Source: `misc/task/task_lesson.pdf`
-Checked before publishing with `file`; it is a PDF 1.6 document. Replace this file when the generated lesson-video pipeline supersedes the placeholder.
+Checked before publishing with `file`; it is a PDF 1.6 document. The in-world paper should render from structured templates, not from this PDF.
