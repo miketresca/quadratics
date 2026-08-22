@@ -21,6 +21,7 @@ infra/supabase/.temp/
 # Local demo prep artifacts
 demo_yap.m4a
 docs/local-demo-plan.md
+docs/handoff-*.md
 sound_effects/
 assets/sound_effects/
 assets/screens/

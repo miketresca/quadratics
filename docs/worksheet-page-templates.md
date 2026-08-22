@@ -32,6 +32,8 @@ The template owns stable IDs for:
 
 The browser renderer currently hard-codes visual placement for Lesson 1 while the page system is being shaped. That placement must key by stable fill target ID. Keep answer checking, progress persistence, and future evals tied to semantic lesson data rather than canvas coordinates.
 
+Do not keep expected answers duplicated in the renderer long term. If a renderer-side fallback is needed during template migration, track it as temporary and reconcile it before enabling validation for that section.
+
 ## Layout Architecture
 
 Worksheet rendering should be componentized across every section and lesson. Do not add new pages as loose `fillText` calls plus separate hit-box maps. Each view should be built from grouped layout primitives whose visible drawing, clickable regions, answer constraints, and pen targets share the same source coordinates.
