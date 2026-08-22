@@ -529,21 +529,21 @@ function drawVocabularySection(context: CanvasRenderingContext2D) {
   drawVocabularyCard(
     context,
     168,
-    430,
+    500,
     "Volume",
     "The amount of space a solid figure takes up, measured in cubic units.",
     "A box packed with 12 one-inch cubes has a volume of 12 cubic units."
   );
-  drawFlatCubeArray(context, 806, 470, 4, 3, 34);
+  drawFlatCubeArray(context, 776, 552, 4, 3, 44);
   drawVocabularyCard(
     context,
     168,
-    782,
+    854,
     "Unit Cube",
     "A cube that is 1 unit long, 1 unit wide, and 1 unit tall.",
     "Unit cubes are the building blocks we count to measure volume."
   );
-  drawSingleCube(context, 850, 834, 118);
+  drawSingleCube(context, 850, 906, 118);
 }
 
 function drawGuidedPracticeSection(context: CanvasRenderingContext2D) {
@@ -646,44 +646,47 @@ function drawGrid(context: CanvasRenderingContext2D, x: number, y: number, colum
 }
 
 function drawFlatCubeArray(context: CanvasRenderingContext2D, x: number, y: number, columns: number, rows: number, size: number) {
-  const topWidth = size;
-  const topHeight = size * 0.56;
-  const depth = size * 0.45;
-  for (let row = 0; row < rows; row += 1) {
-    for (let column = columns - 1; column >= 0; column -= 1) {
-      const cellX = x + (column - row) * (topWidth / 2);
-      const cellY = y + (column + row) * (topHeight / 2);
-      drawFlatArrayCube(context, cellX, cellY, topWidth, topHeight, depth);
-    }
-  }
-}
-
-function drawFlatArrayCube(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, depth: number) {
-  const top = [
-    {x, y},
-    {x: x + width / 2, y: y - height / 2},
-    {x: x + width, y},
-    {x: x + width / 2, y: y + height / 2}
-  ];
-  const bottomLeft = {x: top[3].x, y: top[3].y + depth};
-  const bottomRight = {x: top[2].x, y: top[2].y + depth};
+  const halfWidth = size * 0.5;
+  const halfHeight = size * 0.3;
+  const depth = size * 0.48;
 
   context.strokeStyle = "#334155";
   context.lineWidth = 2.2;
-  context.fillStyle = "#f8fafc";
-  drawPolygon(context, top);
-  context.fill();
-  context.stroke();
+  for (let row = rows - 1; row >= 0; row -= 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const centerX = x + (column - row) * halfWidth;
+      const centerY = y + (column + row) * halfHeight;
+      const bottom = {x: centerX, y: centerY + halfHeight};
+      if (row === rows - 1) {
+        context.fillStyle = "#ded6c6";
+        drawPolygon(context, [bottom, {x: bottom.x + halfWidth, y: bottom.y - halfHeight}, {x: bottom.x + halfWidth, y: bottom.y + depth - halfHeight}, {x: bottom.x, y: bottom.y + depth}]);
+        context.fill();
+        context.stroke();
+      }
+      if (column === 0) {
+        context.fillStyle = "#efe7d8";
+        drawPolygon(context, [bottom, {x: bottom.x - halfWidth, y: bottom.y - halfHeight}, {x: bottom.x - halfWidth, y: bottom.y + depth - halfHeight}, {x: bottom.x, y: bottom.y + depth}]);
+        context.fill();
+        context.stroke();
+      }
+    }
+  }
 
-  context.fillStyle = "#eee7d6";
-  drawPolygon(context, [top[3], bottomLeft, {x: top[0].x, y: top[0].y + depth}, top[0]]);
-  context.fill();
-  context.stroke();
-
-  context.fillStyle = "#d8d0bd";
-  drawPolygon(context, [top[2], bottomRight, bottomLeft, top[3]]);
-  context.fill();
-  context.stroke();
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const centerX = x + (column - row) * halfWidth;
+      const centerY = y + (column + row) * halfHeight;
+      context.fillStyle = "#f8fafc";
+      drawPolygon(context, [
+        {x: centerX, y: centerY - halfHeight},
+        {x: centerX + halfWidth, y: centerY},
+        {x: centerX, y: centerY + halfHeight},
+        {x: centerX - halfWidth, y: centerY}
+      ]);
+      context.fill();
+      context.stroke();
+    }
+  }
 }
 
 function drawPolygon(context: CanvasRenderingContext2D, points: Array<{x: number; y: number}>) {
