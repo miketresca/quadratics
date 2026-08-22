@@ -529,21 +529,21 @@ function drawVocabularySection(context: CanvasRenderingContext2D) {
   drawVocabularyCard(
     context,
     168,
-    390,
+    430,
     "Volume",
     "The amount of space a solid figure takes up, measured in cubic units.",
     "A box packed with 12 one-inch cubes has a volume of 12 cubic units."
   );
-  drawStackedCubes(context, 810, 426, 6, 2);
+  drawFlatCubeArray(context, 806, 470, 4, 3, 34);
   drawVocabularyCard(
     context,
     168,
-    720,
+    782,
     "Unit Cube",
     "A cube that is 1 unit long, 1 unit wide, and 1 unit tall.",
     "Unit cubes are the building blocks we count to measure volume."
   );
-  drawSingleCube(context, 850, 768, 118);
+  drawSingleCube(context, 850, 834, 118);
 }
 
 function drawGuidedPracticeSection(context: CanvasRenderingContext2D) {
@@ -643,6 +643,56 @@ function drawGrid(context: CanvasRenderingContext2D, x: number, y: number, colum
       context.strokeRect(x + column * size, y + row * size, size, size);
     }
   }
+}
+
+function drawFlatCubeArray(context: CanvasRenderingContext2D, x: number, y: number, columns: number, rows: number, size: number) {
+  const topWidth = size;
+  const topHeight = size * 0.56;
+  const depth = size * 0.45;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = columns - 1; column >= 0; column -= 1) {
+      const cellX = x + (column - row) * (topWidth / 2);
+      const cellY = y + (column + row) * (topHeight / 2);
+      drawFlatArrayCube(context, cellX, cellY, topWidth, topHeight, depth);
+    }
+  }
+}
+
+function drawFlatArrayCube(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, depth: number) {
+  const top = [
+    {x, y},
+    {x: x + width / 2, y: y - height / 2},
+    {x: x + width, y},
+    {x: x + width / 2, y: y + height / 2}
+  ];
+  const bottomLeft = {x: top[3].x, y: top[3].y + depth};
+  const bottomRight = {x: top[2].x, y: top[2].y + depth};
+
+  context.strokeStyle = "#334155";
+  context.lineWidth = 2.2;
+  context.fillStyle = "#f8fafc";
+  drawPolygon(context, top);
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = "#eee7d6";
+  drawPolygon(context, [top[3], bottomLeft, {x: top[0].x, y: top[0].y + depth}, top[0]]);
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = "#d8d0bd";
+  drawPolygon(context, [top[2], bottomRight, bottomLeft, top[3]]);
+  context.fill();
+  context.stroke();
+}
+
+function drawPolygon(context: CanvasRenderingContext2D, points: Array<{x: number; y: number}>) {
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) {
+    context.lineTo(point.x, point.y);
+  }
+  context.closePath();
 }
 
 function drawVocabularyCard(context: CanvasRenderingContext2D, x: number, y: number, title: string, definition: string, example: string) {
