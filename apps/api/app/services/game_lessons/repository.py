@@ -1136,13 +1136,8 @@ def _status_for_stage(stage: str) -> GameLessonArtifactStatus:
 def _canonical_template_if_needed(template: GameWorksheetTemplate) -> GameWorksheetTemplate:
     if template.id != TEMPLATE_ID:
         return template
-    payload = template.payload
-    required_arrays = ("pages", "sections", "questions", "fillTargets")
-    has_full_map = all(
-        isinstance(payload.get(key), list) and payload.get(key) for key in required_arrays
-    )
-    if has_full_map:
-        return template
+    # Lesson 1 is authored as a deterministic template in code so old persisted
+    # template artifacts cannot keep serving stale worksheet coordinates.
     return VOLUME_CUBES_LESSON_1_TEMPLATE.model_copy(deep=True)
 
 

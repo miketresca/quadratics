@@ -1,4 +1,4 @@
-import {DESK_SURFACE_Y} from "./game-scene-config";
+import {DESK_MAT_X, DESK_SURFACE_Y} from "./game-scene-config";
 import {createLeatherTexture, createWoodTexture} from "./game-textures";
 
 export function createDeskSurface(THREE: typeof import("three")) {
@@ -28,7 +28,7 @@ export function createDeskSurface(THREE: typeof import("three")) {
     new THREE.BoxGeometry(3.25, 0.035, 4.05),
     new THREE.MeshStandardMaterial({map: matTexture, color: 0x24231f, roughness: 0.94, metalness: 0.03, bumpMap: matTexture, bumpScale: 0.035})
   );
-  mat.position.set(0, DESK_SURFACE_Y + 0.006, 0.06);
+  mat.position.set(DESK_MAT_X, DESK_SURFACE_Y + 0.006, 0.06);
   mat.receiveShadow = true;
   group.add(mat);
 

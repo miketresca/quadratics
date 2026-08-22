@@ -1,6 +1,6 @@
 import type {CurrentUser, GameLessonId} from "@quadratics/types";
 
-import type {LaptopCostState, LaptopPipelineState, LaptopTab, MusicState} from "./game-laptop-panels";
+import type {LaptopCostState, LaptopDisplayTab, LaptopPipelineState, MusicState} from "./game-laptop-panels";
 
 export type LessonChoice = {
   id: GameLessonId;
@@ -20,7 +20,7 @@ export type LaptopScreenApi = {
   setLoading: (loading: boolean) => void;
   setMusicState: (state: MusicState) => void;
   setPipelineState: (state: LaptopPipelineState) => void;
-  setTab: (tab: LaptopTab) => void;
+  setTab: (tab: LaptopDisplayTab) => void;
   updateUser: (user: CurrentUser | null) => void;
 };
 

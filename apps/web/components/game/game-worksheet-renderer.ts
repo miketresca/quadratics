@@ -10,8 +10,7 @@ import {
   LESSON_CHOICES,
   WORKSHEET_CANVAS_HEIGHT,
   WORKSHEET_CANVAS_WIDTH,
-  WORKSHEET_COMPLETE_RECT,
-  WORKSHEET_NEXT_PAGE_RECT
+  WORKSHEET_COMPLETE_RECT
 } from "./game-scene-config";
 import type {
   InteractiveWorksheetBundle,
@@ -22,6 +21,89 @@ import type {
   WorksheetSection
 } from "./game-types";
 
+const PAPER_RECT = {
+  height: WORKSHEET_CANVAS_HEIGHT - 92,
+  width: WORKSHEET_CANVAS_WIDTH - 92,
+  x: 46,
+  y: 46
+};
+const SECTION_SELECTOR_RECT = {
+  height: 86,
+  width: PAPER_RECT.width - 90,
+  x: PAPER_RECT.x + 45,
+  y: PAPER_RECT.y + 132
+};
+const SECTION_VIEWPORT_RECT = {
+  height: PAPER_RECT.height - 392,
+  width: PAPER_RECT.width - 120,
+  x: PAPER_RECT.x + 60,
+  y: PAPER_RECT.y + 280
+};
+const WORKSHEET_TEXTURE_SCALE = 2;
+const SECTION_AUDIO_RECT = {
+  height: 58,
+  width: 250,
+  x: SECTION_VIEWPORT_RECT.x + SECTION_VIEWPORT_RECT.width - 286,
+  y: SECTION_VIEWPORT_RECT.y + 28
+};
+const DO_NOW_LAYOUT = {
+  problem1: {
+    grid: {columns: 4, rows: 3, size: 34, x: 244, y: 518},
+    number: {x: 188, y: 466},
+    prompt: {
+      maxWidth: 790,
+      text: "Consider an array of 3 rows of 4 squares. How many squares are there in all? Write a multiplication equation to show your thinking.",
+      x: 230,
+      y: 460
+    },
+    equation: {
+      label: {x: 244, y: 674},
+      line: {height: 24, width: 250, x: 354, y: 650}
+    },
+    total: {
+      label: {x: 244, y: 734},
+      line: {height: 24, width: 54, x: 338, y: 710},
+      suffix: {x: 406, y: 734}
+    }
+  },
+  problem2: {
+    facts: [
+      {id: "fill_do_now_fact_3x4", label: "3 x 4 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 836}},
+      {id: "fill_do_now_fact_4x2", label: "4 x 2 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 886}},
+      {id: "fill_do_now_fact_2x5", label: "2 x 5 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 936}},
+      {id: "fill_do_now_fact_5x6", label: "5 x 6 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 986}},
+      {id: "fill_do_now_fact_4x7", label: "4 x 7 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 1036}}
+    ],
+    number: {x: 188, y: 812},
+    title: {x: 230, y: 812}
+  },
+  problem3: {
+    area: {
+      label: {x: 244, y: 1320},
+      line: {height: 26, width: 62, x: 330, y: 1294},
+      suffix: {x: 410, y: 1320}
+    },
+    grid: {columns: 5, rows: 2, size: 34, x: 244, y: 1206},
+    number: {x: 188, y: 1142},
+    prompt: {x: 230, y: 1176},
+    title: {x: 230, y: 1142}
+  }
+} as const;
+const CUSTOM_FILL_TARGET_RECTS: Record<string, WorksheetRect> = {
+  fill_guided_row_1_layer: {height: 48, width: 128, x: 504, y: 592},
+  fill_guided_row_1_layers: {height: 48, width: 128, x: 690, y: 592},
+  fill_guided_row_1_volume: {height: 48, width: 150, x: 870, y: 592},
+  fill_guided_row_2_layer: {height: 48, width: 128, x: 504, y: 746},
+  fill_guided_row_2_layers: {height: 48, width: 128, x: 690, y: 746},
+  fill_guided_row_2_volume: {height: 48, width: 150, x: 870, y: 746},
+  fill_guided_row_3_layer: {height: 48, width: 128, x: 504, y: 900},
+  fill_guided_row_3_layers: {height: 48, width: 128, x: 690, y: 900},
+  fill_guided_row_3_volume: {height: 48, width: 150, x: 870, y: 900},
+  fill_guided_row_4_layer: {height: 48, width: 128, x: 504, y: 1054},
+  fill_guided_row_4_layers: {height: 48, width: 128, x: 690, y: 1054},
+  fill_guided_row_4_volume: {height: 48, width: 150, x: 870, y: 1054}
+};
+
 export function createWorksheetTexture(
   THREE: typeof import("three"),
   checkedLessonId: GameLessonId | null,
@@ -30,11 +112,15 @@ export function createWorksheetTexture(
   playback: WorksheetPlaybackState
 ) {
   const canvas = document.createElement("canvas");
-  canvas.width = WORKSHEET_CANVAS_WIDTH;
-  canvas.height = WORKSHEET_CANVAS_HEIGHT;
-  drawWorksheet(canvas, checkedLessonId, hoveredChoiceId, run, playback);
+  canvas.width = WORKSHEET_CANVAS_WIDTH * WORKSHEET_TEXTURE_SCALE;
+  canvas.height = WORKSHEET_CANVAS_HEIGHT * WORKSHEET_TEXTURE_SCALE;
   const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  drawWorksheet(canvas, checkedLessonId, hoveredChoiceId, run, playback);
   texture.needsUpdate = true;
   return texture;
 }
@@ -64,12 +150,11 @@ function drawWorksheet(
   if (!context) {
     return;
   }
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#fffaf0";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = "#ded2bd";
-  context.lineWidth = 5;
-  context.strokeRect(34, 34, canvas.width - 68, canvas.height - 68);
+  context.setTransform(WORKSHEET_TEXTURE_SCALE, 0, 0, WORKSHEET_TEXTURE_SCALE, 0, 0);
+  context.clearRect(0, 0, WORKSHEET_CANVAS_WIDTH, WORKSHEET_CANVAS_HEIGHT);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  drawFlatPaperBackground(context);
 
   if (checkedLessonId === GAME_LESSON_TEMPLATE_ID && run?.templateId === GAME_LESSON_TEMPLATE_ID) {
     drawGeneratedWorksheet(context, run, playback);
@@ -77,148 +162,144 @@ function drawWorksheet(
   }
 
   context.fillStyle = "#24313f";
-  context.font = "700 58px ui-rounded, system-ui, sans-serif";
-  context.fillText("Today’s worksheet", 116, 190);
-  context.font = "34px ui-rounded, system-ui, sans-serif";
+  context.font = "700 46px ui-rounded, system-ui, sans-serif";
+  context.fillText("Today’s worksheet", 170, 230);
+  context.font = "28px ui-rounded, system-ui, sans-serif";
   context.fillStyle = "#64748b";
-  context.fillText("Choose a lesson to begin.", 116, 250);
+  context.fillText("Choose a lesson to begin.", 170, 282);
 
   for (const choice of LESSON_CHOICES) {
     const active = choice.id === checkedLessonId;
     const hovered = choice.id === hoveredChoiceId;
     context.fillStyle = active ? "#e7f8ef" : hovered ? "#f4f0e7" : "#fffdf8";
     context.strokeStyle = choice.locked ? "#d6c7ae" : active ? "#2f9d65" : hovered ? "#7c5f35" : "#cdbfAA";
-    context.lineWidth = hovered || active ? 8 : 4;
-    roundRect(context, choice.box.x, choice.box.y, choice.box.width, choice.box.height, 24);
+    context.lineWidth = hovered || active ? 6 : 3;
+    roundRect(context, choice.box.x, choice.box.y, choice.box.width, choice.box.height, 20);
     context.fill();
     context.stroke();
 
-    const checkboxX = choice.box.x + 42;
-    const checkboxY = choice.box.y + 48;
+    const checkboxX = choice.box.x + 34;
+    const checkboxY = choice.box.y + 34;
     context.strokeStyle = choice.locked ? "#a9987f" : "#314155";
-    context.lineWidth = 7;
-    roundRect(context, checkboxX, checkboxY, 72, 72, 10);
+    context.lineWidth = 5;
+    roundRect(context, checkboxX, checkboxY, 54, 54, 8);
     context.stroke();
     if (active) {
       context.strokeStyle = "#15803d";
-      context.lineWidth = 13;
+      context.lineWidth = 10;
       context.beginPath();
-      context.moveTo(checkboxX + 15, checkboxY + 38);
-      context.lineTo(checkboxX + 33, checkboxY + 57);
-      context.lineTo(checkboxX + 60, checkboxY + 17);
+      context.moveTo(checkboxX + 12, checkboxY + 29);
+      context.lineTo(checkboxX + 27, checkboxY + 44);
+      context.lineTo(checkboxX + 48, checkboxY + 12);
       context.stroke();
     }
 
     context.fillStyle = choice.locked ? "#8b8173" : "#1f2937";
-    context.font = "700 42px ui-rounded, system-ui, sans-serif";
-    context.fillText(choice.title, choice.box.x + 146, choice.box.y + 70);
+    context.font = "700 31px ui-rounded, system-ui, sans-serif";
+    context.fillText(choice.title, choice.box.x + 116, choice.box.y + 54);
     context.fillStyle = choice.locked ? "#a69b89" : "#64748b";
-    context.font = "30px ui-rounded, system-ui, sans-serif";
-    context.fillText(choice.subtitle, choice.box.x + 146, choice.box.y + 122);
+    context.font = "23px ui-rounded, system-ui, sans-serif";
+    context.fillText(choice.subtitle, choice.box.x + 116, choice.box.y + 91);
   }
 
   context.strokeStyle = "#e7dac4";
-  context.lineWidth = 3;
+  context.lineWidth = 2;
   for (let index = 0; index < 8; index += 1) {
-    const y = 940 + index * 58;
+    const y = 980 + index * 44;
     context.beginPath();
-    context.moveTo(118, y);
-    context.lineTo(1082, y);
+    context.moveTo(170, y);
+    context.lineTo(970, y);
     context.stroke();
   }
 
   context.fillStyle = "#9a8973";
-  context.font = "28px ui-rounded, system-ui, sans-serif";
-  context.fillText("Notes", 118, 892);
+  context.font = "23px ui-rounded, system-ui, sans-serif";
+  context.fillText("Notes", 170, 938);
+
 }
 
-function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
-  const pages = worksheetPagesForRun(run);
-  const currentPageId = currentWorksheetPageId(run, playback);
-  const currentPageIndex = Math.max(0, pages.findIndex((page) => page.id === currentPageId));
-  const sections = pageSectionsForRun(run, currentPageId);
+function drawFlatPaperBackground(context: CanvasRenderingContext2D) {
+  context.fillStyle = "#fffdf7";
+  context.fillRect(0, 0, WORKSHEET_CANVAS_WIDTH, WORKSHEET_CANVAS_HEIGHT);
+  context.strokeStyle = "#ded2bd";
+  context.lineWidth = 4;
+  context.strokeRect(40, 42, WORKSHEET_CANVAS_WIDTH - 80, WORKSHEET_CANVAS_HEIGHT - 84);
+}
+
+function drawGeneratedWorksheet(
+  context: CanvasRenderingContext2D,
+  run: GameWorksheetRunSnapshot,
+  playback: WorksheetPlaybackState
+) {
+  const sections = worksheetSectionsForRun(run);
   const fillTargets = worksheetFillTargetsForRun(run);
   const complete = artifactForStage(run, "interactive_bundle")?.status === "completed";
   const completedSections = new Set(playback.completedSectionIds);
-  const pageComplete = isWorksheetPageComplete(run, playback, currentPageId);
-  const nextPageId = nextWorksheetPageId(run, currentPageId);
   const allSectionsComplete = areAllWorksheetSectionsComplete(run, playback);
 
-  context.fillStyle = "#24313f";
-  context.font = "800 50px ui-rounded, system-ui, sans-serif";
-  context.fillText("Volume With Whole-Number Cubes", 96, 150);
-  context.font = "28px ui-rounded, system-ui, sans-serif";
-  context.fillStyle = "#64748b";
-  context.fillText(
-    complete ? `Page ${currentPageIndex + 1} of ${pages.length} · click a section to reveal it` : "Build the worksheet pipeline on the laptop",
-    96,
-    205
-  );
-
   const status = artifactForStage(run, "interactive_bundle")?.status ?? "waiting";
-  context.fillStyle = complete ? "#d9f99d" : "#fef3c7";
-  context.strokeStyle = complete ? "#15803d" : "#a16207";
-  context.lineWidth = 3;
-  roundRect(context, 780, 102, 318, 64, 18);
-  context.fill();
-  context.stroke();
-  context.fillStyle = complete ? "#14532d" : "#713f12";
-  context.font = "800 22px ui-monospace, SFMono-Regular, Menlo, monospace";
-  context.fillText(`bundle: ${status}`, 810, 143);
+  const activeSection = activeWorksheetSection(sections, playback);
+  drawWorksheetHeader(context, activeSection, status, complete);
 
-  const sectionRects = sectionDisplayRects(sections);
+  const selectorRects = sectionSelectorRects(sections);
   for (const section of sections) {
-    const rect = sectionRects.get(section.id);
+    const rect = selectorRects.get(section.id);
     if (!rect) {
       continue;
     }
-    const active = playback.activeSectionId === section.id;
     const completed = completedSections.has(section.id);
-    context.fillStyle = active ? "#eefcf4" : completed ? "#f7fff9" : "#fffdf8";
-    context.strokeStyle = active ? "#0f9f6e" : completed ? "#2f9d65" : complete ? "#8fb99d" : "#cdbfaa";
-    context.lineWidth = 4;
-    roundRect(context, rect.x, rect.y, rect.width, rect.height, 22);
+    const selected = activeSection?.id === section.id;
+    context.fillStyle = selected ? "#ecfdf5" : completed ? "#f0fdf4" : "#fffdf8";
+    context.strokeStyle = selected ? "#0f766e" : completed ? "#2f9d65" : "#d8c9ad";
+    context.lineWidth = selected || completed ? 5 : 2;
+    roundRect(context, rect.x, rect.y, rect.width, rect.height, 12);
     context.fill();
     context.stroke();
-    context.fillStyle = "#1f2937";
-    context.font = "800 34px ui-rounded, system-ui, sans-serif";
-    context.fillText(section.title, rect.x + 30, rect.y + 55);
+    context.fillStyle = selected ? "#064e3b" : completed ? "#166534" : "#334155";
+    context.font = "900 22px ui-rounded, system-ui, sans-serif";
+    context.fillText(sectionTitleForDisplay(section), rect.x + 22, rect.y + 36);
+    context.fillStyle = "#64748b";
+    context.font = "17px ui-rounded, system-ui, sans-serif";
+    wrapWorksheetText(context, section.summary ?? "Worksheet section", rect.x + 22, rect.y + 62, rect.width - 54, 21, 1);
     if (completed) {
       context.strokeStyle = "#15803d";
-      context.lineWidth = 8;
+      context.lineWidth = 6;
       context.beginPath();
-      context.moveTo(rect.x + rect.width - 72, rect.y + 50);
-      context.lineTo(rect.x + rect.width - 48, rect.y + 76);
-      context.lineTo(rect.x + rect.width - 20, rect.y + 30);
+      context.moveTo(rect.x + rect.width - 42, rect.y + 30);
+      context.lineTo(rect.x + rect.width - 27, rect.y + 46);
+      context.lineTo(rect.x + rect.width - 10, rect.y + 20);
       context.stroke();
-    }
-    if (section.summary) {
-      context.font = "24px ui-rounded, system-ui, sans-serif";
-      context.fillStyle = "#64748b";
-      wrapWorksheetText(context, section.summary, rect.x + 30, rect.y + 92, rect.width - 60, 30, 2);
     }
   }
 
-  context.fillStyle = "#1f2937";
-  context.font = "800 30px ui-rounded, system-ui, sans-serif";
-  context.fillText(currentPageId === "page_2" ? "Guided-practice answers" : "Section notes", 96, 650);
-  const pageTargets = fillTargets.filter((target) => (target.pageId ?? "page_1") === currentPageId);
-  for (const target of pageTargets) {
-    const revealedText = worksheetTargetRevealText(run, playback, target);
-    const box = canvasRectForTarget(target);
+  if (activeSection) {
+    drawCustomWorksheetSection(context, activeSection);
+    drawSectionAudioButton(context, complete);
+  }
+
+  for (const target of fillTargets.filter((candidate) => !activeSection || candidate.sectionId === activeSection.id)) {
+    const box = canvasRectForTarget(target, activeSection);
     const readOnly = isReadOnlyTarget(target);
+    const revealedText = readOnly ? worksheetTargetRevealText(run, playback, target) : "";
     const activeInput = playback.activeFillTargetId === target.id;
-    const answerText = playback.answers[target.id] ?? "";
+    const answerText = worksheetDisplayAnswer(target.id, playback.answers[target.id] ?? "");
     const result = playback.answerResults[target.id];
-    context.fillStyle = readOnly ? "#f7f5eb" : activeInput ? "#eefcf4" : "#fffdf8";
+    if (readOnly) {
+      continue;
+    }
+    if (target.sectionId === "do_now") {
+      drawWorksheetLineInput(context, box, answerText, activeInput, result);
+      continue;
+    }
+    context.fillStyle = activeInput ? "rgba(236, 253, 245, 0.76)" : "rgba(255, 255, 255, 0.68)";
     context.strokeStyle = result?.correct ? "#16a34a" : result && !result.correct ? "#dc2626" : activeInput ? "#0f9f6e" : "#d6c7ae";
     context.lineWidth = activeInput || result ? 5 : 3;
     roundRect(context, box.x, box.y, box.width, box.height, 12);
     context.fill();
     context.stroke();
-    context.fillStyle = readOnly ? "#475569" : answerText ? "#1e3a8a" : "#9a8973";
+    context.fillStyle = answerText ? "#1e3a8a" : "#9a8973";
     context.font = answerText || revealedText ? "28px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif" : "24px ui-rounded, system-ui, sans-serif";
-    const targetText = readOnly ? target.expectedText ?? target.id : answerText || revealedText || (complete ? "click to type" : "waiting for bundle");
+    const targetText = answerText || revealedText || (complete ? "click to type" : "waiting for bundle");
     context.fillText(targetText.slice(0, 72), box.x + 16, box.y + box.height * 0.65);
     if (result && !result.correct) {
       context.fillStyle = "#991b1b";
@@ -229,7 +310,6 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
 
   const readyToCheck = complete && isWorksheetReadyToSubmit(run, playback);
   const allAnswersCorrect = readyToCheck && areWorksheetAnswersCorrect(run, playback);
-  const currentPageAnswersCorrect = areWorksheetPageAnswersCorrect(run, playback, currentPageId);
   if (complete && !playback.submittedAt) {
     context.fillStyle = readyToCheck ? "#e0f2fe" : "#f8fafc";
     context.strokeStyle = readyToCheck ? "#0284c7" : "#cbd5e1";
@@ -240,16 +320,6 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
     context.fillStyle = readyToCheck ? "#075985" : "#64748b";
     context.font = "900 23px ui-monospace, SFMono-Regular, Menlo, monospace";
     context.fillText("CHECK ANSWERS", WORKSHEET_COMPLETE_RECT.x + 44, WORKSHEET_COMPLETE_RECT.y + 46);
-  } else if (complete && pageComplete && currentPageAnswersCorrect && nextPageId) {
-    context.fillStyle = "#e7f8ef";
-    context.strokeStyle = "#15803d";
-    context.lineWidth = 4;
-    roundRect(context, WORKSHEET_NEXT_PAGE_RECT.x, WORKSHEET_NEXT_PAGE_RECT.y, WORKSHEET_NEXT_PAGE_RECT.width, WORKSHEET_NEXT_PAGE_RECT.height, 18);
-    context.fill();
-    context.stroke();
-    context.fillStyle = "#14532d";
-    context.font = "900 25px ui-monospace, SFMono-Regular, Menlo, monospace";
-    context.fillText("NEXT PAGE  →", WORKSHEET_NEXT_PAGE_RECT.x + 42, WORKSHEET_NEXT_PAGE_RECT.y + 47);
   } else if (complete && allSectionsComplete && allAnswersCorrect) {
     context.fillStyle = playback.lessonCompletedAt ? "#dcfce7" : "#fff7ed";
     context.strokeStyle = playback.lessonCompletedAt ? "#16a34a" : "#ea580c";
@@ -269,17 +339,309 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
     context.fillText(playback.lessonCompletedAt ? "LESSON COMPLETE" : "COMPLETE LESSON", WORKSHEET_COMPLETE_RECT.x + 34, WORKSHEET_COMPLETE_RECT.y + 46);
   }
 
-  context.fillStyle = "#9a8973";
+  if (playback.lessonCompletedAt || (playback.submittedAt && !allAnswersCorrect)) {
+    context.fillStyle = playback.lessonCompletedAt ? "#14532d" : "#991b1b";
+    context.font = "24px ui-rounded, system-ui, sans-serif";
+    context.fillText(playback.lessonCompletedAt ? "Progress saved." : "Fix the highlighted answers, then check again.", PAPER_RECT.x + 20, 1450);
+  }
+}
+
+function drawWorksheetHeader(
+  context: CanvasRenderingContext2D,
+  activeSection: WorksheetSection | null,
+  status: string,
+  complete: boolean
+) {
+  context.fillStyle = "#24313f";
+  context.font = "900 44px ui-rounded, system-ui, sans-serif";
+  context.fillText("Lesson 1", PAPER_RECT.x + 46, PAPER_RECT.y + 56);
+  context.fillStyle = "#3f4d5f";
+  context.font = "700 23px ui-rounded, system-ui, sans-serif";
+  context.fillText("Volume With Whole-Number Cubes", PAPER_RECT.x + 48, PAPER_RECT.y + 92);
+  if (activeSection) {
+    context.fillStyle = "#0f766e";
+    context.font = "900 18px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillText(sectionTitleForDisplay(activeSection).toUpperCase(), PAPER_RECT.x + 48, PAPER_RECT.y + 122);
+  }
+
+  context.fillStyle = complete ? "#d9f99d" : "#fef3c7";
+  context.strokeStyle = complete ? "#15803d" : "#a16207";
+  context.lineWidth = 2;
+  roundRect(context, WORKSHEET_CANVAS_WIDTH - 380, 86, 300, 44, 12);
+  context.fill();
+  context.stroke();
+  context.fillStyle = complete ? "#14532d" : "#713f12";
+  context.font = "800 19px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillText(`bundle: ${status}`, WORKSHEET_CANVAS_WIDTH - 350, 116);
+}
+
+function drawCustomWorksheetSection(context: CanvasRenderingContext2D, section: WorksheetSection) {
+  context.fillStyle = "#fbf7ed";
+  context.strokeStyle = "#d7c6a5";
+  context.lineWidth = 3;
+  roundRect(context, SECTION_VIEWPORT_RECT.x, SECTION_VIEWPORT_RECT.y, SECTION_VIEWPORT_RECT.width, SECTION_VIEWPORT_RECT.height, 18);
+  context.fill();
+  context.stroke();
+
+  if (section.id === "vocabulary") {
+    drawVocabularySection(context);
+  } else if (section.id === "guided_practice") {
+    drawGuidedPracticeSection(context);
+  } else {
+    drawDoNowSection(context);
+  }
+}
+
+function drawSectionAudioButton(context: CanvasRenderingContext2D, enabled: boolean) {
+  context.fillStyle = enabled ? "#0f766e" : "#cbd5e1";
+  context.strokeStyle = enabled ? "#115e59" : "#94a3b8";
+  context.lineWidth = 3;
+  roundRect(context, SECTION_AUDIO_RECT.x, SECTION_AUDIO_RECT.y, SECTION_AUDIO_RECT.width, SECTION_AUDIO_RECT.height, 16);
+  context.fill();
+  context.stroke();
+  context.fillStyle = enabled ? "#ffffff" : "#64748b";
+  drawSpeakerIcon(context, SECTION_AUDIO_RECT.x + 26, SECTION_AUDIO_RECT.y + 19, 22, enabled ? "#ffffff" : "#64748b");
+  context.font = "900 20px ui-rounded, system-ui, sans-serif";
+  context.fillText("Explanation", SECTION_AUDIO_RECT.x + 68, SECTION_AUDIO_RECT.y + 38);
+}
+
+function drawDoNowSection(context: CanvasRenderingContext2D) {
+  const {problem1, problem2, problem3} = DO_NOW_LAYOUT;
+  drawSectionTitle(context, "Do Now", "Warm up by counting flat arrays before building volume.");
+  drawPromptNumber(context, 1, problem1.number.x, problem1.number.y);
+  context.fillStyle = "#24313f";
   context.font = "24px ui-rounded, system-ui, sans-serif";
-  context.fillText(
-    playback.lessonCompletedAt
-      ? "Progress saved. Reset will return this worksheet to page 1."
-      : playback.submittedAt && !allAnswersCorrect
-        ? "Fix the highlighted answers, then check again."
-        : "Progress is saved for this lesson run.",
-    96,
-    1455
+  wrapWorksheetText(context, problem1.prompt.text, problem1.prompt.x, problem1.prompt.y, problem1.prompt.maxWidth, 28, 2);
+  drawGrid(context, problem1.grid.x, problem1.grid.y, problem1.grid.columns, problem1.grid.rows, problem1.grid.size);
+  context.fillStyle = "#475569";
+  context.font = "22px ui-rounded, system-ui, sans-serif";
+  context.fillText("Equation:", problem1.equation.label.x, problem1.equation.label.y);
+  context.fillText("There are", problem1.total.label.x, problem1.total.label.y);
+  context.fillText("squares in all.", problem1.total.suffix.x, problem1.total.suffix.y);
+
+  drawPromptNumber(context, 2, problem2.number.x, problem2.number.y);
+  context.fillStyle = "#24313f";
+  context.font = "800 25px ui-rounded, system-ui, sans-serif";
+  context.fillText("Solve.", problem2.title.x, problem2.title.y);
+  context.fillStyle = "#64748b";
+  context.font = "20px ui-rounded, system-ui, sans-serif";
+  context.fillText("Write each product.", problem2.title.x, problem2.title.y + 34);
+  for (const fact of problem2.facts) {
+    context.fillStyle = "#475569";
+    context.font = "900 21px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillText(fact.label, fact.labelX, fact.line.y + fact.line.height - 8);
+  }
+
+  drawPromptNumber(context, 3, problem3.number.x, problem3.number.y);
+  context.fillStyle = "#24313f";
+  context.font = "800 25px ui-rounded, system-ui, sans-serif";
+  context.fillText("Find the area.", problem3.title.x, problem3.title.y);
+  context.fillStyle = "#64748b";
+  context.font = "20px ui-rounded, system-ui, sans-serif";
+  context.fillText("A rectangle is 5 units by 2 units.", problem3.prompt.x, problem3.prompt.y);
+  drawGrid(context, problem3.grid.x, problem3.grid.y, problem3.grid.columns, problem3.grid.rows, problem3.grid.size);
+  context.fillStyle = "#475569";
+  context.font = "900 22px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillText("Area =", problem3.area.label.x, problem3.area.label.y);
+  context.fillStyle = "#64748b";
+  context.font = "20px ui-rounded, system-ui, sans-serif";
+  context.fillText("square units", problem3.area.suffix.x, problem3.area.suffix.y);
+}
+
+function drawVocabularySection(context: CanvasRenderingContext2D) {
+  drawSectionTitle(context, "Vocabulary", "Two words that make the rest of the lesson feel simple.");
+  drawVocabularyCard(
+    context,
+    168,
+    390,
+    "Volume",
+    "The amount of space a solid figure takes up, measured in cubic units.",
+    "A box packed with 12 one-inch cubes has a volume of 12 cubic units."
   );
+  drawStackedCubes(context, 810, 426, 6, 2);
+  drawVocabularyCard(
+    context,
+    168,
+    720,
+    "Unit Cube",
+    "A cube that is 1 unit long, 1 unit wide, and 1 unit tall.",
+    "Unit cubes are the building blocks we count to measure volume."
+  );
+  drawSingleCube(context, 850, 768, 118);
+}
+
+function drawGuidedPracticeSection(context: CanvasRenderingContext2D) {
+  drawSectionTitle(context, "Guided Example", "Use one clear rule: cubes in a layer times number of layers.");
+  const tableX = 166;
+  const tableY = 450;
+  const rowHeight = 154;
+  const columns = [tableX, 430, 660, 846, 1060];
+  context.fillStyle = "#e0f2fe";
+  context.strokeStyle = "#93c5fd";
+  context.lineWidth = 3;
+  roundRect(context, tableX, tableY, 894, rowHeight * 4 + 72, 18);
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#0f172a";
+  context.font = "900 18px ui-rounded, system-ui, sans-serif";
+  context.fillText("Shape", columns[0] + 22, tableY + 44);
+  context.fillText("Cubes / layer", columns[1] + 28, tableY + 44);
+  context.fillText("Layers", columns[2] + 40, tableY + 44);
+  context.fillText("Volume", columns[3] + 54, tableY + 44);
+  for (let row = 0; row < 4; row += 1) {
+    const y = tableY + 72 + row * rowHeight;
+    context.strokeStyle = "#bfdbfe";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(tableX, y);
+    context.lineTo(tableX + 894, y);
+    context.stroke();
+    drawStackedCubes(context, columns[0] + 40, y + 28, row === 1 ? 4 : row === 3 ? 10 : 6, row === 0 ? 1 : 2);
+    context.fillStyle = "#475569";
+    context.font = "800 19px ui-rounded, system-ui, sans-serif";
+    context.fillText(row === 0 ? "one layer" : row === 1 ? "3 layers" : row === 2 ? "2 layers" : "2 long layers", columns[0] + 118, y + 78);
+  }
+}
+
+function drawSectionTitle(context: CanvasRenderingContext2D, title: string, subtitle: string) {
+  context.fillStyle = "#24313f";
+  context.font = "900 34px ui-rounded, system-ui, sans-serif";
+  context.fillText(title, SECTION_VIEWPORT_RECT.x + 46, SECTION_VIEWPORT_RECT.y + 66);
+  context.fillStyle = "#64748b";
+  context.font = "21px ui-rounded, system-ui, sans-serif";
+  context.fillText(subtitle, SECTION_VIEWPORT_RECT.x + 46, SECTION_VIEWPORT_RECT.y + 102);
+}
+
+function drawPromptNumber(context: CanvasRenderingContext2D, value: number, x: number, y: number) {
+  context.fillStyle = "#0f766e";
+  context.beginPath();
+  context.arc(x, y, 20, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#fff";
+  context.font = "900 20px ui-rounded, system-ui, sans-serif";
+  context.fillText(String(value), x - 6, y + 7);
+}
+
+function drawWorksheetLineInput(
+  context: CanvasRenderingContext2D,
+  box: WorksheetRect,
+  answerText: string,
+  activeInput: boolean,
+  result: {correct?: boolean; explanation?: string | null} | undefined
+) {
+  const lineY = worksheetLineY(box);
+  context.strokeStyle = result?.correct ? "#16a34a" : result && !result.correct ? "#dc2626" : activeInput ? "#0f766e" : "#8b8070";
+  context.lineWidth = activeInput || result ? 5 : 3;
+  context.beginPath();
+  context.moveTo(box.x, lineY);
+  context.lineTo(box.x + box.width, lineY);
+  context.stroke();
+  if (activeInput) {
+    context.fillStyle = "rgba(15, 118, 110, 0.12)";
+    roundRect(context, box.x - 7, lineY - box.height + 8, box.width + 14, box.height + 2, 8);
+    context.fill();
+  }
+  if (answerText) {
+    context.fillStyle = "#1e3a8a";
+    context.font = "30px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif";
+    context.fillText(answerText.slice(0, 42), box.x + 8, lineY - 6);
+  }
+  if (result && !result.correct) {
+    context.fillStyle = "#991b1b";
+    context.font = "18px ui-rounded, system-ui, sans-serif";
+    context.fillText("check", box.x + box.width + 14, lineY + 4);
+  }
+}
+
+function worksheetLineY(box: WorksheetRect) {
+  return box.y + box.height;
+}
+
+function drawGrid(context: CanvasRenderingContext2D, x: number, y: number, columns: number, rows: number, size: number) {
+  context.fillStyle = "#e2e8f0";
+  context.strokeStyle = "#64748b";
+  context.lineWidth = 3;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      context.fillRect(x + column * size, y + row * size, size, size);
+      context.strokeRect(x + column * size, y + row * size, size, size);
+    }
+  }
+}
+
+function drawVocabularyCard(context: CanvasRenderingContext2D, x: number, y: number, title: string, definition: string, example: string) {
+  context.fillStyle = "#fffaf0";
+  context.strokeStyle = "#d8c9ad";
+  context.lineWidth = 3;
+  roundRect(context, x, y, 860, 230, 18);
+  context.fill();
+  context.stroke();
+  context.fillStyle = "#0f766e";
+  context.font = "900 34px ui-rounded, system-ui, sans-serif";
+  context.fillText(title, x + 34, y + 58);
+  context.fillStyle = "#334155";
+  context.font = "24px ui-rounded, system-ui, sans-serif";
+  wrapWorksheetText(context, definition, x + 34, y + 106, 570, 30, 2);
+  context.fillStyle = "#64748b";
+  context.font = "21px ui-rounded, system-ui, sans-serif";
+  wrapWorksheetText(context, example, x + 34, y + 176, 610, 26, 2);
+}
+
+function drawStackedCubes(context: CanvasRenderingContext2D, x: number, y: number, count: number, layers: number) {
+  const cubeSize = 22;
+  for (let layer = 0; layer < layers; layer += 1) {
+    for (let index = 0; index < count; index += 1) {
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+      drawSingleCube(context, x + column * (cubeSize + 3) + layer * 16, y + row * (cubeSize + 3) - layer * 14, cubeSize);
+    }
+  }
+}
+
+function drawSingleCube(context: CanvasRenderingContext2D, x: number, y: number, size: number) {
+  context.fillStyle = "#dbeafe";
+  context.strokeStyle = "#475569";
+  context.lineWidth = Math.max(2, size / 18);
+  roundRect(context, x, y, size, size, Math.max(3, size / 12));
+  context.fill();
+  context.stroke();
+  context.beginPath();
+  context.moveTo(x, y);
+  context.lineTo(x + size * 0.22, y - size * 0.18);
+  context.lineTo(x + size * 1.22, y - size * 0.18);
+  context.lineTo(x + size, y);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(x + size, y);
+  context.lineTo(x + size * 1.22, y - size * 0.18);
+  context.lineTo(x + size * 1.22, y + size * 0.82);
+  context.lineTo(x + size, y + size);
+  context.stroke();
+}
+
+function drawSpeakerIcon(context: CanvasRenderingContext2D, x: number, y: number, size: number, color: string) {
+  context.fillStyle = color;
+  context.beginPath();
+  context.moveTo(x, y + size * 0.36);
+  context.lineTo(x + size * 0.34, y + size * 0.36);
+  context.lineTo(x + size * 0.68, y);
+  context.lineTo(x + size * 0.68, y + size);
+  context.lineTo(x + size * 0.34, y + size * 0.64);
+  context.lineTo(x, y + size * 0.64);
+  context.closePath();
+  context.fill();
+  context.strokeStyle = color;
+  context.lineWidth = 3;
+  context.beginPath();
+  context.arc(x + size * 0.75, y + size * 0.5, size * 0.38, -0.65, 0.65);
+  context.stroke();
+  context.beginPath();
+  context.arc(x + size * 0.82, y + size * 0.5, size * 0.62, -0.65, 0.65);
+  context.stroke();
+}
+
+function sectionTitleForDisplay(section: WorksheetSection) {
+  return section.id === "guided_practice" ? "Guided Example" : section.title;
 }
 
 function roundRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
@@ -310,23 +672,6 @@ function interactiveBundleForRun(run: GameWorksheetRunSnapshot | null): Interact
 
 function templatePayloadForRun(run: GameWorksheetRunSnapshot): Record<string, unknown> {
   return artifactForStage(run, "template")?.payload ?? run.templatePayload;
-}
-
-function worksheetPagesFromPayload(payload: Record<string, unknown> | null | undefined): Array<{id: string; pageNumber?: number}> {
-  const pages = Array.isArray(payload?.pages) ? payload.pages : [];
-  return pages.flatMap((page) => {
-    if (!isRecord(page) || typeof page.id !== "string") {
-      return [];
-    }
-    return [{id: page.id, pageNumber: typeof page.pageNumber === "number" ? page.pageNumber : undefined}];
-  });
-}
-
-function worksheetPagesForRun(run: GameWorksheetRunSnapshot): Array<{id: string; pageNumber?: number}> {
-  const bundle = interactiveBundleForRun(run);
-  const template = templatePayloadForRun(run);
-  const pages = bundle?.pages?.length ? bundle.pages : worksheetPagesFromPayload(template);
-  return pages.length ? pages : [{id: "page_1", pageNumber: 1}];
 }
 
 function worksheetSectionsForRun(run: GameWorksheetRunSnapshot): WorksheetSection[] {
@@ -400,15 +745,55 @@ export function worksheetFillTargetAtCanvasPoint(x: number, y: number, run: Game
   if (artifactForStage(run, "interactive_bundle")?.status !== "completed") {
     return null;
   }
-  const currentPageId = currentWorksheetPageId(run, playback);
+  const activeSection = activeWorksheetSection(worksheetSectionsForRun(run), playback);
   return (
     worksheetFillTargetsForRun(run).find((target) => {
-      if ((target.pageId ?? "page_1") !== currentPageId || isReadOnlyTarget(target)) {
+      if (isReadOnlyTarget(target) || (activeSection && target.sectionId !== activeSection.id)) {
         return false;
       }
-      return pointInRect(x, y, canvasRectForTarget(target));
+      return pointInRect(x, y, canvasRectForTarget(target, activeSection));
     }) ?? null
   );
+}
+
+export function worksheetPenPointForActiveInput(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  const activeFillTargetId = playback.activeFillTargetId;
+  if (!activeFillTargetId) {
+    return null;
+  }
+  const activeSection = activeWorksheetSection(worksheetSectionsForRun(run), playback);
+  const target = worksheetFillTargetsForRun(run).find((candidate) => candidate.id === activeFillTargetId);
+  if (!target || isReadOnlyTarget(target) || (activeSection && target.sectionId !== activeSection.id)) {
+    return null;
+  }
+  const box = canvasRectForTarget(target, activeSection);
+  const answer = playback.answers[target.id] ?? "";
+  const characterAdvance = target.sectionId === "guided_practice" ? 20 : 18;
+  return {
+    x: Math.min(box.x + box.width - 18, box.x + 18 + answer.length * characterAdvance),
+    y: worksheetLineY(box) - 6
+  };
+}
+
+export function nextWorksheetAnswerForKey(targetId: string, currentAnswer: string, key: string) {
+  const nextAnswer = `${currentAnswer}${key}`;
+  if (targetId === "fill_do_now_array_equation") {
+    return /^[0-9*xX= ]$/.test(key) ? nextAnswer.slice(0, 12) : currentAnswer;
+  }
+  if (targetId.startsWith("fill_do_now_")) {
+    return /^[0-9]$/.test(key) ? nextAnswer.slice(0, 2) : currentAnswer;
+  }
+  return nextAnswer.slice(0, 96);
+}
+
+function worksheetDisplayAnswer(targetId: string, answer: string) {
+  if (targetId === "fill_do_now_array_equation") {
+    return answer.replaceAll(/[^0-9*xX= ]/g, "").slice(0, 12);
+  }
+  if (targetId.startsWith("fill_do_now_")) {
+    return answer.replaceAll(/[^0-9]/g, "").slice(0, 2);
+  }
+  return answer;
 }
 
 export function checkWorksheetAnswers(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
@@ -438,11 +823,6 @@ export function areWorksheetAnswersCorrect(run: GameWorksheetRunSnapshot, playba
   return targets.length > 0 && targets.every((target) => playback.answerResults[target.id]?.correct === true);
 }
 
-function areWorksheetPageAnswersCorrect(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, pageId: string) {
-  const pageTargets = worksheetEditableTargetsForRun(run).filter((target) => (target.pageId ?? "page_1") === pageId);
-  return pageTargets.length === 0 || pageTargets.every((target) => playback.answerResults[target.id]?.correct === true);
-}
-
 function worksheetEditableTargetsForRun(run: GameWorksheetRunSnapshot) {
   return worksheetFillTargetsForRun(run).filter((target) => !isReadOnlyTarget(target));
 }
@@ -451,27 +831,67 @@ function isReadOnlyTarget(target: WorksheetFillTarget) {
   return target.inputMode === "read_only" || target.sectionId === "vocabulary";
 }
 
-function canvasRectForTarget(target: WorksheetFillTarget) {
+function canvasRectForTarget(target: WorksheetFillTarget, activeSection: WorksheetSection | null = null) {
+  const doNowRect = doNowFillTargetRect(target.id);
+  if (doNowRect) {
+    return doNowRect;
+  }
+  const customRect = CUSTOM_FILL_TARGET_RECTS[target.id];
+  if (customRect) {
+    return customRect;
+  }
   const rect = target.rect;
   const normalized = rect.x <= 1 && rect.y <= 1 && rect.width <= 1 && rect.height <= 1;
   if (!normalized) {
     return rect;
   }
+  if (!activeSection) {
+    return {
+      height: rect.height * PAPER_RECT.height,
+      width: rect.width * PAPER_RECT.width,
+      x: PAPER_RECT.x + rect.x * PAPER_RECT.width,
+      y: PAPER_RECT.y + rect.y * PAPER_RECT.height
+    };
+  }
+  const sourceRect = {height: 1, width: 1, x: 0, y: 0};
+  const pageRect = SECTION_VIEWPORT_RECT;
   return {
-    height: rect.height * WORKSHEET_CANVAS_HEIGHT,
-    width: rect.width * WORKSHEET_CANVAS_WIDTH,
-    x: rect.x * WORKSHEET_CANVAS_WIDTH,
-    y: rect.y * WORKSHEET_CANVAS_HEIGHT
+    height: (rect.height / sourceRect.height) * pageRect.height,
+    width: (rect.width / sourceRect.width) * pageRect.width,
+    x: pageRect.x + ((rect.x - sourceRect.x) / sourceRect.width) * pageRect.width,
+    y: pageRect.y + ((rect.y - sourceRect.y) / sourceRect.height) * pageRect.height
   };
+}
+
+function doNowFillTargetRect(targetId: string): WorksheetRect | null {
+  if (targetId === "fill_do_now_array_equation") {
+    return DO_NOW_LAYOUT.problem1.equation.line;
+  }
+  if (targetId === "fill_do_now_array_total") {
+    return DO_NOW_LAYOUT.problem1.total.line;
+  }
+  if (targetId === "fill_do_now_area") {
+    return DO_NOW_LAYOUT.problem3.area.line;
+  }
+  const fact = DO_NOW_LAYOUT.problem2.facts.find((candidate) => candidate.id === targetId);
+  return fact?.line ?? null;
 }
 
 function isAnswerCorrect(answer: string, target: WorksheetFillTarget) {
   const normalizedAnswer = normalizeAnswer(answer);
   const normalizedExpected = normalizeAnswer(target.expectedText ?? "");
+  const compactAnswer = normalizedAnswer.replaceAll(" ", "");
+  const compactExpected = normalizedExpected.replaceAll(" ", "");
   if (!normalizedAnswer || !normalizedExpected) {
     return false;
   }
+  if (/^\d+$/.test(compactExpected)) {
+    return compactAnswer === compactExpected;
+  }
   if (normalizedAnswer === normalizedExpected || normalizedAnswer.includes(normalizedExpected) || normalizedExpected.includes(normalizedAnswer)) {
+    return true;
+  }
+  if (compactAnswer === compactExpected || compactAnswer.includes(compactExpected) || compactExpected.includes(compactAnswer)) {
     return true;
   }
   if (target.sectionId === "guided_practice") {
@@ -503,33 +923,6 @@ function explanationForTarget(target: WorksheetFillTarget) {
     return "The final volume tells how many unit cubes fill the whole shape.";
   }
   return "Count one complete layer first, then multiply by how many matching layers there are.";
-}
-
-function currentWorksheetPageId(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
-  const pages = worksheetPagesForRun(run);
-  if (playback.currentPageId && pages.some((page) => page.id === playback.currentPageId)) {
-    return playback.currentPageId;
-  }
-  return pages[0]?.id ?? "page_1";
-}
-
-function nextWorksheetPageId(run: GameWorksheetRunSnapshot, currentPageId: string) {
-  const pages = worksheetPagesForRun(run);
-  const currentIndex = pages.findIndex((page) => page.id === currentPageId);
-  if (currentIndex < 0 || currentIndex >= pages.length - 1) {
-    return null;
-  }
-  return pages[currentIndex + 1]?.id ?? null;
-}
-
-function pageSectionsForRun(run: GameWorksheetRunSnapshot, pageId: string) {
-  return worksheetSectionsForRun(run).filter((section) => (section.pageId ?? "page_1") === pageId);
-}
-
-function isWorksheetPageComplete(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, pageId: string) {
-  const completedSections = new Set(playback.completedSectionIds);
-  const sections = pageSectionsForRun(run, pageId);
-  return sections.length > 0 && sections.every((section) => completedSections.has(section.id));
 }
 
 export function areAllWorksheetSectionsComplete(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
@@ -614,15 +1007,32 @@ function worksheetFillTargetsFromPayload(payload: Record<string, unknown> | null
   });
 }
 
-function sectionDisplayRects(sections: WorksheetSection[]) {
+function activeWorksheetSection(sections: WorksheetSection[], playback: WorksheetPlaybackState) {
+  const active = sections.find((section) => section.id === playback.activeSectionId);
+  if (active) {
+    return active;
+  }
+  for (let index = playback.completedSectionIds.length - 1; index >= 0; index -= 1) {
+    const completed = sections.find((section) => section.id === playback.completedSectionIds[index]);
+    if (completed) {
+      return completed;
+    }
+  }
+  return sections[0] ?? null;
+}
+
+function sectionSelectorRects(sections: WorksheetSection[]) {
   const rects = new Map<string, {height: number; width: number; x: number; y: number}>();
-  const fallback = [
-    {height: 150, width: 998, x: 96, y: 275},
-    {height: 150, width: 998, x: 96, y: 450},
-    {height: 150, width: 998, x: 96, y: 1090}
-  ];
+  const gap = 18;
+  const count = Math.max(1, sections.length);
+  const width = (SECTION_SELECTOR_RECT.width - gap * (count - 1)) / count;
   sections.forEach((section, index) => {
-    rects.set(section.id, fallback[index] ?? {height: 132, width: 998, x: 96, y: 275 + index * 160});
+    rects.set(section.id, {
+      height: SECTION_SELECTOR_RECT.height,
+      width,
+      x: SECTION_SELECTOR_RECT.x + index * (width + gap),
+      y: SECTION_SELECTOR_RECT.y
+    });
   });
   return rects;
 }
@@ -686,6 +1096,7 @@ export function worksheetActionAtCanvasPoint(
   | {target: WorksheetFillTarget; type: "fill_target"}
   | {pageId: string; type: "next_page"}
   | {section: WorksheetSection; type: "section"}
+  | {section: WorksheetSection; type: "section_audio"}
   | {type: "submit_answers"}
   | {type: "complete_lesson"}
   | null {
@@ -696,29 +1107,22 @@ export function worksheetActionAtCanvasPoint(
   if (fillTarget) {
     return {target: fillTarget, type: "fill_target"};
   }
-  const currentPageId = currentWorksheetPageId(run, playback);
-  const nextPageId = nextWorksheetPageId(run, currentPageId);
   if (!playback.submittedAt && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
     return {type: "submit_answers"};
   }
   if (
-    isWorksheetPageComplete(run, playback, currentPageId) &&
-    areWorksheetPageAnswersCorrect(run, playback, currentPageId) &&
-    nextPageId &&
-    pointInRect(x, y, WORKSHEET_NEXT_PAGE_RECT)
-  ) {
-    return {pageId: nextPageId, type: "next_page"};
-  }
-  if (
     areAllWorksheetSectionsComplete(run, playback) &&
     areWorksheetAnswersCorrect(run, playback) &&
-    !nextPageId &&
     pointInRect(x, y, WORKSHEET_COMPLETE_RECT)
   ) {
     return {type: "complete_lesson"};
   }
-  const sections = pageSectionsForRun(run, currentPageId);
-  const rects = sectionDisplayRects(sections);
+  const sections = worksheetSectionsForRun(run);
+  const activeSection = activeWorksheetSection(sections, playback);
+  if (activeSection && pointInRect(x, y, SECTION_AUDIO_RECT)) {
+    return {section: activeSection, type: "section_audio"};
+  }
+  const rects = sectionSelectorRects(sections);
   const section =
     sections.find((section) => {
       const rect = rects.get(section.id);

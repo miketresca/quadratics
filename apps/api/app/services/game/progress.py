@@ -217,18 +217,26 @@ class SupabaseGameProgressRepository:
         playback: GameWorksheetPlaybackProgress,
     ) -> GameProgress:
         _validate_unlocked_lesson(lesson_id)
-        current = await self._require_started_lesson(user_id, lesson_id)
+        current = await self._ensure_started_lesson(user_id, lesson_id)
         metadata = _metadata_dict(current)
         metadata["worksheetPlayback"] = playback.model_dump(by_alias=True)
-        await self._upsert_lesson_progress(user_id, lesson_id, {"metadata": metadata})
+        await self._upsert_lesson_progress(
+            user_id,
+            lesson_id,
+            _lesson_progress_values(current, metadata),
+        )
         return await self.get(user_id)
 
     async def set_phone_reward(self, user_id: str, lesson_id: str, pending: bool) -> GameProgress:
         _validate_unlocked_lesson(lesson_id)
-        current = await self._require_started_lesson(user_id, lesson_id)
+        current = await self._ensure_started_lesson(user_id, lesson_id)
         metadata = _metadata_dict(current)
         metadata["phoneRewardPending"] = pending
-        await self._upsert_lesson_progress(user_id, lesson_id, {"metadata": metadata})
+        await self._upsert_lesson_progress(
+            user_id,
+            lesson_id,
+            _lesson_progress_values(current, metadata),
+        )
         return await self.get(user_id)
 
     async def claim_easter_egg(
@@ -238,13 +246,17 @@ class SupabaseGameProgressRepository:
         easter_egg_id: str,
     ) -> GameProgress:
         _validate_unlocked_lesson(lesson_id)
-        current = await self._require_started_lesson(user_id, lesson_id)
+        current = await self._ensure_started_lesson(user_id, lesson_id)
         metadata = _metadata_dict(current)
         easter = _easter_metadata(metadata)
         if easter_egg_id not in easter["discoveredIds"]:
             easter["discoveredIds"].append(easter_egg_id)
         metadata["easterEggs"] = easter
-        await self._upsert_lesson_progress(user_id, lesson_id, {"metadata": metadata})
+        await self._upsert_lesson_progress(
+            user_id,
+            lesson_id,
+            _lesson_progress_values(current, metadata),
+        )
         return await self.get(user_id)
 
     async def reset(self, user_id: str) -> GameProgress:
@@ -290,7 +302,7 @@ class SupabaseGameProgressRepository:
                 },
             )
         _raise_for_storage_error(response)
-        return [GameLessonProgress.model_validate(row) for row in response.json()]
+        return [_lesson_progress_from_row(row) for row in response.json()]
 
     async def _get_one_lesson_progress(
         self,
@@ -310,13 +322,31 @@ class SupabaseGameProgressRepository:
             )
         _raise_for_storage_error(response)
         rows = response.json()
-        return GameLessonProgress.model_validate(rows[0]) if rows else None
+        return _lesson_progress_from_row(rows[0]) if rows else None
 
     async def _require_started_lesson(self, user_id: str, lesson_id: str) -> GameLessonProgress:
         current = await self._get_one_lesson_progress(user_id, lesson_id)
         if current is None:
             raise InvalidGameProgressAction("Lesson has not been started")
         return current
+
+    async def _ensure_started_lesson(self, user_id: str, lesson_id: str) -> GameLessonProgress:
+        current = await self._get_one_lesson_progress(user_id, lesson_id)
+        if current is not None:
+            return current
+        now = _now()
+        await self._upsert_lesson_progress(
+            user_id,
+            lesson_id,
+            {
+                "status": "started",
+                "started_at": now,
+                "completed_at": None,
+                "source": "game_sprint_1",
+                "metadata": {},
+            },
+        )
+        return GameLessonProgress(lesson_id=lesson_id, status="started", started_at=now)
 
     async def _upsert_user_progress(self, user_id: str, values: dict[str, Any]) -> None:
         payload = {"user_id": user_id, **values}
@@ -387,7 +417,7 @@ def _copy_lesson_progress(
 ) -> GameLessonProgress:
     return GameLessonProgress(
         lesson_id=current.lesson_id,
-        status=current.status,
+        status=current.status or "started",
         started_at=current.started_at,
         completed_at=current.completed_at,
         metadata=metadata,
@@ -398,6 +428,25 @@ def _metadata_dict(current: GameLessonProgress) -> dict[str, Any]:
     if current.metadata is None:
         return {}
     return current.metadata.model_dump(by_alias=True, exclude_none=True)
+
+
+def _lesson_progress_values(
+    current: GameLessonProgress,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "status": current.status or "started",
+        "started_at": current.started_at,
+        "completed_at": current.completed_at,
+        "source": "game_sprint_1",
+        "metadata": metadata,
+    }
+
+
+def _lesson_progress_from_row(row: dict[str, Any]) -> GameLessonProgress:
+    normalized = dict(row)
+    normalized["status"] = normalized.get("status") or "started"
+    return GameLessonProgress.model_validate(normalized)
 
 
 def _easter_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -423,4 +472,6 @@ def _now() -> str:
 def _raise_for_storage_error(response: httpx.Response) -> None:
     if response.is_success:
         return
-    raise GameProgressStorageError(f"Game progress storage request failed: {response.status_code}")
+    raise GameProgressStorageError(
+        f"Game progress storage request failed: {response.status_code}: {response.text[:500]}"
+    )

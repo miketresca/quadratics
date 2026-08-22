@@ -26,8 +26,9 @@ export async function updateGameProgress(params: {
     body: JSON.stringify(params.request)
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
-    throw new Error(body?.detail ?? "Could not update game progress");
+    const text = await response.text();
+    const body = tryParseJson(text) as {detail?: string} | null;
+    throw new Error(body?.detail ?? (text || "Could not update game progress"));
   }
   return response.json() as Promise<GameProgress>;
 }
@@ -42,4 +43,12 @@ export async function resetGameProgress(accessToken: string): Promise<GameProgre
     throw new Error(body?.detail ?? "Could not reset game progress");
   }
   return response.json() as Promise<GameProgress>;
+}
+
+function tryParseJson(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
 }

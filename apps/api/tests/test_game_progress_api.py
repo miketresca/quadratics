@@ -1,7 +1,12 @@
 import pytest
 
 from app.api.routes import game_progress
-from app.services.game.progress import InMemoryGameProgressRepository
+from app.schemas.game import GameLessonProgress
+from app.services.game.progress import (
+    InMemoryGameProgressRepository,
+    _copy_lesson_progress,
+    _lesson_progress_from_row,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -115,6 +120,87 @@ async def test_game_progress_persists_worksheet_playback_metadata(authenticated_
     assert metadata["worksheetPlayback"]["currentPageId"] == "page_2"
     assert completed.status_code == 200
     assert completed.json()["lessons"][0]["metadata"] == metadata
+
+
+@pytest.mark.asyncio
+async def test_game_progress_playback_update_starts_lesson(authenticated_client):
+    updated = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={
+            "action": "update_lesson_playback",
+            "lessonId": "volume-cubes-lesson-1",
+            "worksheetPlayback": {
+                "completedSectionIds": ["do_now"],
+                "currentPageId": "page_1",
+            },
+        },
+    )
+
+    assert updated.status_code == 200
+    lesson = updated.json()["lessons"][0]
+    assert lesson["status"] == "started"
+    assert lesson["startedAt"] is not None
+    assert lesson["metadata"]["worksheetPlayback"]["completedSectionIds"] == ["do_now"]
+
+
+@pytest.mark.asyncio
+async def test_game_progress_reward_update_starts_lesson(authenticated_client):
+    updated = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={"action": "set_phone_reward", "lessonId": "volume-cubes-lesson-1"},
+    )
+
+    assert updated.status_code == 200
+    lesson = updated.json()["lessons"][0]
+    assert lesson["status"] == "started"
+    assert lesson["startedAt"] is not None
+    assert lesson["metadata"]["phoneRewardPending"] is True
+
+
+@pytest.mark.asyncio
+async def test_game_progress_easter_egg_update_starts_lesson(authenticated_client):
+    updated = await authenticated_client.put(
+        "/api/v1/game/me/progress",
+        json={
+            "action": "claim_easter_egg",
+            "lessonId": "volume-cubes-lesson-1",
+            "easterEggId": "lesson_1_phone_reward",
+        },
+    )
+
+    assert updated.status_code == 200
+    lesson = updated.json()["lessons"][0]
+    assert lesson["status"] == "started"
+    assert lesson["startedAt"] is not None
+    assert lesson["metadata"]["easterEggs"]["discoveredIds"] == ["lesson_1_phone_reward"]
+
+
+def test_game_progress_copy_defaults_missing_status_to_started():
+    legacy_progress = GameLessonProgress.model_construct(
+        lesson_id="volume-cubes-lesson-1",
+        status=None,
+        started_at="2026-08-22T00:00:00+00:00",
+        completed_at=None,
+        metadata=None,
+    )
+
+    copied = _copy_lesson_progress(legacy_progress, metadata={"phoneRewardPending": True})
+
+    assert copied.status == "started"
+
+
+def test_game_progress_row_defaults_missing_status_to_started():
+    progress = _lesson_progress_from_row(
+        {
+            "lesson_id": "volume-cubes-lesson-1",
+            "status": None,
+            "started_at": "2026-08-22T00:00:00+00:00",
+            "completed_at": None,
+            "metadata": None,
+        }
+    )
+
+    assert progress.status == "started"
 
 
 @pytest.mark.asyncio

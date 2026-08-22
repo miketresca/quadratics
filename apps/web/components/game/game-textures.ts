@@ -72,21 +72,22 @@ export function createWoodTexture(THREE: typeof import("three"), baseColor: numb
   if (context) {
     const base = `#${baseColor.toString(16).padStart(6, "0")}`;
     const grain = `#${grainColor.toString(16).padStart(6, "0")}`;
-    const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, base);
-    gradient.addColorStop(0.55, "#a86432");
-    gradient.addColorStop(1, "#d5904d");
-    context.fillStyle = gradient;
+    context.fillStyle = base;
     context.fillRect(0, 0, canvas.width, canvas.height);
+    for (let index = 0; index < 4_200; index += 1) {
+      const shade = 70 + Math.floor(Math.random() * 36);
+      context.fillStyle = `rgba(${shade + 24}, ${shade + 8}, ${shade - 8}, ${0.025 + Math.random() * 0.055})`;
+      context.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1 + Math.random() * 2.6, 0.7 + Math.random() * 1.8);
+    }
     context.strokeStyle = grain;
-    context.lineWidth = 3;
-    for (let index = 0; index < 30; index += 1) {
-      const y = 18 + index * 13 + Math.random() * 6;
-      context.globalAlpha = 0.16 + Math.random() * 0.1;
+    context.lineWidth = 2;
+    for (let index = 0; index < 34; index += 1) {
+      const y = 12 + index * 11 + Math.random() * 5;
+      context.globalAlpha = 0.1 + Math.random() * 0.08;
       context.beginPath();
       context.moveTo(0, y);
       for (let x = 0; x <= canvas.width; x += 72) {
-        context.lineTo(x, y + Math.sin(index * 0.7 + x * 0.018) * 11);
+        context.lineTo(x, y + Math.sin(index * 0.7 + x * 0.018) * 7);
       }
       context.stroke();
     }

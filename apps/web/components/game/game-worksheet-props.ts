@@ -1,14 +1,21 @@
 import type {Mesh, Object3D, Texture, Vector3} from "three";
 
-import {DESK_RIG_Z, DESK_SURFACE_Y, PAPER_HEIGHT, PAPER_WIDTH, PAPER_Y} from "./game-scene-config";
+import {DESK_RIG_Z, DESK_SURFACE_Y, PAPER_HEIGHT, PAPER_WIDTH, PAPER_X, PAPER_Y} from "./game-scene-config";
 
 export function createPaper(THREE: typeof import("three"), paperTexture: Texture) {
   const paper = new THREE.Mesh(
     new THREE.PlaneGeometry(PAPER_WIDTH, PAPER_HEIGHT),
-    new THREE.MeshStandardMaterial({map: paperTexture, color: 0xffffff, roughness: 0.9, metalness: 0})
+    new THREE.MeshStandardMaterial({
+      emissive: 0xffffff,
+      emissiveIntensity: 0.14,
+      map: paperTexture,
+      color: 0xffffff,
+      roughness: 1,
+      metalness: 0
+    })
   );
   paper.rotation.x = -Math.PI / 2;
-  paper.position.set(0, PAPER_Y, -0.15);
+  paper.position.set(PAPER_X, PAPER_Y, -0.1);
   paper.receiveShadow = true;
   return paper;
 }
@@ -16,7 +23,7 @@ export function createPaper(THREE: typeof import("three"), paperTexture: Texture
 export function createDeskPenModel(THREE: typeof import("three"), source: Object3D) {
   const group = new THREE.Group();
   group.name = "desk-pen";
-  group.position.set(2.1, DESK_SURFACE_Y + 0.095, 0.68);
+  group.position.set(2.28, DESK_SURFACE_Y + 0.095, 0.72);
   group.rotation.set(0, 0, 0);
 
   const model = createNormalizedBlueOfficePen(THREE, source, 0.82);

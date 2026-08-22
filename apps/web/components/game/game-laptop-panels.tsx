@@ -7,6 +7,8 @@ import {FocusedPipelinePanel} from "./game-pipeline-panel";
 import {shortRunId} from "./game-pipeline-utils";
 
 export type LaptopTab = "demo" | "pipeline" | "costs" | "music" | "settings";
+export type SignedOutLaptopTab = "signin" | "music";
+export type LaptopDisplayTab = LaptopTab | SignedOutLaptopTab;
 export type MusicOptionId = "lofi" | "techno" | "classical";
 export type MusicOption = {
   id: MusicOptionId;
@@ -90,10 +92,10 @@ export function LaptopFocusPanel({
   onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => void;
   onSignIn: (event: FormEvent<HTMLFormElement>) => void;
   onSignOut: () => void;
-  onTabChange: (tab: LaptopTab) => void;
+  onTabChange: (tab: LaptopDisplayTab) => void;
   pipeline: LaptopPipelineState;
   selectedMusicId: MusicOptionId;
-  tab: LaptopTab;
+  tab: LaptopDisplayTab;
   user: CurrentUser | null;
 }) {
   return (
@@ -102,60 +104,21 @@ export function LaptopFocusPanel({
         className="pointer-events-auto absolute left-[4.8vw] top-[13.4vh] grid h-[71vh] w-[90.4vw] overflow-hidden rounded-[1.65rem] border border-cyan-100/20 bg-[#070b12] font-mono text-cyan-50 shadow-[inset_0_0_48px_rgba(35,220,255,0.11),0_0_80px_rgba(20,184,166,0.09)]"
         data-testid="focused-laptop-screen"
       >
-        {!user ? (
-          <form
-            className="grid h-full place-items-center"
-            onSubmit={onSignIn}
-          >
-            <div className="grid w-full max-w-md gap-4 rounded-2xl border border-emerald-200/20 bg-black/55 p-8 shadow-2xl shadow-emerald-950/20">
-              <div>
-                <h2 className="text-2xl font-black tracking-tight text-zinc-50">quadratics login</h2>
-                <p className="mt-2 text-sm text-zinc-400">Start a saved worksheet session.</p>
-              </div>
-              <label className="grid gap-2">
-                <span className="text-[11px] uppercase tracking-widest text-zinc-500">Username</span>
-                <input
-                  autoComplete="username"
-                  className="rounded-lg border border-zinc-700 bg-[#101621] px-3 py-3 text-base text-zinc-50 outline-none focus:border-emerald-300/80"
-                  name="username"
-                  required
-                  type="text"
-                />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-[11px] uppercase tracking-widest text-zinc-500">Password</span>
-                <input
-                  autoComplete="current-password"
-                  className="rounded-lg border border-zinc-700 bg-[#101621] px-3 py-3 text-base text-zinc-50 outline-none focus:border-emerald-300/80"
-                  name="password"
-                  required
-                  type="password"
-                />
-              </label>
-              {error ? (
-                <div className="rounded-lg border border-red-400/45 bg-red-950/45 px-3 py-2 text-sm text-red-100">
-                  {error}
-                </div>
-              ) : null}
-              <button
-                className="rounded-lg border border-emerald-300/70 bg-emerald-950/60 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/60 disabled:cursor-wait disabled:opacity-60"
-                disabled={loading}
-                type="submit"
-              >
-                {loading ? "Signing in" : "Sign in"}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="grid h-full min-h-0 grid-rows-[4.2rem_minmax(0,1fr)] bg-[#070b12]">
+        <div className="grid h-full min-h-0 grid-rows-[4.2rem_minmax(0,1fr)] bg-[#070b12]">
             <div className="flex items-end gap-2 border-b border-zinc-700/70 bg-[#111318] px-3 pt-2">
-              {([
-                ["demo", "Demo"],
-                ["pipeline", "Pipeline"],
-                ["costs", "Costs"],
-                ["music", "Music"],
-                ["settings", "Settings"]
-              ] as Array<[LaptopTab, string]>).map(([value, label]) => (
+              {(user
+                ? ([
+                    ["demo", "Demo"],
+                    ["pipeline", "Pipeline"],
+                    ["costs", "Costs"],
+                    ["music", "Music"],
+                    ["settings", "Settings"]
+                  ] as Array<[LaptopTab, string]>)
+                : ([
+                    ["signin", "Sign in"],
+                    ["music", "Music"]
+                  ] as Array<[SignedOutLaptopTab, string]>)
+              ).map(([value, label]) => (
                 <button
                   className={`h-11 rounded-t-xl border px-6 text-base font-black ${tab === value ? "border-zinc-700 border-b-[#071018] bg-[#071018] text-emerald-200" : "border-zinc-700 bg-[#191b22] text-zinc-400 hover:text-zinc-100"}`}
                   data-testid={`focused-laptop-tab-${value}`}
@@ -168,7 +131,9 @@ export function LaptopFocusPanel({
               ))}
             </div>
             <div className="min-h-0 overflow-hidden bg-gradient-to-br from-[#071018] to-[#090d14] p-5">
-              {tab === "music" ? (
+              {!user && tab !== "music" ? (
+                <FocusedSignInPanel error={error} loading={loading} onSignIn={onSignIn} />
+              ) : tab === "music" ? (
                 <FocusedMusicPanel
                   musicMuted={musicMuted}
                   musicVolume={musicVolume}
@@ -177,7 +142,7 @@ export function LaptopFocusPanel({
                   onMusicVolumeChange={onMusicVolumeChange}
                   selectedMusicId={selectedMusicId}
                 />
-              ) : tab === "pipeline" ? (
+              ) : user && tab === "pipeline" ? (
                 <FocusedPipelinePanel
                   onApproveArtifact={onApproveArtifact}
                   onCreateRun={onCreateRun}
@@ -186,18 +151,70 @@ export function LaptopFocusPanel({
                   onSaveArtifact={onSaveArtifact}
                   pipeline={pipeline}
                 />
-              ) : tab === "costs" ? (
+              ) : user && tab === "costs" ? (
                 <FocusedCostsPanel costs={costs} pipeline={pipeline} />
-              ) : tab === "settings" ? (
+              ) : user && tab === "settings" ? (
                 <FocusedSettingsPanel onSignOut={onSignOut} user={user} />
               ) : (
                 <FocusedDemoPanel />
               )}
             </div>
           </div>
-        )}
       </div>
     </div>
+  );
+}
+
+function FocusedSignInPanel({
+  error,
+  loading,
+  onSignIn
+}: {
+  error: string | null;
+  loading: boolean;
+  onSignIn: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <form className="grid h-full place-items-center" onSubmit={onSignIn}>
+      <div className="grid w-full max-w-md gap-4 rounded-2xl border border-emerald-200/20 bg-black/55 p-8 shadow-2xl shadow-emerald-950/20">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight text-zinc-50">quadratics login</h2>
+          <p className="mt-2 text-sm text-zinc-400">Start a saved worksheet session.</p>
+        </div>
+        <label className="grid gap-2">
+          <span className="text-[11px] uppercase tracking-widest text-zinc-500">Username</span>
+          <input
+            autoComplete="username"
+            className="rounded-lg border border-zinc-700 bg-[#101621] px-3 py-3 text-base text-zinc-50 outline-none focus:border-emerald-300/80"
+            name="username"
+            required
+            type="text"
+          />
+        </label>
+        <label className="grid gap-2">
+          <span className="text-[11px] uppercase tracking-widest text-zinc-500">Password</span>
+          <input
+            autoComplete="current-password"
+            className="rounded-lg border border-zinc-700 bg-[#101621] px-3 py-3 text-base text-zinc-50 outline-none focus:border-emerald-300/80"
+            name="password"
+            required
+            type="password"
+          />
+        </label>
+        {error ? (
+          <div className="rounded-lg border border-red-400/45 bg-red-950/45 px-3 py-2 text-sm text-red-100">
+            {error}
+          </div>
+        ) : null}
+        <button
+          className="rounded-lg border border-emerald-300/70 bg-emerald-950/60 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/60 disabled:cursor-wait disabled:opacity-60"
+          disabled={loading}
+          type="submit"
+        >
+          {loading ? "Signing in" : "Sign in"}
+        </button>
+      </div>
+    </form>
   );
 }
 

@@ -26,6 +26,7 @@ import {
   formatUsd,
   musicEmbedUrl,
   type LaptopCostState,
+  type LaptopDisplayTab,
   type LaptopPipelineState,
   type LaptopTab,
   type MusicOptionId,
@@ -48,12 +49,12 @@ export function createLaptopScreen(
     onMusicChange: (selectedMusicId: MusicOptionId) => void;
     onMusicMutedChange: (muted: boolean) => void;
     onMusicVolumeChange: (volume: number) => void;
-    onTabChange: (tab: LaptopTab) => void;
+    onTabChange: (tab: LaptopDisplayTab) => void;
     origin: string;
     pipeline: LaptopPipelineState;
     musicVolume: number;
     selectedMusicId: MusicOptionId;
-    tab: LaptopTab;
+    tab: LaptopDisplayTab;
     user: CurrentUser | null;
   }
 ) {
@@ -99,7 +100,7 @@ export function createLaptopScreen(
   iframe.style.display = "block";
 
   let currentUser = options.user;
-  let currentTab = options.tab;
+  let currentTab: LaptopDisplayTab = options.tab;
   let currentError = options.error;
   let currentMusicId = options.selectedMusicId;
   let currentMusicMuted = options.musicMuted;
@@ -138,7 +139,41 @@ export function createLaptopScreen(
     keepMusicMounted();
     appRoot.replaceChildren();
     if (!currentUser) {
-      appRoot.append(renderLaptopLogin({error: currentError, loading, onSignIn: options.onSignIn}));
+      appRoot.append(renderSignedOutLaptopBrowser({
+        error: currentError,
+        iframe,
+        loading,
+        musicMuted: currentMusicMuted,
+        musicVolume: currentMusicVolume,
+        onMusicChange: (selectedMusicId) => {
+          currentMusicId = selectedMusicId;
+          refreshMusicSource();
+          render();
+          options.onMusicChange(selectedMusicId);
+        },
+        onMusicMutedChange: (muted) => {
+          currentMusicMuted = muted;
+          postMusicCommand(muted ? "mute" : "unMute");
+          postMusicCommand("playVideo");
+          render();
+          options.onMusicMutedChange(muted);
+        },
+        onMusicVolumeChange: (volume) => {
+          currentMusicVolume = clampMusicVolume(volume);
+          postMusicCommand("setVolume", [currentMusicVolume]);
+          render();
+          options.onMusicVolumeChange(currentMusicVolume);
+        },
+        onSignIn: options.onSignIn,
+        onTabChange: (tab) => {
+          currentTab = tab;
+          render();
+          options.onTabChange(tab);
+        },
+        selectedMusicId: currentMusicId,
+        tab: currentTab === "music" ? "music" : "signin"
+      }));
+      applyMusicPlaybackState();
       return;
     }
     appRoot.append(renderLaptopBrowser({
@@ -178,7 +213,7 @@ export function createLaptopScreen(
       selectedMusicId: currentMusicId,
       pipeline: currentPipeline,
       costs: currentCosts,
-      tab: currentTab,
+      tab: currentTab === "signin" ? "demo" : currentTab,
       user: currentUser
     }));
     applyMusicPlaybackState();
@@ -220,13 +255,14 @@ export function createLaptopScreen(
         currentCosts = state;
         render();
       },
-      setTab(tab: LaptopTab) {
+      setTab(tab: LaptopDisplayTab) {
         currentTab = tab;
         render();
       },
       updateUser(user: CurrentUser | null) {
         currentUser = user;
         currentError = null;
+        currentTab = user ? "demo" : "signin";
         render();
       }
     },
@@ -628,6 +664,110 @@ function renderLaptopCosts(pipeline: LaptopPipelineState, costs: LaptopCostState
     </div>
     <div style="border:1px solid rgba(63,63,70,.76);border-radius:12px;background:rgba(3,7,18,.42);padding:4px 14px">${stageRows}</div>
   `;
+  return wrap;
+}
+
+function renderSignedOutLaptopBrowser({
+  error,
+  iframe,
+  loading,
+  musicMuted,
+  musicVolume,
+  onMusicChange,
+  onMusicMutedChange,
+  onMusicVolumeChange,
+  onSignIn,
+  onTabChange,
+  selectedMusicId,
+  tab
+}: {
+  error: string | null;
+  iframe: HTMLIFrameElement;
+  loading: boolean;
+  musicMuted: boolean;
+  musicVolume: number;
+  onMusicChange: (selectedMusicId: MusicOptionId) => void;
+  onMusicMutedChange: (muted: boolean) => void;
+  onMusicVolumeChange: (volume: number) => void;
+  onSignIn: (formData: FormData) => Promise<void>;
+  onTabChange: (tab: LaptopDisplayTab) => void;
+  selectedMusicId: MusicOptionId;
+  tab: "signin" | "music";
+}) {
+  const wrap = document.createElement("div");
+  wrap.style.height = "100%";
+  wrap.style.display = "grid";
+  wrap.style.gridTemplateRows = "58px 1fr";
+  wrap.style.background = "#070b12";
+
+  const tabs = document.createElement("div");
+  tabs.style.display = "flex";
+  tabs.style.alignItems = "end";
+  tabs.style.gap = "7px";
+  tabs.style.padding = "10px 12px 0";
+  tabs.style.borderBottom = "1px solid rgba(63,63,70,0.7)";
+  tabs.style.background = "#111318";
+  for (const item of [
+    ["signin", "Sign in"],
+    ["music", "Music"]
+  ] as Array<["signin" | "music", string]>) {
+    const button = document.createElement("button");
+    button.textContent = item[1];
+    button.type = "button";
+    button.style.height = "38px";
+    button.style.padding = "0 20px";
+    button.style.border = "1px solid rgba(63,63,70,0.86)";
+    button.style.borderBottom = tab === item[0] ? "1px solid #071018" : "1px solid rgba(63,63,70,0.86)";
+    button.style.borderRadius = "11px 11px 0 0";
+    button.style.background = tab === item[0] ? "#071018" : "#191b22";
+    button.style.color = tab === item[0] ? "#a7f3d0" : "#a1a1aa";
+    button.style.fontWeight = "800";
+    button.style.fontSize = "13px";
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onTabChange(item[0]);
+    });
+    tabs.append(button);
+  }
+  wrap.append(tabs);
+
+  const body = document.createElement("div");
+  body.style.minHeight = "0";
+  body.style.padding = "20px";
+  body.style.background = "linear-gradient(135deg,#071018,#090d14)";
+  if (tab === "music") {
+    const musicBrowser = renderLaptopBrowser({
+      costs: {error: null, events: [], loading: false, summary: null},
+      iframe,
+      musicMuted,
+      musicVolume,
+      onApproveArtifact: () => undefined,
+      onCreateRun: () => undefined,
+      onMusicChange,
+      onMusicMutedChange,
+      onMusicVolumeChange,
+      onResetProgress: () => undefined,
+      onRunStage: () => undefined,
+      onSaveArtifact: () => undefined,
+      onSignOut: async () => undefined,
+      onTabChange,
+      pipeline: {error: null, loading: false, loadingStage: null, run: null},
+      selectedMusicId,
+      tab: "music",
+      user: {creditBalance: 0, displayName: "guest", email: null, id: "guest"}
+    });
+    const musicBody = musicBrowser.lastElementChild;
+    if (musicBody instanceof HTMLElement) {
+      body.replaceWith(musicBody);
+      wrap.append(musicBody);
+      return wrap;
+    }
+  } else {
+    body.append(renderLaptopLogin({error, loading, onSignIn}));
+  }
+  wrap.append(body);
   return wrap;
 }
 

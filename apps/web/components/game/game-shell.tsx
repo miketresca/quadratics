@@ -23,6 +23,7 @@ import {createClient} from "@/lib/supabase/client";
 import {
   LaptopFocusPanel,
   type LaptopCostState,
+  type LaptopDisplayTab,
   type LaptopPipelineState,
   type LaptopTab,
   type MusicOptionId,
@@ -65,7 +66,7 @@ import {
   LESSON_CHOICES,
   PAPER_HEIGHT,
   PAPER_WIDTH,
-  PAPER_Y,
+  PAPER_X,
   PHONE_FOCUS_QUOTES,
   PHONE_VIBRATION_SOUND_URL,
   ROOM,
@@ -91,11 +92,13 @@ import {
   choiceAtCanvasPoint,
   createWorksheetTexture,
   isWorksheetReadyToSubmit,
+  nextWorksheetAnswerForKey,
   refreshPaperTexture,
   sectionPlaybackDurationMs,
   worksheetActionAtCanvasPoint,
   worksheetActionsForSection,
-  worksheetNarrationForSection
+  worksheetNarrationForSection,
+  worksheetPenPointForActiveInput
 } from "./game-worksheet-renderer";
 import {createDeskPenModel, createPaper, createRaisedPenCursor} from "./game-worksheet-props";
 
@@ -106,6 +109,7 @@ export function GameShell({
   initialLoginError: string | null;
   initialUser: CurrentUser | null;
 }) {
+  const initialMusicState: MusicState = initialUser ? readMusicState() : {muted: false, selectedMusicId: "techno", volume: 35};
   const mountRef = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(false);
   const worksheetFocusedRef = useRef(false);
@@ -120,9 +124,9 @@ export function GameShell({
   const sectionCompletionTimerRef = useRef<number | null>(null);
   const sectionSpeechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const phoneVibrationAudioRef = useRef<HTMLAudioElement | null>(null);
-  const selectedMusicRef = useRef<MusicOptionId>(readMusicState().selectedMusicId);
-  const musicMutedRef = useRef(readMusicState().muted);
-  const musicVolumeRef = useRef(readMusicState().volume);
+  const selectedMusicRef = useRef<MusicOptionId>(initialMusicState.selectedMusicId);
+  const musicMutedRef = useRef(initialMusicState.muted);
+  const musicVolumeRef = useRef(initialMusicState.volume);
   const gameRunRef = useRef<GameWorksheetRunSnapshot | null>(null);
   const gameCostStateRef = useRef<LaptopCostState>({
     error: null,
@@ -147,15 +151,15 @@ export function GameShell({
   const [focusedMode, setFocusedMode] = useState<FocusMode>("room");
   const [clockPanelVisible, setClockPanelVisible] = useState(false);
   const [interactiveTarget, setInteractiveTarget] = useState<InteractiveTarget>(null);
-  const [laptopTab, setLaptopTab] = useState<LaptopTab>("demo");
+  const [laptopTab, setLaptopTab] = useState<LaptopDisplayTab>(initialUser ? "demo" : "signin");
   const [laptopLoginLoading, setLaptopLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(initialLoginError);
   const [user, setUser] = useState<CurrentUser | null>(initialUser);
   const [pomodoro, setPomodoro] = useState<PomodoroState>(() => initialUser ? readPomodoroState() : {endsAt: null, minutes: 25});
   const [pomodoroNow, setPomodoroNow] = useState(() => Date.now());
-  const [selectedMusicId, setSelectedMusicId] = useState<MusicOptionId>(() => readMusicState().selectedMusicId);
-  const [musicMuted, setMusicMuted] = useState(() => readMusicState().muted);
-  const [musicVolume, setMusicVolume] = useState(() => readMusicState().volume);
+  const [selectedMusicId, setSelectedMusicId] = useState<MusicOptionId>(initialMusicState.selectedMusicId);
+  const [musicMuted, setMusicMuted] = useState(initialMusicState.muted);
+  const [musicVolume, setMusicVolume] = useState(initialMusicState.volume);
   const [gameRun, setGameRun] = useState<GameWorksheetRunSnapshot | null>(null);
   const [gameCostState, setGameCostState] = useState<LaptopCostState>({
     error: null,
@@ -244,6 +248,7 @@ export function GameShell({
     gamePipelineRequestRef.current += 1;
     setUser(nextUser);
     laptopScreenRef.current?.updateUser(nextUser);
+    changeLaptopTab("demo");
     setGamePipelineError(null);
     laptopScreenRef.current?.setPipelineState({error: null, loading: gamePipelineLoading, loadingStage: gamePipelineLoadingStage, run: gameRunRef.current});
     if (data.session?.access_token) {
@@ -261,6 +266,9 @@ export function GameShell({
     setPhoneRewardSnapshot(false, {persist: false});
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
+    changeLaptopTab("signin");
+    changeMusic("techno");
+    changeMusicMuted(false);
     setGameRun(null);
     setGameCostSnapshot({error: null, events: [], loading: false, summary: null});
     setWorksheetPlayback(DEFAULT_WORKSHEET_PLAYBACK);
@@ -290,7 +298,7 @@ export function GameShell({
     writePomodoroState(next);
   }
 
-  function changeLaptopTab(tab: LaptopTab) {
+  function changeLaptopTab(tab: LaptopDisplayTab) {
     setLaptopTab(tab);
     laptopScreenRef.current?.setTab(tab);
     if (tab === "costs") {
@@ -471,6 +479,16 @@ export function GameShell({
       window.speechSynthesis.cancel();
     }
     sectionSpeechUtteranceRef.current = null;
+  }
+
+  function selectWorksheetSection(sectionId: string) {
+    clearSectionPlayback();
+    setWorksheetPlaybackSnapshot({
+      ...worksheetPlaybackRef.current,
+      activeFillTargetId: null,
+      activeSectionId: sectionId,
+      activeSectionStartedAt: null
+    });
   }
 
   function startWorksheetSectionPlayback(run: GameWorksheetRunSnapshot, sectionId: string) {
@@ -1005,12 +1023,12 @@ export function GameShell({
 
     function applyFocusCamera(mode: FocusMode, pointerX: number, pointerY: number) {
       if (mode === "paper") {
-        cameraTarget.x = pointerX * 0.12;
-        cameraTarget.y = 7.15;
-        cameraTarget.z = 3.75 + DESK_RIG_Z + pointerY * 0.06;
-        lookTarget.x = 0;
-        lookTarget.y = DESK_SURFACE_Y + 0.02;
-        lookTarget.z = -0.35 + DESK_RIG_Z;
+        cameraTarget.x = PAPER_X;
+        cameraTarget.y = 5.16;
+        cameraTarget.z = -0.1 + DESK_RIG_Z;
+        lookTarget.x = PAPER_X;
+        lookTarget.y = DESK_SURFACE_Y + 0.025;
+        lookTarget.z = -0.1 + DESK_RIG_Z;
       } else if (mode === "laptop") {
         cameraTarget.x = -2.12 + pointerX * 0.035;
         cameraTarget.y = 2.12 + pointerY * 0.025;
@@ -1470,8 +1488,10 @@ export function GameShell({
             setLockedMessage(areWorksheetAnswersCorrect(gameRunRef.current, checkedPlayback) ? "All answers are correct. Continue the lesson." : "Some answers need another look.");
           } else if (action?.type === "section") {
             setLockedMessage(null);
+            selectWorksheetSection(action.section.id);
+          } else if (action?.type === "section_audio") {
+            setLockedMessage(null);
             startWorksheetSectionPlayback(gameRunRef.current, action.section.id);
-            changeLaptopTab("pipeline");
           } else if (action?.type === "next_page") {
             setLockedMessage(null);
             clearSectionPlayback();
@@ -1540,7 +1560,10 @@ export function GameShell({
           if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
             event.preventDefault();
             const currentAnswer = worksheetPlaybackRef.current.answers[activeFillTargetId] ?? "";
-            updateWorksheetAnswer(activeFillTargetId, `${currentAnswer}${event.key}`.slice(0, 96));
+            const nextAnswer = nextWorksheetAnswerForKey(activeFillTargetId, currentAnswer, event.key);
+            if (nextAnswer !== currentAnswer) {
+              updateWorksheetAnswer(activeFillTargetId, nextAnswer);
+            }
             return;
           }
         }
@@ -1654,6 +1677,18 @@ export function GameShell({
       document.addEventListener("pointerlockchange", handlePointerLockChange);
       cleanupCallbacks.push(() => document.removeEventListener("pointerlockchange", handlePointerLockChange));
 
+      const updatePenTargetFromCanvasPoint = (canvasX: number, canvasY: number) => {
+        if (!paperMesh) {
+          return;
+        }
+        const uvX = canvasX / WORKSHEET_CANVAS_WIDTH;
+        const uvY = 1 - canvasY / WORKSHEET_CANVAS_HEIGHT;
+        const localPoint = new THREE.Vector3((uvX - 0.5) * PAPER_WIDTH, (uvY - 0.5) * PAPER_HEIGHT, 0);
+        const worldPoint = paperMesh.localToWorld(localPoint);
+        pointerTarget.x = worldPoint.x;
+        pointerTarget.z = worldPoint.z;
+      };
+
       const resize = () => {
         if (!mountRef.current || !renderer || !camera) {
           return;
@@ -1675,9 +1710,20 @@ export function GameShell({
         camera.position.x += (cameraTarget.x - camera.position.x) * 0.045;
         camera.position.y += (cameraTarget.y - camera.position.y) * 0.045;
         camera.position.z += (cameraTarget.z - camera.position.z) * 0.045;
+        if (focusModeRef.current === "paper") {
+          camera.up.set(0, 0, -1);
+        } else {
+          camera.up.set(0, 1, 0);
+        }
         camera.lookAt(lookTarget.x, lookTarget.y, lookTarget.z);
         if (penGroup) {
           penGroup.visible = worksheetFocusedRef.current;
+          if (worksheetFocusedRef.current && selectedLessonIdRef.current === GAME_LESSON_TEMPLATE_ID && gameRunRef.current?.templateId === GAME_LESSON_TEMPLATE_ID) {
+            const penPoint = worksheetPenPointForActiveInput(gameRunRef.current, worksheetPlaybackRef.current);
+            if (penPoint) {
+              updatePenTargetFromCanvasPoint(penPoint.x, penPoint.y);
+            }
+          }
           penGroup.position.x += (pointerTarget.x - penGroup.position.x) * 0.18;
           penGroup.position.y += (DESK_SURFACE_Y + 0.12 - penGroup.position.y) * 0.18;
           penGroup.position.z += (pointerTarget.z - penGroup.position.z) * 0.18;

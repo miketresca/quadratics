@@ -29,6 +29,7 @@ class GameLessonDefinition:
 LESSONS = {
     "volume-cubes-lesson-1": GameLessonDefinition(id="volume-cubes-lesson-1", locked=False),
     "dynamic-lesson-locked": GameLessonDefinition(id="dynamic-lesson-locked", locked=True),
+    "dynamic-lesson-3-locked": GameLessonDefinition(id="dynamic-lesson-3-locked", locked=True),
 }
 
 
