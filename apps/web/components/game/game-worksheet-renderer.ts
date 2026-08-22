@@ -202,23 +202,45 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
   context.fillStyle = "#1f2937";
   context.font = "800 30px ui-rounded, system-ui, sans-serif";
   context.fillText(currentPageId === "page_2" ? "Guided-practice answers" : "Section notes", 96, 650);
-  context.strokeStyle = "#e7dac4";
-  context.lineWidth = 3;
-  let rowY = 710;
   const pageTargets = fillTargets.filter((target) => (target.pageId ?? "page_1") === currentPageId);
   for (const target of pageTargets) {
     const revealedText = worksheetTargetRevealText(run, playback, target);
-    context.beginPath();
-    context.moveTo(110, rowY + 30);
-    context.lineTo(1090, rowY + 30);
+    const box = canvasRectForTarget(target);
+    const readOnly = isReadOnlyTarget(target);
+    const activeInput = playback.activeFillTargetId === target.id;
+    const answerText = playback.answers[target.id] ?? "";
+    const result = playback.answerResults[target.id];
+    context.fillStyle = readOnly ? "#f7f5eb" : activeInput ? "#eefcf4" : "#fffdf8";
+    context.strokeStyle = result?.correct ? "#16a34a" : result && !result.correct ? "#dc2626" : activeInput ? "#0f9f6e" : "#d6c7ae";
+    context.lineWidth = activeInput || result ? 5 : 3;
+    roundRect(context, box.x, box.y, box.width, box.height, 12);
+    context.fill();
     context.stroke();
-    context.fillStyle = revealedText ? "#1e3a8a" : "#9a8973";
-    context.font = revealedText ? "30px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif" : "26px ui-rounded, system-ui, sans-serif";
-    context.fillText(revealedText || (complete ? "click a section to reveal" : "waiting for interactive bundle"), 120, rowY);
-    rowY += 72;
+    context.fillStyle = readOnly ? "#475569" : answerText ? "#1e3a8a" : "#9a8973";
+    context.font = answerText || revealedText ? "28px Chalkboard SE, Comic Sans MS, ui-rounded, system-ui, sans-serif" : "24px ui-rounded, system-ui, sans-serif";
+    const targetText = readOnly ? target.expectedText ?? target.id : answerText || revealedText || (complete ? "click to type" : "waiting for bundle");
+    context.fillText(targetText.slice(0, 72), box.x + 16, box.y + box.height * 0.65);
+    if (result && !result.correct) {
+      context.fillStyle = "#991b1b";
+      context.font = "20px ui-rounded, system-ui, sans-serif";
+      wrapWorksheetText(context, result.explanation ?? "Review this answer with the teacher explanation.", box.x, box.y + box.height + 28, box.width, 24, 2);
+    }
   }
 
-  if (complete && pageComplete && nextPageId) {
+  const readyToCheck = complete && isWorksheetReadyToSubmit(run, playback);
+  const allAnswersCorrect = readyToCheck && areWorksheetAnswersCorrect(run, playback);
+  const currentPageAnswersCorrect = areWorksheetPageAnswersCorrect(run, playback, currentPageId);
+  if (complete && !playback.submittedAt) {
+    context.fillStyle = readyToCheck ? "#e0f2fe" : "#f8fafc";
+    context.strokeStyle = readyToCheck ? "#0284c7" : "#cbd5e1";
+    context.lineWidth = 4;
+    roundRect(context, WORKSHEET_COMPLETE_RECT.x, WORKSHEET_COMPLETE_RECT.y, WORKSHEET_COMPLETE_RECT.width, WORKSHEET_COMPLETE_RECT.height, 18);
+    context.fill();
+    context.stroke();
+    context.fillStyle = readyToCheck ? "#075985" : "#64748b";
+    context.font = "900 23px ui-monospace, SFMono-Regular, Menlo, monospace";
+    context.fillText("CHECK ANSWERS", WORKSHEET_COMPLETE_RECT.x + 44, WORKSHEET_COMPLETE_RECT.y + 46);
+  } else if (complete && pageComplete && currentPageAnswersCorrect && nextPageId) {
     context.fillStyle = "#e7f8ef";
     context.strokeStyle = "#15803d";
     context.lineWidth = 4;
@@ -228,7 +250,7 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
     context.fillStyle = "#14532d";
     context.font = "900 25px ui-monospace, SFMono-Regular, Menlo, monospace";
     context.fillText("NEXT PAGE  →", WORKSHEET_NEXT_PAGE_RECT.x + 42, WORKSHEET_NEXT_PAGE_RECT.y + 47);
-  } else if (complete && allSectionsComplete) {
+  } else if (complete && allSectionsComplete && allAnswersCorrect) {
     context.fillStyle = playback.lessonCompletedAt ? "#dcfce7" : "#fff7ed";
     context.strokeStyle = playback.lessonCompletedAt ? "#16a34a" : "#ea580c";
     context.lineWidth = 4;
@@ -250,7 +272,11 @@ function drawGeneratedWorksheet(context: CanvasRenderingContext2D, run: GameWork
   context.fillStyle = "#9a8973";
   context.font = "24px ui-rounded, system-ui, sans-serif";
   context.fillText(
-    playback.lessonCompletedAt ? "Progress saved. Reset will return this worksheet to page 1." : "Progress is saved locally for this lesson run.",
+    playback.lessonCompletedAt
+      ? "Progress saved. Reset will return this worksheet to page 1."
+      : playback.submittedAt && !allAnswersCorrect
+        ? "Fix the highlighted answers, then check again."
+        : "Progress is saved for this lesson run.",
     96,
     1455
   );
@@ -342,6 +368,9 @@ export function sectionPlaybackDurationMs(run: GameWorksheetRunSnapshot, section
 }
 
 function worksheetTargetRevealText(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, target: WorksheetFillTarget) {
+  if (playback.answers[target.id]) {
+    return playback.answers[target.id];
+  }
   const sectionId = target.sectionId;
   if (!sectionId) {
     return "";
@@ -365,6 +394,115 @@ function worksheetTargetRevealText(run: GameWorksheetRunSnapshot, playback: Work
   }
   const progress = Math.max(0, Math.min(1, (elapsedSeconds - startSeconds) / Math.max(0.1, endSeconds - startSeconds)));
   return sourceText.slice(0, Math.max(1, Math.ceil(sourceText.length * progress)));
+}
+
+export function worksheetFillTargetAtCanvasPoint(x: number, y: number, run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  if (artifactForStage(run, "interactive_bundle")?.status !== "completed") {
+    return null;
+  }
+  const currentPageId = currentWorksheetPageId(run, playback);
+  return (
+    worksheetFillTargetsForRun(run).find((target) => {
+      if ((target.pageId ?? "page_1") !== currentPageId || isReadOnlyTarget(target)) {
+        return false;
+      }
+      return pointInRect(x, y, canvasRectForTarget(target));
+    }) ?? null
+  );
+}
+
+export function checkWorksheetAnswers(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  return Object.fromEntries(
+    worksheetEditableTargetsForRun(run).map((target) => {
+      const answer = playback.answers[target.id] ?? "";
+      const correct = isAnswerCorrect(answer, target);
+      return [
+        target.id,
+        {
+          correct,
+          expectedText: target.expectedText ?? null,
+          explanation: correct ? null : explanationForTarget(target)
+        }
+      ];
+    })
+  );
+}
+
+export function isWorksheetReadyToSubmit(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  const targets = worksheetEditableTargetsForRun(run);
+  return targets.length > 0 && targets.every((target) => (playback.answers[target.id] ?? "").trim().length > 0);
+}
+
+export function areWorksheetAnswersCorrect(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  const targets = worksheetEditableTargetsForRun(run);
+  return targets.length > 0 && targets.every((target) => playback.answerResults[target.id]?.correct === true);
+}
+
+function areWorksheetPageAnswersCorrect(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, pageId: string) {
+  const pageTargets = worksheetEditableTargetsForRun(run).filter((target) => (target.pageId ?? "page_1") === pageId);
+  return pageTargets.length === 0 || pageTargets.every((target) => playback.answerResults[target.id]?.correct === true);
+}
+
+function worksheetEditableTargetsForRun(run: GameWorksheetRunSnapshot) {
+  return worksheetFillTargetsForRun(run).filter((target) => !isReadOnlyTarget(target));
+}
+
+function isReadOnlyTarget(target: WorksheetFillTarget) {
+  return target.inputMode === "read_only" || target.sectionId === "vocabulary";
+}
+
+function canvasRectForTarget(target: WorksheetFillTarget) {
+  const rect = target.rect;
+  const normalized = rect.x <= 1 && rect.y <= 1 && rect.width <= 1 && rect.height <= 1;
+  if (!normalized) {
+    return rect;
+  }
+  return {
+    height: rect.height * WORKSHEET_CANVAS_HEIGHT,
+    width: rect.width * WORKSHEET_CANVAS_WIDTH,
+    x: rect.x * WORKSHEET_CANVAS_WIDTH,
+    y: rect.y * WORKSHEET_CANVAS_HEIGHT
+  };
+}
+
+function isAnswerCorrect(answer: string, target: WorksheetFillTarget) {
+  const normalizedAnswer = normalizeAnswer(answer);
+  const normalizedExpected = normalizeAnswer(target.expectedText ?? "");
+  if (!normalizedAnswer || !normalizedExpected) {
+    return false;
+  }
+  if (normalizedAnswer === normalizedExpected || normalizedAnswer.includes(normalizedExpected) || normalizedExpected.includes(normalizedAnswer)) {
+    return true;
+  }
+  if (target.sectionId === "guided_practice") {
+    const expectedNumber = normalizedExpected.match(/\d+/)?.[0];
+    return Boolean(expectedNumber && normalizedAnswer.includes(expectedNumber));
+  }
+  const requiredTokens = normalizedExpected.split(" ").filter((token) => token.length > 3);
+  const matchingTokens = requiredTokens.filter((token) => normalizedAnswer.includes(token));
+  return requiredTokens.length > 0 && matchingTokens.length / requiredTokens.length >= 0.55;
+}
+
+function normalizeAnswer(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("×", "x")
+    .replaceAll(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replaceAll(/\s+/g, " ");
+}
+
+function explanationForTarget(target: WorksheetFillTarget) {
+  if (target.sectionId === "guided_practice") {
+    return `Use length x width x height. The expected answer is ${target.expectedText ?? "the table value"}.`;
+  }
+  if (target.questionId === "do_now_dimensions") {
+    return "A rectangular prism is described by three dimensions: length, width, and height.";
+  }
+  if (target.questionId === "do_now_meaning") {
+    return "The final volume tells how many unit cubes fill the whole shape.";
+  }
+  return "Count one complete layer first, then multiply by how many matching layers there are.";
 }
 
 function currentWorksheetPageId(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
@@ -466,6 +604,7 @@ function worksheetFillTargetsFromPayload(payload: Record<string, unknown> | null
       {
         expectedText: typeof target.expectedText === "string" ? target.expectedText : undefined,
         id: target.id,
+        inputMode: target.inputMode === "read_only" ? "read_only" : "student_text",
         pageId: typeof target.pageId === "string" ? target.pageId : undefined,
         questionId: typeof target.questionId === "string" ? target.questionId : undefined,
         rect: target.rect,
@@ -544,19 +683,38 @@ export function worksheetActionAtCanvasPoint(
   run: GameWorksheetRunSnapshot,
   playback: WorksheetPlaybackState
 ):
+  | {target: WorksheetFillTarget; type: "fill_target"}
   | {pageId: string; type: "next_page"}
   | {section: WorksheetSection; type: "section"}
+  | {type: "submit_answers"}
   | {type: "complete_lesson"}
   | null {
   if (artifactForStage(run, "interactive_bundle")?.status !== "completed") {
     return null;
   }
+  const fillTarget = worksheetFillTargetAtCanvasPoint(x, y, run, playback);
+  if (fillTarget) {
+    return {target: fillTarget, type: "fill_target"};
+  }
   const currentPageId = currentWorksheetPageId(run, playback);
   const nextPageId = nextWorksheetPageId(run, currentPageId);
-  if (isWorksheetPageComplete(run, playback, currentPageId) && nextPageId && pointInRect(x, y, WORKSHEET_NEXT_PAGE_RECT)) {
+  if (!playback.submittedAt && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
+    return {type: "submit_answers"};
+  }
+  if (
+    isWorksheetPageComplete(run, playback, currentPageId) &&
+    areWorksheetPageAnswersCorrect(run, playback, currentPageId) &&
+    nextPageId &&
+    pointInRect(x, y, WORKSHEET_NEXT_PAGE_RECT)
+  ) {
     return {pageId: nextPageId, type: "next_page"};
   }
-  if (areAllWorksheetSectionsComplete(run, playback) && !nextPageId && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
+  if (
+    areAllWorksheetSectionsComplete(run, playback) &&
+    areWorksheetAnswersCorrect(run, playback) &&
+    !nextPageId &&
+    pointInRect(x, y, WORKSHEET_COMPLETE_RECT)
+  ) {
     return {type: "complete_lesson"};
   }
   const sections = pageSectionsForRun(run, currentPageId);

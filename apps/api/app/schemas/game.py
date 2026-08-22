@@ -32,9 +32,13 @@ GameProgressAction = Literal[
 
 
 class GameWorksheetPlaybackProgress(ApiModel):
+    active_fill_target_id: str | None = None
+    answer_results: dict[str, dict[str, str | bool | None]] = Field(default_factory=dict)
+    answers: dict[str, str] = Field(default_factory=dict)
     completed_section_ids: list[str] = Field(default_factory=list)
     current_page_id: str | None = None
     lesson_completed_at: int | None = None
+    submitted_at: int | None = None
 
 
 class GameEasterEggProgress(ApiModel):

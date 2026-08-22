@@ -167,6 +167,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_do_now_count_layers",
             "sectionId": "do_now",
+            "inputMode": "student_text",
             "questionId": "do_now_count_layers",
             "pageId": "page_1",
             "rect": {"x": 0.12, "y": 0.22, "width": 0.76, "height": 0.045},
@@ -175,6 +176,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_do_now_dimensions",
             "sectionId": "do_now",
+            "inputMode": "student_text",
             "questionId": "do_now_dimensions",
             "pageId": "page_1",
             "rect": {"x": 0.12, "y": 0.29, "width": 0.76, "height": 0.045},
@@ -183,6 +185,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_do_now_meaning",
             "sectionId": "do_now",
+            "inputMode": "student_text",
             "questionId": "do_now_meaning",
             "pageId": "page_1",
             "rect": {"x": 0.12, "y": 0.36, "width": 0.76, "height": 0.045},
@@ -191,6 +194,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_vocab_volume",
             "sectionId": "vocabulary",
+            "inputMode": "read_only",
             "questionId": "vocab_volume",
             "pageId": "page_1",
             "rect": {"x": 0.12, "y": 0.51, "width": 0.76, "height": 0.05},
@@ -199,6 +203,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_vocab_cubic_unit",
             "sectionId": "vocabulary",
+            "inputMode": "read_only",
             "questionId": "vocab_cubic_unit",
             "pageId": "page_1",
             "rect": {"x": 0.12, "y": 0.6, "width": 0.76, "height": 0.05},
@@ -207,6 +212,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_guided_row_1",
             "sectionId": "guided_practice",
+            "inputMode": "student_text",
             "questionId": "guided_row_1",
             "pageId": "page_2",
             "rect": {"x": 0.62, "y": 0.22, "width": 0.24, "height": 0.045},
@@ -215,6 +221,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_guided_row_2",
             "sectionId": "guided_practice",
+            "inputMode": "student_text",
             "questionId": "guided_row_2",
             "pageId": "page_2",
             "rect": {"x": 0.62, "y": 0.32, "width": 0.24, "height": 0.045},
@@ -223,6 +230,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_guided_row_3",
             "sectionId": "guided_practice",
+            "inputMode": "student_text",
             "questionId": "guided_row_3",
             "pageId": "page_2",
             "rect": {"x": 0.62, "y": 0.42, "width": 0.24, "height": 0.045},
@@ -231,6 +239,7 @@ VOLUME_CUBES_LESSON_1_PAYLOAD: dict[str, Any] = {
         {
             "id": "fill_guided_row_4",
             "sectionId": "guided_practice",
+            "inputMode": "student_text",
             "questionId": "guided_row_4",
             "pageId": "page_2",
             "rect": {"x": 0.62, "y": 0.52, "width": 0.24, "height": 0.045},

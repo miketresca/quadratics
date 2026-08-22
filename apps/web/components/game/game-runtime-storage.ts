@@ -8,11 +8,21 @@ const WORKSHEET_PLAYBACK_STORAGE_PREFIX = "quadratics.game.worksheet-playback.v1
 const PHONE_REWARD_STORAGE_PREFIX = "quadratics.game.phone-reward.v1";
 
 export type WorksheetPlaybackState = {
+  activeFillTargetId: string | null;
+  answerResults: Record<string, WorksheetAnswerResult>;
+  answers: Record<string, string>;
   activeSectionId: string | null;
   activeSectionStartedAt: number | null;
   completedSectionIds: string[];
   currentPageId: string | null;
   lessonCompletedAt: number | null;
+  submittedAt: number | null;
+};
+
+export type WorksheetAnswerResult = {
+  correct: boolean;
+  expectedText?: string | null;
+  explanation?: string | null;
 };
 
 export type PomodoroState = {
@@ -21,11 +31,15 @@ export type PomodoroState = {
 };
 
 export const DEFAULT_WORKSHEET_PLAYBACK: WorksheetPlaybackState = {
+  activeFillTargetId: null,
+  answerResults: {},
+  answers: {},
   activeSectionId: null,
   activeSectionStartedAt: null,
   completedSectionIds: [],
   currentPageId: null,
-  lessonCompletedAt: null
+  lessonCompletedAt: null,
+  submittedAt: null
 };
 
 export function readPomodoroState(): PomodoroState {
@@ -80,11 +94,15 @@ export function readWorksheetPlaybackState(runId: string): WorksheetPlaybackStat
   try {
     const parsed = JSON.parse(window.localStorage.getItem(worksheetPlaybackStorageKey(runId)) ?? "{}") as Partial<WorksheetPlaybackState>;
     return {
+      activeFillTargetId: typeof parsed.activeFillTargetId === "string" ? parsed.activeFillTargetId : null,
+      answerResults: isAnswerResultsRecord(parsed.answerResults) ? parsed.answerResults : {},
+      answers: isStringRecord(parsed.answers) ? parsed.answers : {},
       activeSectionId: typeof parsed.activeSectionId === "string" ? parsed.activeSectionId : null,
       activeSectionStartedAt: typeof parsed.activeSectionStartedAt === "number" ? parsed.activeSectionStartedAt : null,
       completedSectionIds: Array.isArray(parsed.completedSectionIds) ? parsed.completedSectionIds.filter((value): value is string => typeof value === "string") : [],
       currentPageId: typeof parsed.currentPageId === "string" ? parsed.currentPageId : null,
-      lessonCompletedAt: typeof parsed.lessonCompletedAt === "number" ? parsed.lessonCompletedAt : null
+      lessonCompletedAt: typeof parsed.lessonCompletedAt === "number" ? parsed.lessonCompletedAt : null,
+      submittedAt: typeof parsed.submittedAt === "number" ? parsed.submittedAt : null
     };
   } catch {
     return DEFAULT_WORKSHEET_PLAYBACK;
@@ -100,9 +118,13 @@ export function writeWorksheetPlaybackState(runId: string, state: WorksheetPlayb
 
 export function toApiWorksheetPlayback(state: WorksheetPlaybackState): GameWorksheetPlaybackProgress {
   return {
+    activeFillTargetId: state.activeFillTargetId,
+    answerResults: state.answerResults,
+    answers: state.answers,
     completedSectionIds: state.completedSectionIds,
     currentPageId: state.currentPageId,
-    lessonCompletedAt: state.lessonCompletedAt
+    lessonCompletedAt: state.lessonCompletedAt,
+    submittedAt: state.submittedAt
   };
 }
 
@@ -111,11 +133,15 @@ export function worksheetPlaybackFromApi(progress: GameWorksheetPlaybackProgress
     return DEFAULT_WORKSHEET_PLAYBACK;
   }
   return {
+    activeFillTargetId: progress.activeFillTargetId ?? null,
+    answerResults: isAnswerResultsRecord(progress.answerResults) ? progress.answerResults : {},
+    answers: isStringRecord(progress.answers) ? progress.answers : {},
     activeSectionId: null,
     activeSectionStartedAt: null,
     completedSectionIds: progress.completedSectionIds ?? [],
     currentPageId: progress.currentPageId ?? null,
-    lessonCompletedAt: progress.lessonCompletedAt ?? null
+    lessonCompletedAt: progress.lessonCompletedAt ?? null,
+    submittedAt: progress.submittedAt ?? null
   };
 }
 
@@ -150,4 +176,28 @@ function worksheetPlaybackStorageKey(runId: string) {
 
 function phoneRewardStorageKey(userId: string) {
   return `${PHONE_REWARD_STORAGE_PREFIX}.${userId}`;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => typeof entry === "string")
+  );
+}
+
+function isAnswerResultsRecord(value: unknown): value is Record<string, WorksheetAnswerResult> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        !Array.isArray(entry) &&
+        typeof (entry as {correct?: unknown}).correct === "boolean"
+    )
+  );
 }

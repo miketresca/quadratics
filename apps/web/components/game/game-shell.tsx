@@ -85,8 +85,11 @@ import type {
 } from "./game-types";
 import {
   areAllWorksheetSectionsComplete,
+  areWorksheetAnswersCorrect,
+  checkWorksheetAnswers,
   choiceAtCanvasPoint,
   createWorksheetTexture,
+  isWorksheetReadyToSubmit,
   refreshPaperTexture,
   sectionPlaybackDurationMs,
   worksheetActionAtCanvasPoint,
@@ -435,6 +438,21 @@ export function GameShell({
         worksheetPlayback: toApiWorksheetPlayback(nextPlayback)
       });
     }
+  }
+
+  function updateWorksheetAnswer(targetId: string, answer: string) {
+    const nextResults = {...worksheetPlaybackRef.current.answerResults};
+    delete nextResults[targetId];
+    setWorksheetPlaybackSnapshot({
+      ...worksheetPlaybackRef.current,
+      answerResults: nextResults,
+      answers: {
+        ...worksheetPlaybackRef.current.answers,
+        [targetId]: answer
+      },
+      lessonCompletedAt: null,
+      submittedAt: null
+    });
   }
 
   function clearSectionPlayback() {
@@ -824,6 +842,7 @@ export function GameShell({
     let hoveredChoiceId: GameLessonId | null = null;
     let sceneEditorSelection: SceneTunableName = "laptop";
     const sceneTunables: Partial<Record<SceneTunableName, Object3D>> = {};
+    const coordinateTargets: Object3D[] = [];
     const pointerTarget = {x: 1.08, z: 0.82 + DESK_RIG_Z};
     const cameraTarget = {x: 0, y: 2.85, z: SEATED_CAMERA_Z};
     const lookTarget = {x: 0, y: 1.52, z: -2.25 + DESK_RIG_Z};
@@ -1064,6 +1083,7 @@ export function GameShell({
       const backdrop = createOfficeBackdrop(THREE);
       rainStreaks = backdrop.rainStreaks;
       scene.add(backdrop.group);
+      coordinateTargets.push(backdrop.group);
       sceneTunables.map = backdrop.mapGroup;
       let visitorLocation: VisitorLocation | null = null;
       let worldMap: WorldMapGeoJson | null = null;
@@ -1086,6 +1106,7 @@ export function GameShell({
       deskRig.name = "desk-rig";
       deskRig.position.z = DESK_RIG_Z;
       scene.add(deskRig);
+      coordinateTargets.push(deskRig);
 
       deskRig.add(createDeskSurface(THREE));
       const supplies = createDeskSupplies(THREE);
@@ -1266,17 +1287,10 @@ export function GameShell({
         } else {
           setTarget(null);
         }
-        const coordinateTargets: Object3D[] = [];
-        const selectedLaptop = sceneTunables.laptop;
-        const selectedClock = sceneTunables.clock;
-        const selectedMap = sceneTunables.map;
-        const selectedPhone = sceneTunables.phone;
-        if (paperMesh) coordinateTargets.push(paperMesh);
-        if (selectedLaptop) coordinateTargets.push(selectedLaptop);
-        if (selectedClock) coordinateTargets.push(selectedClock);
-        if (selectedMap) coordinateTargets.push(selectedMap);
-        if (selectedPhone) coordinateTargets.push(selectedPhone);
-        updatePointedCoordinates(raycaster.intersectObjects(coordinateTargets, true)[0]?.point ?? null);
+        const coordinateHit = raycaster
+          .intersectObjects(paperMesh ? [paperMesh, ...coordinateTargets] : coordinateTargets, true)
+          .find((hit) => hit.object.visible);
+        updatePointedCoordinates(coordinateHit?.point ?? null);
         const [hit] = raycaster.intersectObject(paperMesh);
         if (!hit || !hit.uv || focusModeRef.current !== "paper") {
           hoveredChoiceId = null;
@@ -1384,18 +1398,47 @@ export function GameShell({
         const canvasY = (1 - hit.uv.y) * WORKSHEET_CANVAS_HEIGHT;
         if (selectedLessonIdRef.current === GAME_LESSON_TEMPLATE_ID && gameRunRef.current?.templateId === GAME_LESSON_TEMPLATE_ID) {
           const action = worksheetActionAtCanvasPoint(canvasX, canvasY, gameRunRef.current, worksheetPlaybackRef.current);
-          if (action?.type === "section") {
+          if (action?.type === "fill_target") {
+            setLockedMessage(null);
+            const nextResults = {...worksheetPlaybackRef.current.answerResults};
+            delete nextResults[action.target.id];
+            setWorksheetPlaybackSnapshot({
+              ...worksheetPlaybackRef.current,
+              activeFillTargetId: action.target.id,
+              answerResults: nextResults,
+              submittedAt: null
+            });
+          } else if (action?.type === "submit_answers") {
+            if (!isWorksheetReadyToSubmit(gameRunRef.current, worksheetPlaybackRef.current)) {
+              setLockedMessage("Fill in every answer box before checking your work.");
+              return;
+            }
+            const checkedPlayback = {
+              ...worksheetPlaybackRef.current,
+              activeFillTargetId: null,
+              answerResults: checkWorksheetAnswers(gameRunRef.current, worksheetPlaybackRef.current),
+              submittedAt: Date.now()
+            };
+            setWorksheetPlaybackSnapshot(checkedPlayback);
+            setLockedMessage(areWorksheetAnswersCorrect(gameRunRef.current, checkedPlayback) ? "All answers are correct. Continue the lesson." : "Some answers need another look.");
+          } else if (action?.type === "section") {
             setLockedMessage(null);
             startWorksheetSectionPlayback(gameRunRef.current, action.section.id);
             changeLaptopTab("pipeline");
           } else if (action?.type === "next_page") {
             setLockedMessage(null);
             clearSectionPlayback();
-            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeSectionId: null, activeSectionStartedAt: null, currentPageId: action.pageId});
+            setWorksheetPlaybackSnapshot({
+              ...worksheetPlaybackRef.current,
+              activeFillTargetId: null,
+              activeSectionId: null,
+              activeSectionStartedAt: null,
+              currentPageId: action.pageId
+            });
           } else if (action?.type === "complete_lesson") {
             setLockedMessage(null);
             clearSectionPlayback();
-            const nextPlayback = {...worksheetPlaybackRef.current, lessonCompletedAt: Date.now()};
+            const nextPlayback = {...worksheetPlaybackRef.current, activeFillTargetId: null, lessonCompletedAt: Date.now()};
             setWorksheetPlaybackSnapshot(nextPlayback);
             void updateGameLessonProgress("complete_lesson");
             window.setTimeout(() => {
@@ -1434,6 +1477,25 @@ export function GameShell({
           target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
         if (isLaptopTyping && event.key !== "Escape") {
           return;
+        }
+        const activeFillTargetId = worksheetPlaybackRef.current.activeFillTargetId;
+        if (focusModeRef.current === "paper" && activeFillTargetId) {
+          if (event.key === "Backspace") {
+            event.preventDefault();
+            updateWorksheetAnswer(activeFillTargetId, (worksheetPlaybackRef.current.answers[activeFillTargetId] ?? "").slice(0, -1));
+            return;
+          }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeFillTargetId: null});
+            return;
+          }
+          if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+            event.preventDefault();
+            const currentAnswer = worksheetPlaybackRef.current.answers[activeFillTargetId] ?? "";
+            updateWorksheetAnswer(activeFillTargetId, `${currentAnswer}${event.key}`.slice(0, 96));
+            return;
+          }
         }
         if (event.code === "Space") {
           event.preventDefault();

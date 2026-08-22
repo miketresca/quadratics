@@ -40,6 +40,7 @@ export type WorksheetSection = {
 export type WorksheetFillTarget = {
   expectedText?: string;
   id: string;
+  inputMode?: "student_text" | "read_only";
   pageId?: string;
   questionId?: string;
   rect: WorksheetRect;

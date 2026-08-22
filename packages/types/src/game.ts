@@ -23,9 +23,20 @@ export type GameProgressAction =
   | "select_fighter";
 
 export interface GameWorksheetPlaybackProgress {
+  activeFillTargetId?: string | null;
+  answerResults?: Record<
+    string,
+    {
+      correct: boolean;
+      expectedText?: string | null;
+      explanation?: string | null;
+    }
+  >;
+  answers?: Record<string, string>;
   completedSectionIds: string[];
   currentPageId?: string | null;
   lessonCompletedAt?: number | null;
+  submittedAt?: number | null;
 }
 
 export interface GameEasterEggProgress {
