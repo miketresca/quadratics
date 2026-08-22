@@ -10,4 +10,4 @@ Handoffs should be concise, task-named, and should capture:
 - known local-only artifacts or ignored files
 - next safe steps
 
-Keep durable product decisions in `docs/decisions/`, solved issue notes in `docs/solutions/`, and the active backlog in `docs/to-do.md`.
+Keep durable product decisions in `docs/decisions/`, solved issue notes in `docs/solutions/`, and the active backlog in `docs/backlog/to-do.md`.

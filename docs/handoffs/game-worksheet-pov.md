@@ -57,7 +57,7 @@ Current dirty paths observed:
 - `apps/web/lib/game/progress-client.ts`
 - `apps/web/public/game/lessons/volume-cubes/pages/` untracked
 - `assets/` untracked
-- `docs/todo.md` untracked
+- `docs/todo.md` untracked at the time of capture; this was later consolidated into `docs/backlog/to-do.md`
 - `infra/supabase/migrations/0012_game_progress_lesson_ids.sql` untracked
 - `misc/progress/` untracked
 - `misc/task/` untracked
@@ -143,14 +143,9 @@ The user wants the section flow so the paper can show one readable section at a 
 
 ## Broader Backlog
 
-There are two backlog files right now:
+The old duplicate backlog files were later reconciled into `docs/backlog/to-do.md`.
 
-- `docs/todo.md` currently contains the immediate restore-flat-paper task.
-- `docs/to-do.md` contains the broader Worksheet POV Lab backlog.
-
-Before doing new feature work, reconcile these if useful. Do not delete either file without user approval.
-
-Current broader items from `docs/to-do.md`:
+Current broader items from `docs/backlog/to-do.md`:
 
 - Reusable incorrect-answer explanation flow.
 - Polish Lesson 1 interactive worksheet experience.
@@ -187,8 +182,8 @@ Read these first in a new thread:
 - `AGENTS.md` for project-wide constraints.
 - `apps/web/AGENTS.md` for frontend conventions.
 - `apps/web/components/game/AGENTS.md` if present; game-specific instructions may exist.
-- `docs/todo.md` and `docs/to-do.md` for active backlog.
-- `docs/architecture.md` only if broader data flow is needed.
+- `docs/backlog/to-do.md` for active backlog.
+- `docs/reference/architecture.md` only if broader data flow is needed.
 
 ## Cautions
 
@@ -201,7 +196,7 @@ Read these first in a new thread:
 
 ## Suggested Next Step In Fresh Thread
 
-1. Read `AGENTS.md`, this handoff, `docs/todo.md`, and `docs/to-do.md`.
+1. Read `AGENTS.md`, this handoff, `docs/backlog/to-do.md`.
 2. Check `git status --short`.
 3. Inspect only:
    - `apps/web/components/game/game-worksheet-renderer.ts`

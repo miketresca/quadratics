@@ -2,6 +2,18 @@
 
 This note captures cleanup findings from the `building-lesson-1-a-z` worksheet-template branch. It is intentionally a follow-up list, not a refactor plan to execute all at once.
 
+## Completed Cleanup
+
+- Grouped root-level docs under focused folders:
+  - `docs/reference/` for architecture, auth, domain, and pipeline references.
+  - `docs/backlog/` for the living backlog.
+  - `docs/templates/` for reusable worksheet template documentation.
+  - `docs/reviews/` for cleanup and review notes.
+  - `docs/handoffs/` for resumable session notes.
+- Moved the local demo cue sheet into `docs/plans/local-demo-plan.md` so it is preserved with other planning material instead of sitting ignored at the docs root.
+- Removed local cache clutter from the workspace and added `.uv-cache/` to `.gitignore`.
+- Updated project and scoped agent docs to point at the new docs paths.
+
 ## Findings
 
 1. `apps/web/components/game/game-worksheet-renderer.ts` currently duplicates Lesson 1 fill target metadata and expected answers that also exist in `apps/api/app/services/game_lessons/templates/volume_cubes_lesson_1.py`.
@@ -23,6 +35,10 @@ This note captures cleanup findings from the `building-lesson-1-a-z` worksheet-t
 5. Local artifacts should stay out of source.
 
    The repo now ignores generated worksheet page PNGs, Motion Canvas timestamp temp files, local progress videos, local task PDFs, and loose raw assets under `assets/`. Curated runtime assets should live under intentional public paths with README context. Resumable handoff notes are not local artifacts; keep them in `docs/handoffs/` when they are useful for future agents.
+
+6. No tracked code files were removed in this cleanup pass.
+
+   Static inspection did not reveal a low-risk tracked code deletion. The remaining cleanup opportunities are structural refactors around lesson data ownership and scene orchestration, which should be done alongside the next feature that touches those paths.
 
 ## Recommended Cleanup Sequence
 

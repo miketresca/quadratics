@@ -903,7 +903,7 @@ Create the first `/game` vertical slice for Quadratics without changing the exis
 ## References
 
 - Local task files: `misc/task/task_document.pdf`, `misc/task/task_lesson.pdf`
-- Current architecture: `docs/architecture.md`, `docs/video-pipeline.md`, `docs/auth-and-usage.md`
+- Current architecture: `docs/reference/architecture.md`, `docs/reference/video-pipeline.md`, `docs/reference/auth-and-usage.md`
 - Current app guides: `apps/web/AGENTS.md`, `apps/api/AGENTS.md`, `apps/video/AGENTS.md`
 - Master Hand reference: https://models.spriters-resource.com/nintendo_64/ssb/asset/283437/
 - Smash Ball reference: https://models.spriters-resource.com/wii/ssbb/asset/292971/

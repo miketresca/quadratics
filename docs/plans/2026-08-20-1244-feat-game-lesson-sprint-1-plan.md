@@ -659,8 +659,8 @@ If only web/static work is touched before API progress is added, the API test ca
 - Master plan: `docs/plans/2026-08-20-1228-feat-game-lesson-master-plan.md`
 - Web guide: `apps/web/AGENTS.md`
 - API guide: `apps/api/AGENTS.md`
-- Auth docs: `docs/auth-and-usage.md`
-- Architecture docs: `docs/architecture.md`
+- Auth docs: `docs/reference/auth-and-usage.md`
+- Architecture docs: `docs/reference/architecture.md`
 - Local task lesson source: `misc/task/task_lesson.pdf`
 - Super Smash Bros. N64 sprites/menus: https://www.spriters-resource.com/nintendo_64/ssb/page-1/
 - Super Smash Bros. custom sprites: https://www.spriters-resource.com/custom_edited/supersmashbroscustoms/

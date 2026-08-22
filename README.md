@@ -32,7 +32,7 @@ The project exists to make educational video generation inspectable and repeatab
 - `packages/config` - Shared app configuration such as instructor placeholders
 - `infra/supabase` - Supabase migrations and setup notes
 - `fixtures/golden` - Development fixture data for the canonical quadratic
-- `docs` - Architecture, domain model, video pipeline, ADRs, plans, and solved-problem notes
+- `docs` - Organized project notes: reference docs, backlog, plans, templates, reviews, handoffs, ADRs, and solved-problem notes
 
 ## Architecture
 
@@ -60,10 +60,11 @@ SymPy and deterministic Python code are the source of mathematical truth. LLMs c
 
 Read more in:
 
-- [Architecture](docs/architecture.md)
-- [Domain Model](docs/domain-model.md)
-- [Video Pipeline](docs/video-pipeline.md)
-- [Auth and Usage](docs/auth-and-usage.md)
+- [Architecture](docs/reference/architecture.md)
+- [Domain Model](docs/reference/domain-model.md)
+- [Video Pipeline](docs/reference/video-pipeline.md)
+- [Auth and Usage](docs/reference/auth-and-usage.md)
+- [Current Backlog](docs/backlog/to-do.md)
 - [Strategy](STRATEGY.md)
 
 ## Prerequisites
