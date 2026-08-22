@@ -41,7 +41,10 @@ export function FocusedPipelinePanel({
   pipeline: LaptopPipelineState;
 }) {
   return (
-    <div className="grid h-full content-start gap-4 overflow-auto rounded-2xl border border-emerald-200/15 bg-[#050b10] p-6">
+    <div
+      className="grid h-full min-h-0 content-start gap-4 overflow-y-auto overscroll-contain rounded-2xl border border-emerald-200/15 bg-[#050b10] p-6"
+      onWheel={(event) => event.stopPropagation()}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-200/65">worksheet pipeline</p>

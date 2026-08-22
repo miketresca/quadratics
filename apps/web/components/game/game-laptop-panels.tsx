@@ -95,8 +95,11 @@ export function LaptopFocusPanel({
   user: CurrentUser | null;
 }) {
   return (
-    <div className="pointer-events-auto h-full w-full rounded-[2rem] border border-cyan-100/20 bg-[#070b12] p-8 shadow-[0_0_80px_rgba(20,184,166,0.2)]">
-      <div className="grid h-full overflow-hidden rounded-2xl border border-emerald-200/20 bg-[#080b12]">
+    <div className="pointer-events-none absolute inset-0 z-30">
+      <div
+        className="pointer-events-auto absolute left-[4.8vw] top-[13.4vh] grid h-[71vh] w-[90.4vw] overflow-hidden rounded-[1.65rem] border border-cyan-100/20 bg-[#070b12] font-mono text-cyan-50 shadow-[inset_0_0_48px_rgba(35,220,255,0.11),0_0_80px_rgba(20,184,166,0.09)]"
+        data-testid="focused-laptop-screen"
+      >
         {!user ? (
           <form
             className="grid h-full place-items-center"
@@ -142,7 +145,7 @@ export function LaptopFocusPanel({
             </div>
           </form>
         ) : (
-          <div className="grid h-full grid-rows-[4.2rem_1fr] bg-[#070b12]">
+          <div className="grid h-full min-h-0 grid-rows-[4.2rem_minmax(0,1fr)] bg-[#070b12]">
             <div className="flex items-end gap-2 border-b border-zinc-700/70 bg-[#111318] px-3 pt-2">
               {([
                 ["demo", "Demo"],
@@ -162,7 +165,7 @@ export function LaptopFocusPanel({
                 </button>
               ))}
             </div>
-            <div className="min-h-0 bg-gradient-to-br from-[#071018] to-[#090d14] p-5">
+            <div className="min-h-0 overflow-hidden bg-gradient-to-br from-[#071018] to-[#090d14] p-5">
               {tab === "music" ? (
                 <FocusedMusicPanel
                   musicMuted={musicMuted}
