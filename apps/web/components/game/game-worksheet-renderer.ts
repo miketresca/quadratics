@@ -96,7 +96,7 @@ const GUIDED_EXAMPLE_LAYOUT = {
     shape: {label: "Shape", x: 166, width: 236},
     volume: {label: "Volume (cubic units)", x: 888, width: 172}
   },
-  headerY: 500,
+  headerY: 530,
   rowHeight: 178,
   rowStartY: 574,
   rows: [
@@ -215,6 +215,27 @@ const LESSON_ONE_DO_NOW_TARGETS: Array<Omit<WorksheetFillTarget, "rect">> = [
     sectionId: "do_now"
   }
 ];
+const LESSON_ONE_GUIDED_TARGETS: Array<Omit<WorksheetFillTarget, "rect">> = [
+  ["fill_guided_row_1_layer", "6"],
+  ["fill_guided_row_1_layers", "1"],
+  ["fill_guided_row_1_volume", "6"],
+  ["fill_guided_row_2_layer", "4"],
+  ["fill_guided_row_2_layers", "3"],
+  ["fill_guided_row_2_volume", "12"],
+  ["fill_guided_row_3_layer", "6"],
+  ["fill_guided_row_3_layers", "2"],
+  ["fill_guided_row_3_volume", "12"],
+  ["fill_guided_row_4_layer", "10"],
+  ["fill_guided_row_4_layers", "2"],
+  ["fill_guided_row_4_volume", "20"]
+].map(([id, expectedText]) => ({
+  expectedText,
+  id,
+  inputMode: "student_text",
+  pageId: "page_1",
+  questionId: "guided_volume_table",
+  sectionId: "guided_practice"
+}));
 
 export function createWorksheetTexture(
   THREE: typeof import("three"),
@@ -607,7 +628,7 @@ function drawGuidedPracticeSection(context: CanvasRenderingContext2D) {
   drawCenteredText(context, columns.shape.label, columns.shape.x + columns.shape.width / 2, headerY);
   drawCenteredText(context, columns.cubesPerLayer.label, columns.cubesPerLayer.x + columns.cubesPerLayer.width / 2, headerY);
   drawCenteredText(context, columns.layers.label, columns.layers.x + columns.layers.width / 2, headerY);
-  drawCenteredWrappedText(context, columns.volume.label, columns.volume.x + columns.volume.width / 2, headerY - 16, columns.volume.width, 21, 2);
+  drawCenteredWrappedText(context, columns.volume.label, columns.volume.x + columns.volume.width / 2, headerY - 12, columns.volume.width, 21, 2);
 
   context.strokeStyle = "#d8c9ad";
   context.lineWidth = 2;
@@ -909,7 +930,8 @@ function worksheetFillTargetsForRun(run: GameWorksheetRunSnapshot): WorksheetFil
     return sourceTargets;
   }
   const doNowTargets = lessonOneDoNowFillTargets();
-  return [...doNowTargets, ...sourceTargets.filter((target) => target.sectionId !== "do_now")];
+  const guidedTargets = lessonOneGuidedFillTargets();
+  return [...doNowTargets, ...guidedTargets, ...sourceTargets.filter((target) => target.sectionId !== "do_now" && target.sectionId !== "guided_practice")];
 }
 
 export function worksheetNarrationForSection(run: GameWorksheetRunSnapshot, sectionId: string): WorksheetNarrationSection | null {
@@ -1141,6 +1163,13 @@ function lessonOneDoNowFillTargets(): WorksheetFillTarget[] {
   return LESSON_ONE_DO_NOW_TARGETS.map((target) => ({
     ...target,
     rect: doNowFillTargetRect(target.id) ?? {height: 0, width: 0, x: 0, y: 0}
+  }));
+}
+
+function lessonOneGuidedFillTargets(): WorksheetFillTarget[] {
+  return LESSON_ONE_GUIDED_TARGETS.map((target) => ({
+    ...target,
+    rect: CUSTOM_FILL_TARGET_RECTS[target.id] ?? {height: 0, width: 0, x: 0, y: 0}
   }));
 }
 

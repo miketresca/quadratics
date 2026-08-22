@@ -105,17 +105,9 @@ const guidedRun: GameWorksheetRunSnapshot = {
       ...numericRun.artifacts[0],
       payload: {
         fillTargets: [
-          "fill_guided_row_1_layer",
-          "fill_guided_row_1_layers",
           "fill_guided_row_1_volume",
-          "fill_guided_row_2_layer",
-          "fill_guided_row_2_layers",
           "fill_guided_row_2_volume",
-          "fill_guided_row_3_layer",
-          "fill_guided_row_3_layers",
           "fill_guided_row_3_volume",
-          "fill_guided_row_4_layer",
-          "fill_guided_row_4_layers",
           "fill_guided_row_4_volume"
         ].map((id) => ({
           expectedText: "12",
@@ -131,7 +123,7 @@ const guidedRun: GameWorksheetRunSnapshot = {
     }
   ],
   id: "run_guided",
-  templateId: "guided-test-template"
+  templateId: "volume-cubes-lesson-1"
 };
 
 describe("worksheet answer checking", () => {
