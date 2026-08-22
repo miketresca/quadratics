@@ -25,3 +25,13 @@ sound_effects/
 assets/sound_effects/
 assets/screens/
 assets/sprites/
+assets/*.gif
+assets/*.glb
+assets/*.mp3
+assets/*.mp4
+assets/*.wav
+assets/*.zip
+apps/video/vite.config.ts.timestamp-*.mjs
+apps/web/public/game/lessons/volume-cubes/pages/
+misc/progress/
+misc/task/

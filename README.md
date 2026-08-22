@@ -21,7 +21,7 @@ The project exists to make educational video generation inspectable and repeatab
 - Global Supabase-backed instructors with voice IDs, avatar IDs, and reference images
 - Provider usage cost logging for signed-in users
 - Account-scoped generation reuse so repeated equations reopen saved artifacts instead of spending provider credits again
-- Root worksheet POV lab with a full-screen study-room scene, in-world laptop/login surface, worksheet selection, timer, visitor map, phone focus gag, Lo-Fi player, and one PDF-backed placeholder lesson
+- Root worksheet POV lab with a full-screen study-room scene, in-world laptop/login surface, worksheet selection, timer, visitor map, phone focus gag, Lo-Fi player, and structured built-in worksheet lessons
 
 ## Repository Structure
 
@@ -148,7 +148,9 @@ The root `/` route is the worksheet lesson direction. It intentionally drops the
 
 The laptop owns the in-world login and signed-in browser shell. The signed-in browser has Demo, Music, and Settings tabs; the Lo-Fi Girl player is kept as one persistent embedded player so entering or leaving laptop focus does not start duplicate audio. The clock exposes a local Pomodoro timer. The wall map uses Vercel request geolocation headers for the current visitor pin and seeded demo pins for recorded visits. The phone is a small focus-distraction easter egg that shows a blocked-session quote only while focused.
 
-The POV lab now hosts the game lesson pipeline on the in-world laptop. The previous quadratic generator remains available at `/v1` for the original equation-to-video workflow.
+The POV lab now hosts interactive worksheet lessons on the in-world paper. The current direction is three predefined, built-in lessons authored as structured templates rather than PDF-rendered pages. Each lesson keeps the same section shell: `Do Now`, `Vocabulary`, and `Guided Example`.
+
+The laptop is moving toward two modes. Student view should show study tools, music, and lesson support. Teacher view should keep the current pipeline/debug experience: artifact stages, approvals, exact inputs/outputs, costs, and behind-the-scenes generation state. The previous quadratic generator remains available at `/v1` for the original equation-to-video workflow.
 
 ## Local Development
 

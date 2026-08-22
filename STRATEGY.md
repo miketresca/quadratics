@@ -29,7 +29,9 @@ quadratic input
 
 The final video belongs in the Lesson view. Pipeline logs exist to show how the lesson was produced and to make each stage rerunnable.
 
-The `/game` route is a separate prototype surface for a future worksheet-based lesson experience. It currently proves a seated study-room scene, in-world laptop auth/browser controls, worksheet focus, a Pomodoro clock, a visitor map, a phone focus gag, Lo-Fi ambience, and a PDF-backed placeholder lesson without introducing paid generation into that path.
+The root worksheet POV lab is the active lesson direction. It uses a seated study-room scene, in-world laptop auth/browser controls, worksheet focus, a Pomodoro clock, a visitor map, a phone focus gag, Lo-Fi ambience, and structured built-in lesson templates. The current lesson surface is no longer PDF-backed; PDFs may be authoring references, but the rendered page should come from reusable section layouts and semantic lesson data.
+
+The near-term product split is teacher view versus student view. Student view should focus on completing the built-in lessons and using study helpers. Teacher view should preserve the current laptop pipeline/debug surface for inspecting artifacts, approvals, costs, and generation details.
 
 ## Strategic Principles
 
@@ -49,7 +51,8 @@ The `/game` route is a separate prototype surface for a future worksheet-based l
 4. Separate `elevenlabs_request` and `elevenlabs_audio` internally if request-only regeneration becomes useful; the UI already treats them as visible stages.
 5. Expand blackboard primitives carefully: better final-answer boxing, term-level highlights, layout safeguards, and captions that do not cover math.
 6. Add additional quadratic teaching methods only after factoring is dependable.
-7. Keep `/game` isolated while planning the worksheet-video pipeline; reuse auth and static lesson primitives, but do not let prototype room mechanics destabilize the quadratic generator.
+7. Keep the root worksheet POV lab and `/v1` quadratic generator isolated from each other; reuse auth and static lesson primitives, but do not let room mechanics destabilize the quadratic generator.
+8. Build the worksheet path around three predefined lessons before adding generated lesson authoring.
 
 ## Non-Goals
 
