@@ -65,7 +65,7 @@ export function FocusedPipelinePanel({
             rel="noreferrer"
             target="_blank"
           >
-            Open template PDF
+            Open reference PDF
           </a>
         </div>
         <div className="flex flex-col gap-2">
