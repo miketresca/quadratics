@@ -42,6 +42,7 @@ export function createLaptopScreen(
     onCreateRun: () => void;
     onResetProgress: () => void;
     onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
+    onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => void;
     onSignIn: (formData: FormData) => Promise<void>;
     onSignOut: () => Promise<void>;
     onMusicChange: (selectedMusicId: MusicOptionId) => void;
@@ -148,6 +149,7 @@ export function createLaptopScreen(
       onApproveArtifact: options.onApproveArtifact,
       onCreateRun: options.onCreateRun,
       onRunStage: options.onRunStage,
+      onSaveArtifact: options.onSaveArtifact,
       onResetProgress: options.onResetProgress,
       onMusicChange: (selectedMusicId) => {
         currentMusicId = selectedMusicId;
@@ -339,14 +341,17 @@ function renderLaptopPipeline({
   onCreateRun,
   onResetProgress,
   onRunStage,
+  onSaveArtifact,
   pipeline
 }: {
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
   onResetProgress: () => void;
   onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
+  onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => void;
   pipeline: LaptopPipelineState;
 }) {
+  void onSaveArtifact;
   const wrap = document.createElement("div");
   wrap.style.height = "100%";
   wrap.style.overflow = "auto";
@@ -638,6 +643,7 @@ function renderLaptopBrowser({
   onMusicVolumeChange,
   onResetProgress,
   onRunStage,
+  onSaveArtifact,
   onSignOut,
   onTabChange,
   pipeline,
@@ -656,6 +662,7 @@ function renderLaptopBrowser({
   onMusicVolumeChange: (volume: number) => void;
   onResetProgress: () => void;
   onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
+  onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => void;
   onSignOut: () => Promise<void>;
   onTabChange: (tab: LaptopTab) => void;
   pipeline: LaptopPipelineState;
@@ -786,7 +793,7 @@ function renderLaptopBrowser({
     player.append(iframe);
     body.append(controls, player);
   } else if (tab === "pipeline") {
-    body.append(renderLaptopPipeline({onApproveArtifact, onCreateRun, onResetProgress, onRunStage, pipeline}));
+    body.append(renderLaptopPipeline({onApproveArtifact, onCreateRun, onResetProgress, onRunStage, onSaveArtifact, pipeline}));
   } else if (tab === "costs") {
     body.append(renderLaptopCosts(pipeline, costs));
   } else if (tab === "settings") {

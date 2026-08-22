@@ -11,6 +11,7 @@ from app.providers.elevenlabs.narration_provider import ElevenLabsNarrationProvi
 from app.schemas.game_lessons import (
     GameLessonArtifactApproval,
     GameLessonArtifactApprovalRequest,
+    GameLessonArtifactPayloadUpdateRequest,
     GameLessonRunStageRequest,
     GameWorksheetRunCreateRequest,
     GameWorksheetRunSnapshot,
@@ -141,6 +142,34 @@ async def approve_game_lesson_artifact(
 ) -> GameLessonArtifactApproval:
     try:
         return await _repository(settings).approve_artifact(current_user.id, artifact_id, request)
+    except GameLessonArtifactNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except GameLessonRunNotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except GameLessonStageBlocked as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except GameLessonProviderConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except GameLessonStorageError as exc:
+        raise _storage_http_error(exc) from exc
+
+
+@router.put("/artifacts/{artifact_id}/payload", response_model=GameWorksheetRunSnapshot)
+async def update_game_lesson_artifact_payload(
+    artifact_id: str,
+    request: GameLessonArtifactPayloadUpdateRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> GameWorksheetRunSnapshot:
+    try:
+        return await _repository(settings).update_artifact_payload(
+            current_user.id,
+            artifact_id,
+            request,
+        )
     except GameLessonArtifactNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except GameLessonRunNotFound as exc:

@@ -18,7 +18,13 @@ export function artifactForStage(run: GameWorksheetRunSnapshot | null, stage: Ga
 
 export function isGameLessonPublished(run: GameWorksheetRunSnapshot | null) {
   const artifact = artifactForStage(run, "lesson_publish");
-  return artifact?.status === "completed" || artifact?.status === "approved";
+  if (!artifact || !["completed", "approved"].includes(artifact.status)) {
+    return false;
+  }
+  const payload = artifactPayloadRecord(artifact);
+  const pageCount = typeof payload.pageCount === "number" ? payload.pageCount : 0;
+  const sectionCount = typeof payload.sectionCount === "number" ? payload.sectionCount : 0;
+  return payload.published === true && pageCount > 0 && sectionCount > 0;
 }
 
 export function pipelineDependencyMessage(run: GameWorksheetRunSnapshot | null, stage: GameLessonStage) {

@@ -11,7 +11,7 @@ export type GameFighterId =
   | "pikachu"
   | "luigi"
   | "jigglypuff";
-export type GameLessonId = "volume-cubes-lesson-1" | "dynamic-lesson-locked";
+export type GameLessonId = "volume-cubes-lesson-1" | "dynamic-lesson-locked" | "dynamic-lesson-3-locked";
 export type GameLessonProgressStatus = "started" | "completed";
 export type GameProgressAction =
   | "claim_easter_egg"

@@ -12,6 +12,7 @@ import {
   getGameUsageSummary,
   listInstructors,
   runGameLessonStage,
+  updateGameLessonArtifactPayload,
   type GameLessonArtifact,
   type GameLessonStage,
   type GameWorksheetRunSnapshot
@@ -777,6 +778,47 @@ export function GameShell({
     }
   }
 
+  async function saveGameLessonPipelineArtifact(artifact: GameLessonArtifact, payload: Record<string, unknown>) {
+    const requestId = gamePipelineRequestRef.current + 1;
+    gamePipelineRequestRef.current = requestId;
+    const requestingUserId = userRef.current?.id;
+    if (!requestingUserId) {
+      throw new Error("Login on the laptop to edit this lesson.");
+    }
+    setGamePipelineLoading(true);
+    setGamePipelineLoadingStage(artifact.stage);
+    setGamePipelineError(null);
+    laptopScreenRef.current?.setPipelineState({error: null, loading: true, loadingStage: artifact.stage, run: gameRunRef.current});
+    try {
+      const accessToken = await getLaptopAccessToken();
+      const snapshot = await updateGameLessonArtifactPayload({
+        accessToken,
+        artifactId: artifact.id,
+        notes: "Edited from laptop pipeline console.",
+        payload
+      });
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
+      setGameRunSnapshot(snapshot);
+      void refreshGameUsageCosts();
+      return snapshot;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save worksheet artifact.";
+      if (gamePipelineRequestRef.current !== requestId || userRef.current?.id !== requestingUserId) {
+        return null;
+      }
+      setGamePipelineError(message);
+      laptopScreenRef.current?.setPipelineState({error: message, loading: false, loadingStage: null, run: gameRunRef.current});
+      throw error;
+    } finally {
+      if (gamePipelineRequestRef.current === requestId && userRef.current?.id === requestingUserId) {
+        setGamePipelineLoading(false);
+        setGamePipelineLoadingStage(null);
+      }
+    }
+  }
+
   function startGameLesson(choiceId: GameLessonId, texture: Texture | null) {
     if (!userRef.current) {
       const message = "Login on the laptop to start this lesson.";
@@ -1139,6 +1181,11 @@ export function GameShell({
         },
         onRunStage: (stage, options) => {
           void runGameLessonPipelineStage(stage, {force: options?.force ?? false}).catch(() => {
+            // The laptop pipeline tab renders the failure inline.
+          });
+        },
+        onSaveArtifact: (artifact, payload) => {
+          void saveGameLessonPipelineArtifact(artifact, payload).catch(() => {
             // The laptop pipeline tab renders the failure inline.
           });
         },
@@ -1789,6 +1836,11 @@ export function GameShell({
           }}
           onRunStage={(stage, options) => {
             void runGameLessonPipelineStage(stage, {force: options?.force ?? false}).catch(() => {
+              // The focused laptop tab renders the failure inline.
+            });
+          }}
+          onSaveArtifact={(artifact, payload) => {
+            void saveGameLessonPipelineArtifact(artifact, payload).catch(() => {
               // The focused laptop tab renders the failure inline.
             });
           }}

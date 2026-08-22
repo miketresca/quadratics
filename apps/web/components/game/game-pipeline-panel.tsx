@@ -1,4 +1,4 @@
-import {useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 
 import type {GameLessonArtifact, GameLessonStage, GameWorksheetRunSnapshot} from "@/lib/api";
 
@@ -32,12 +32,14 @@ export function FocusedPipelinePanel({
   onCreateRun,
   onResetProgress,
   onRunStage,
+  onSaveArtifact,
   pipeline
 }: {
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onCreateRun: () => void;
   onResetProgress: () => void;
   onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
+  onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => Promise<void> | void;
   pipeline: LaptopPipelineState;
 }) {
   return (
@@ -88,6 +90,7 @@ export function FocusedPipelinePanel({
       {pipeline.error ? (
         <div className="rounded-lg border border-red-400/40 bg-red-950/35 px-3 py-2 text-sm text-red-100">{pipeline.error}</div>
       ) : null}
+      <GameLessonPipelineSelector />
       <div className="grid gap-3">
         {GAME_LESSON_STAGES.map(({label, stage}) => {
           const artifact = artifactForStage(pipeline.run, stage);
@@ -104,6 +107,7 @@ export function FocusedPipelinePanel({
               loading={pipeline.loading}
               onApproveArtifact={onApproveArtifact}
               onRunStage={onRunStage}
+              onSaveArtifact={onSaveArtifact}
               stage={stage}
             />
           );
@@ -122,6 +126,7 @@ function GamePipelineStageCard({
   loading,
   onApproveArtifact,
   onRunStage,
+  onSaveArtifact,
   stage
 }: {
   artifact: GameLessonArtifact | null;
@@ -132,6 +137,7 @@ function GamePipelineStageCard({
   loading: boolean;
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
+  onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => Promise<void> | void;
   stage: GameLessonStage;
 }) {
   const palette = stagePalette(stage);
@@ -185,8 +191,36 @@ function GamePipelineStageCard({
       {dependencyMessage ? <p className="mt-3 text-xs leading-5 text-amber-100/70">{dependencyMessage}</p> : null}
       {artifact?.staleReason ? <p className="mt-3 text-xs leading-5 text-amber-100/70">Stale: {artifact.staleReason}</p> : null}
       {artifact?.errorMessage ? <p className="mt-3 text-xs leading-5 text-red-100/80">{artifact.errorMessage}</p> : null}
-      <GamePipelineStagePreview artifact={artifact} stage={stage} />
+      <GamePipelineStagePreview artifact={artifact} onSaveArtifact={onSaveArtifact} stage={stage} />
       <GamePipelineStageIo artifact={artifact} />
+    </div>
+  );
+}
+
+function GameLessonPipelineSelector() {
+  return (
+    <div className="grid gap-2 rounded-xl border border-white/10 bg-black/20 p-2 sm:grid-cols-3">
+      {[
+        {label: "Lesson 1", status: "active", title: "Volume With Cubes"},
+        {label: "Lesson 2", status: "locked", title: "Generated Worksheet"},
+        {label: "Lesson 3", status: "locked", title: "Future Challenge"}
+      ].map((lesson) => (
+        <button
+          className={[
+            "rounded-lg border px-3 py-2 text-left transition",
+            lesson.status === "active"
+              ? "border-emerald-300/55 bg-emerald-950/35 text-emerald-100"
+              : "cursor-not-allowed border-zinc-800 bg-zinc-950/40 text-zinc-500"
+          ].join(" ")}
+          disabled={lesson.status !== "active"}
+          key={lesson.label}
+          type="button"
+        >
+          <span className="block font-mono text-[10px] uppercase tracking-widest">{lesson.label}</span>
+          <span className="mt-1 block truncate text-sm font-black">{lesson.title}</span>
+          <span className="mt-1 block font-mono text-[10px] uppercase tracking-wider opacity-70">{lesson.status}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -286,7 +320,15 @@ function GamePipelineInfoRow({label, value}: {label: string; value: string}) {
   );
 }
 
-function GamePipelineStagePreview({artifact, stage}: {artifact: GameLessonArtifact | null; stage: GameLessonStage}) {
+function GamePipelineStagePreview({
+  artifact,
+  onSaveArtifact,
+  stage
+}: {
+  artifact: GameLessonArtifact | null;
+  onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => Promise<void> | void;
+  stage: GameLessonStage;
+}) {
   const previewRows = artifactPreviewRows(artifact, stage);
   const previewText = artifactPreviewText(artifact, stage);
   const sections = artifactSections(artifact);
@@ -298,21 +340,12 @@ function GamePipelineStagePreview({artifact, stage}: {artifact: GameLessonArtifa
     return (
       <div className="mt-4 grid gap-3">
         <GamePipelinePreviewRows rows={previewRows} stage={stage} />
-        {sections.slice(0, 4).map((section, index) => (
-          <div className="rounded border border-white/10 bg-black/25 p-3" key={`${stage}-${recordString(section, "sectionId") ?? index}`}>
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-bold text-zinc-100">
-                {recordString(section, "title") ?? recordString(section, "sectionId") ?? `Section ${index + 1}`}
-              </p>
-              {typeof recordNumber(section, "estimatedSeconds") === "number" ? (
-                <span className="font-mono text-[11px] text-zinc-500">{recordNumber(section, "estimatedSeconds")}s</span>
-              ) : null}
-            </div>
-            <p className="mt-2 text-xs leading-5 text-zinc-300">
-              {recordString(section, "speechText") ?? recordString(section, "narration") ?? recordString(section, "summary") ?? ""}
-            </p>
-          </div>
-        ))}
+        <EditableScriptPreview
+          artifact={artifact}
+          onSaveArtifact={onSaveArtifact}
+          sections={sections}
+          stage={stage}
+        />
       </div>
     );
   }
@@ -363,6 +396,109 @@ function GamePipelineStagePreview({artifact, stage}: {artifact: GameLessonArtifa
     <div className="mt-4">
       <GamePipelinePreviewRows rows={previewRows} stage={stage} />
       {previewText ? <p className="mt-3 text-xs leading-5 text-zinc-400">{previewText}</p> : null}
+    </div>
+  );
+}
+
+function EditableScriptPreview({
+  artifact,
+  onSaveArtifact,
+  sections,
+  stage
+}: {
+  artifact: GameLessonArtifact;
+  onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => Promise<void> | void;
+  sections: Array<Record<string, unknown>>;
+  stage: GameLessonStage;
+}) {
+  const textKey = stage === "speech_markup" ? "speechText" : "narration";
+  const sectionsKey = sections.map((section) => `${recordString(section, "sectionId") ?? ""}:${recordString(section, textKey) ?? ""}`).join("|");
+  const [drafts, setDrafts] = useState<string[]>(() => sections.map((section) => recordString(section, textKey) ?? ""));
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDrafts(sections.map((section) => recordString(section, textKey) ?? ""));
+    setError(null);
+    setSaving(false);
+  }, [artifact.id, artifact.version, sectionsKey, textKey]);
+
+  const dirty = sections.some((section, index) => drafts[index] !== (recordString(section, textKey) ?? ""));
+
+  function resetDrafts() {
+    setDrafts(sections.map((section) => recordString(section, textKey) ?? ""));
+    setError(null);
+  }
+
+  async function saveDrafts() {
+    setSaving(true);
+    setError(null);
+    try {
+      const nextSections = sections.map((section, index) => ({
+        ...section,
+        [textKey]: drafts[index] ?? ""
+      }));
+      await onSaveArtifact(artifact, {
+        ...artifact.payload,
+        sections: nextSections
+      });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save this stage.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (sections.length === 0) {
+    return <p className="rounded border border-amber-300/25 bg-amber-950/20 p-3 text-xs text-amber-100/75">No editable sections were produced for this stage.</p>;
+  }
+
+  return (
+    <div className="grid gap-3">
+      {sections.slice(0, 4).map((section, index) => (
+        <label className="grid gap-2 rounded border border-white/10 bg-black/25 p-3" key={`${stage}-${recordString(section, "sectionId") ?? index}`}>
+          <span className="flex items-start justify-between gap-3">
+            <span className="text-sm font-bold text-zinc-100">
+              {recordString(section, "title") ?? recordString(section, "sectionId") ?? `Section ${index + 1}`}
+            </span>
+            {typeof recordNumber(section, "estimatedSeconds") === "number" ? (
+              <span className="font-mono text-[11px] text-zinc-500">{recordNumber(section, "estimatedSeconds")}s</span>
+            ) : null}
+          </span>
+          <textarea
+            className="min-h-24 resize-y rounded border border-zinc-800 bg-zinc-950/70 px-3 py-2 font-mono text-xs leading-5 text-zinc-200 outline-none transition focus:border-emerald-300/60"
+            onChange={(event) => {
+              const nextDrafts = [...drafts];
+              nextDrafts[index] = event.target.value;
+              setDrafts(nextDrafts);
+            }}
+            value={drafts[index] ?? ""}
+          />
+        </label>
+      ))}
+      {error ? <p className="rounded border border-red-400/35 bg-red-950/30 px-3 py-2 text-xs text-red-100">{error}</p> : null}
+      {dirty ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            className="rounded border border-zinc-700 px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-zinc-300 hover:bg-zinc-900 disabled:cursor-wait disabled:opacity-60"
+            disabled={saving}
+            onClick={resetDrafts}
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            className="rounded border border-emerald-300/50 bg-emerald-950/30 px-3 py-1.5 text-[11px] font-black uppercase tracking-widest text-emerald-100 hover:bg-emerald-900/40 disabled:cursor-wait disabled:opacity-60"
+            disabled={saving}
+            onClick={() => {
+              void saveDrafts();
+            }}
+            type="button"
+          >
+            {saving ? "Saving" : "Save edits"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

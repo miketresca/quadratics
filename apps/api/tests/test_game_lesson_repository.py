@@ -2,8 +2,10 @@ import pytest
 
 from app.schemas.game_lessons import (
     GameLessonArtifactApprovalRequest,
+    GameLessonArtifactPayloadUpdateRequest,
     GameLessonRunStageRequest,
     GameWorksheetRunCreateRequest,
+    GameWorksheetTemplate,
 )
 from app.services.game_lessons.repository import (
     GameLessonRunNotFound,
@@ -303,3 +305,82 @@ async def test_game_lesson_publish_requires_interactive_bundle():
         await repository.run_stage(
             "user-a", run.id, "lesson_publish", GameLessonRunStageRequest()
         )
+
+
+@pytest.mark.asyncio
+async def test_game_lesson_template_falls_back_to_full_canonical_map():
+    repository = InMemoryGameLessonRepository()
+    repository._templates["volume-cubes-lesson-1"] = GameWorksheetTemplate(
+        id="volume-cubes-lesson-1",
+        title="Volume With Whole-Number Cubes",
+        version=1,
+        payload={"sections": [{"id": "stub", "title": "Stub"}]},
+    )
+    run = await repository.create_or_get_run(
+        "user-a",
+        "volume-cubes-lesson-1",
+        GameWorksheetRunCreateRequest(),
+    )
+
+    snapshot = await repository.run_stage("user-a", run.id, "template", GameLessonRunStageRequest())
+
+    template = next(artifact for artifact in snapshot.artifacts if artifact.stage == "template")
+    assert len(template.payload["sections"]) == 3
+    assert len(template.payload["pages"]) > 0
+    assert len(template.payload["fillTargets"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_game_lesson_manual_script_edit_versions_artifact_and_stales_children():
+    repository = InMemoryGameLessonRepository()
+    run = await repository.create_or_get_run(
+        "user-a",
+        "volume-cubes-lesson-1",
+        GameWorksheetRunCreateRequest(),
+    )
+    await repository.run_stage("user-a", run.id, "template", GameLessonRunStageRequest())
+    scripted = await repository.run_stage(
+        "user-a", run.id, "section_script", GameLessonRunStageRequest()
+    )
+    script_artifact = next(
+        artifact for artifact in scripted.artifacts if artifact.stage == "section_script"
+    )
+    await repository.approve_artifact(
+        "user-a",
+        script_artifact.id,
+        GameLessonArtifactApprovalRequest(decision="approved"),
+    )
+    marked_up = await repository.run_stage(
+        "user-a", run.id, "speech_markup", GameLessonRunStageRequest()
+    )
+    speech_markup = next(
+        artifact for artifact in marked_up.artifacts if artifact.stage == "speech_markup"
+    )
+
+    edited_payload = {
+        **script_artifact.payload,
+        "sections": [
+            {
+                **section,
+                "narration": f"Edited {section['sectionId']} directions for textbox input.",
+            }
+            for section in script_artifact.payload["sections"]
+        ],
+    }
+    snapshot = await repository.update_artifact_payload(
+        "user-a",
+        script_artifact.id,
+        GameLessonArtifactPayloadUpdateRequest(payload=edited_payload, notes="test edit"),
+    )
+
+    script_versions = [
+        artifact for artifact in snapshot.artifacts if artifact.stage == "section_script"
+    ]
+    stale_markup = next(
+        artifact for artifact in snapshot.artifacts if artifact.id == speech_markup.id
+    )
+    assert [artifact.version for artifact in script_versions] == [1, 2]
+    assert script_versions[-1].status == "approved"
+    assert script_versions[-1].payload["sections"][0]["narration"].startswith("Edited do_now")
+    assert stale_markup.status == "stale"
+    assert stale_markup.is_current is False

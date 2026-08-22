@@ -12,6 +12,7 @@ from app.schemas.game_lessons import (
     GameLessonArtifact,
     GameLessonArtifactApproval,
     GameLessonArtifactApprovalRequest,
+    GameLessonArtifactPayloadUpdateRequest,
     GameLessonArtifactStatus,
     GameLessonRunStageRequest,
     GameLessonStage,
@@ -48,6 +49,7 @@ STAGE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "lesson_publish": ("interactive_bundle",),
 }
 APPROVAL_REQUIRED_STAGES = {"section_script", "speech_markup"}
+EDITABLE_PAYLOAD_STAGES = {"section_script", "speech_markup"}
 APPROVED_UPSTREAM_REQUIRED: dict[str, tuple[str, ...]] = {
     "speech_markup": ("section_script",),
     "narration": ("speech_markup",),
@@ -109,6 +111,13 @@ class GameLessonRepository(Protocol):
         artifact_id: str,
         request: GameLessonArtifactApprovalRequest,
     ) -> GameLessonArtifactApproval: ...
+
+    async def update_artifact_payload(
+        self,
+        user_id: str,
+        artifact_id: str,
+        request: GameLessonArtifactPayloadUpdateRequest,
+    ) -> GameWorksheetRunSnapshot: ...
 
 
 @dataclass
@@ -244,6 +253,54 @@ class InMemoryGameLessonRepository:
         )
         self._approvals[(artifact.id, artifact.version)] = approval
         return _approval_to_response(approval)
+
+    async def update_artifact_payload(
+        self,
+        user_id: str,
+        artifact_id: str,
+        request: GameLessonArtifactPayloadUpdateRequest,
+    ) -> GameWorksheetRunSnapshot:
+        artifact = self._artifact_for_user(user_id, artifact_id)
+        if not artifact.is_current:
+            raise GameLessonStageBlocked("Only the current artifact version can be edited")
+        if artifact.stage not in EDITABLE_PAYLOAD_STAGES:
+            raise GameLessonStageBlocked(f"{artifact.stage} cannot be edited manually")
+        run = self._run_for_user(user_id, artifact.run_id)
+        now = _now()
+        artifact.is_current = False
+        artifact.updated_at = now
+        payload = _editable_payload_for_stage(artifact.stage, request.payload)
+        next_artifact = _StoredArtifact(
+            id=str(uuid4()),
+            run_id=run.id,
+            stage=artifact.stage,
+            version=self._next_artifact_version(run.id, artifact.stage),
+            status="approved",
+            is_current=True,
+            payload=payload,
+            storage_refs=artifact.storage_refs,
+            error_message=None,
+            stale_reason=None,
+            config_metadata={
+                **artifact.config_metadata,
+                "provider": "manual",
+                "source": "game_lesson_pipeline_editor",
+                "manualEditOfArtifactId": artifact.id,
+                "manualEditNotes": request.notes,
+                "stageInput": artifact.config_metadata.get(
+                    "stageInput",
+                    self._stage_input_for_stage(run, artifact.stage),
+                ),
+                "stageOutput": payload,
+            },
+            created_at=now,
+            updated_at=now,
+        )
+        self._artifacts[next_artifact.id] = next_artifact
+        self._mark_descendants_stale(run.id, artifact.stage)
+        run.updated_at = now
+        run.status = "active"
+        return self._snapshot(run)
 
     def _create_artifact(self, run: _StoredRun, stage: str) -> _StoredArtifact:
         now = _now()
@@ -420,7 +477,7 @@ class InMemoryGameLessonRepository:
         template = self._templates.get(template_id)
         if template is None:
             raise GameLessonTemplateNotFound("Unknown game worksheet template")
-        return template
+        return _canonical_template_if_needed(template)
 
     def _run_for_user(self, user_id: str, run_id: str) -> _StoredRun:
         run = self._runs.get(run_id)
@@ -595,6 +652,61 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             raise GameLessonStorageError("Game lesson approval was not returned after save")
         return _approval_to_response(_approval_from_row(rows[0]))
 
+    async def update_artifact_payload(
+        self,
+        user_id: str,
+        artifact_id: str,
+        request: GameLessonArtifactPayloadUpdateRequest,
+    ) -> GameWorksheetRunSnapshot:
+        artifact = await self._get_artifact_for_user(user_id, artifact_id)
+        if not artifact.is_current:
+            raise GameLessonStageBlocked("Only the current artifact version can be edited")
+        if artifact.stage not in EDITABLE_PAYLOAD_STAGES:
+            raise GameLessonStageBlocked(f"{artifact.stage} cannot be edited manually")
+        run = await self._get_run_for_user(user_id, artifact.run_id)
+        now = _now()
+        payload = _editable_payload_for_stage(artifact.stage, request.payload)
+        config_metadata = {
+            **artifact.config_metadata,
+            "provider": "manual",
+            "source": "game_lesson_pipeline_editor",
+            "manualEditOfArtifactId": artifact.id,
+            "manualEditNotes": request.notes,
+            "stageInput": artifact.config_metadata.get("stageInput")
+            or await self._stage_input_for_storage(run, artifact.stage),
+            "stageOutput": payload,
+        }
+        async with httpx.AsyncClient() as client:
+            current_response = await client.patch(
+                f"{self._base_url}/rest/v1/game_lesson_artifacts",
+                headers=self._headers,
+                params={"id": f"eq.{artifact.id}"},
+                json={"is_current": False, "updated_at": now},
+            )
+            _raise_for_storage_error(current_response)
+            create_response = await client.post(
+                f"{self._base_url}/rest/v1/game_lesson_artifacts",
+                headers={**self._headers, "Prefer": "return=representation"},
+                params={"select": _ARTIFACT_COLUMNS},
+                json={
+                    "run_id": run.id,
+                    "stage": artifact.stage,
+                    "version": await self._next_artifact_version(run.id, artifact.stage),
+                    "status": "approved",
+                    "is_current": True,
+                    "payload": payload,
+                    "storage_refs": artifact.storage_refs,
+                    "config_metadata": config_metadata,
+                },
+            )
+        _raise_for_storage_error(create_response)
+        rows = create_response.json()
+        if not rows:
+            raise GameLessonStorageError("Game lesson artifact was not returned after edit")
+        await self._mark_descendants_stale(run.id, artifact.stage)
+        await self._touch_run(run.id, status_value="active")
+        return await self._snapshot(await self._get_run_for_user(user_id, run.id))
+
     async def _find_run(
         self,
         user_id: str,
@@ -654,7 +766,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         rows = response.json()
         if not rows:
             raise GameLessonTemplateNotFound("Unknown game worksheet template")
-        return GameWorksheetTemplate.model_validate(rows[0])
+        return _canonical_template_if_needed(GameWorksheetTemplate.model_validate(rows[0]))
 
     async def _list_artifacts(self, run_id: str) -> list[_StoredArtifact]:
         async with httpx.AsyncClient() as client:
@@ -1021,6 +1133,36 @@ def _status_for_stage(stage: str) -> GameLessonArtifactStatus:
     return "awaiting_approval" if stage in APPROVAL_REQUIRED_STAGES else "completed"
 
 
+def _canonical_template_if_needed(template: GameWorksheetTemplate) -> GameWorksheetTemplate:
+    if template.id != TEMPLATE_ID:
+        return template
+    payload = template.payload
+    required_arrays = ("pages", "sections", "questions", "fillTargets")
+    has_full_map = all(
+        isinstance(payload.get(key), list) and payload.get(key) for key in required_arrays
+    )
+    if has_full_map:
+        return template
+    return VOLUME_CUBES_LESSON_1_TEMPLATE.model_copy(deep=True)
+
+
+def _editable_payload_for_stage(stage: str, payload: dict[str, Any]) -> dict[str, Any]:
+    if stage not in EDITABLE_PAYLOAD_STAGES:
+        raise GameLessonStageBlocked(f"{stage} cannot be edited manually")
+    sections = payload.get("sections")
+    if not isinstance(sections, list) or not sections:
+        raise GameLessonStageBlocked(f"{stage} edits require at least one section")
+    required_text_key = "speechText" if stage == "speech_markup" else "narration"
+    for section in sections:
+        if not isinstance(section, dict):
+            raise GameLessonStageBlocked(f"{stage} edits must keep section objects")
+        if not str(section.get("sectionId") or section.get("id") or "").strip():
+            raise GameLessonStageBlocked(f"{stage} edits must keep section IDs")
+        if not str(section.get(required_text_key) or "").strip():
+            raise GameLessonStageBlocked(f"{stage} edits must keep non-empty {required_text_key}")
+    return payload
+
+
 def _template_artifact_payload(template_id: str, template: GameWorksheetTemplate) -> dict[str, Any]:
     return {
         "summary": (
@@ -1155,13 +1297,16 @@ def _handwriting_payload(
     template_payload: dict[str, Any],
     narration_payload: dict[str, Any],
 ) -> dict[str, Any]:
+    fill_targets = template_payload.get("fillTargets", [])
+    if not isinstance(fill_targets, list) or not fill_targets:
+        raise GameLessonStageBlocked("handwriting requires template fill targets")
     narration_sections = {
         str(section.get("sectionId")): section
         for section in narration_payload.get("sections", [])
         if isinstance(section, dict)
     }
     actions = []
-    for target in template_payload.get("fillTargets", []):
+    for target in fill_targets:
         if not isinstance(target, dict):
             continue
         section_id = str(target.get("sectionId"))
@@ -1170,7 +1315,7 @@ def _handwriting_payload(
         section_duration = float(section_timing.get("durationSeconds", 8))
         section_targets = [
             candidate
-            for candidate in template_payload.get("fillTargets", [])
+            for candidate in fill_targets
             if isinstance(candidate, dict) and str(candidate.get("sectionId")) == section_id
         ]
         target_index = max(_target_index(section_targets, str(target.get("id"))), 0)
@@ -1198,6 +1343,8 @@ def _handwriting_payload(
                 },
             }
         )
+    if not actions:
+        raise GameLessonStageBlocked("handwriting produced no actions")
     return {
         "summary": (
             "Deterministic handwriting action plan mapped to worksheet fill targets "
@@ -1214,6 +1361,15 @@ def _interactive_bundle_payload(
     narration_payload: dict[str, Any],
     handwriting_payload: dict[str, Any],
 ) -> dict[str, Any]:
+    pages = template_payload.get("pages", [])
+    template_sections = template_payload.get("sections", [])
+    fill_targets = template_payload.get("fillTargets", [])
+    if not isinstance(pages, list) or not pages:
+        raise GameLessonStageBlocked("interactive_bundle requires template pages")
+    if not isinstance(template_sections, list) or not template_sections:
+        raise GameLessonStageBlocked("interactive_bundle requires template sections")
+    if not isinstance(fill_targets, list) or not fill_targets:
+        raise GameLessonStageBlocked("interactive_bundle requires template fill targets")
     actions_by_section: dict[str, list[dict[str, Any]]] = {}
     for action in handwriting_payload.get("actions", []):
         if isinstance(action, dict):
@@ -1224,7 +1380,7 @@ def _interactive_bundle_payload(
         if isinstance(section, dict)
     }
     sections = []
-    for section in template_payload.get("sections", []):
+    for section in template_sections:
         if not isinstance(section, dict):
             continue
         section_id = str(section.get("id"))
@@ -1239,6 +1395,8 @@ def _interactive_bundle_payload(
                 "completionMode": "section_click",
             }
         )
+    if not sections:
+        raise GameLessonStageBlocked("interactive_bundle produced no sections")
     return {
         "summary": (
             "Playable worksheet bundle for the browser. Sections can be clicked to "
@@ -1247,8 +1405,8 @@ def _interactive_bundle_payload(
         "bundleVersion": 1,
         "templateId": run.template_id,
         "selectedInstructorId": run.selected_instructor_id,
-        "pages": template_payload.get("pages", []),
-        "fillTargets": template_payload.get("fillTargets", []),
+        "pages": pages,
+        "fillTargets": fill_targets,
         "sections": sections,
         "completedSections": [],
     }
@@ -1260,6 +1418,12 @@ def _lesson_publish_payload(
     interactive_bundle: _StoredArtifact | None,
 ) -> dict[str, Any]:
     bundle_payload = interactive_bundle.payload if interactive_bundle else {}
+    pages = bundle_payload.get("pages", [])
+    sections = bundle_payload.get("sections", [])
+    if not isinstance(pages, list) or not pages:
+        raise GameLessonStageBlocked("lesson_publish requires a non-empty interactive bundle")
+    if not isinstance(sections, list) or not sections:
+        raise GameLessonStageBlocked("lesson_publish requires bundle sections")
     return {
         "summary": (
             "Canonical Lesson 1 publish marker. This points every learner at the "
@@ -1272,12 +1436,8 @@ def _lesson_publish_payload(
         "selectedInstructorId": run.selected_instructor_id,
         "interactiveBundleArtifactId": interactive_bundle.id if interactive_bundle else None,
         "interactiveBundleVersion": interactive_bundle.version if interactive_bundle else None,
-        "sectionCount": len(bundle_payload.get("sections", []))
-        if isinstance(bundle_payload.get("sections"), list)
-        else 0,
-        "pageCount": len(bundle_payload.get("pages", []))
-        if isinstance(bundle_payload.get("pages"), list)
-        else 0,
+        "sectionCount": len(sections),
+        "pageCount": len(pages),
         "studentReadyAt": _now(),
     }
 

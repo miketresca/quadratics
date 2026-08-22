@@ -335,6 +335,27 @@ export async function approveGameLessonArtifact(params: {
   return (await response.json()) as {decision: "approved" | "rejected"};
 }
 
+export async function updateGameLessonArtifactPayload(params: {
+  accessToken: string;
+  artifactId: string;
+  notes?: string | null;
+  payload: Record<string, unknown>;
+}): Promise<GameWorksheetRunSnapshot> {
+  const response = await fetch(`${apiUrl}/api/v1/game/artifacts/${params.artifactId}/payload`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({notes: params.notes ?? null, payload: params.payload})
+  });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as {detail?: string} | null;
+    throw new Error(body?.detail ?? "Could not save the worksheet artifact");
+  }
+  return normalizeGameLessonRun((await response.json()) as ApiGameWorksheetRunSnapshot);
+}
+
 export async function getGameUsageSummary(accessToken: string): Promise<GameUsageSummary> {
   const response = await fetch(`${apiUrl}/api/v1/game/usage/summary`, {
     headers: {Authorization: `Bearer ${accessToken}`},

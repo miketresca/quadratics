@@ -32,14 +32,21 @@ export const LESSON_CHOICES: LessonChoice[] = [
     title: "Lesson 1: Volume With Cubes",
     subtitle: "Open the guided-notes worksheet",
     locked: false,
-    box: {x: 118, y: 385, width: 964, height: 188}
+    box: {x: 118, y: 320, width: 964, height: 150}
   },
   {
     id: "dynamic-lesson-locked",
     title: "Lesson 2: Generated Worksheet",
     subtitle: "Locked until the worksheet pipeline exists",
     locked: true,
-    box: {x: 118, y: 625, width: 964, height: 188}
+    box: {x: 118, y: 520, width: 964, height: 150}
+  },
+  {
+    id: "dynamic-lesson-3-locked",
+    title: "Lesson 3: Future Challenge",
+    subtitle: "Locked for a later worksheet",
+    locked: true,
+    box: {x: 118, y: 720, width: 964, height: 150}
   }
 ];
 

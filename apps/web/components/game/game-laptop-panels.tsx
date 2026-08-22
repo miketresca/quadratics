@@ -66,6 +66,7 @@ export function LaptopFocusPanel({
   onMusicVolumeChange,
   onResetProgress,
   onRunStage,
+  onSaveArtifact,
   onSignIn,
   onSignOut,
   onTabChange,
@@ -86,6 +87,7 @@ export function LaptopFocusPanel({
   onResetProgress: () => void;
   onApproveArtifact: (artifact: GameLessonArtifact) => void;
   onRunStage: (stage: GameLessonStage, options?: {force?: boolean}) => void;
+  onSaveArtifact: (artifact: GameLessonArtifact, payload: Record<string, unknown>) => void;
   onSignIn: (event: FormEvent<HTMLFormElement>) => void;
   onSignOut: () => void;
   onTabChange: (tab: LaptopTab) => void;
@@ -181,6 +183,7 @@ export function LaptopFocusPanel({
                   onCreateRun={onCreateRun}
                   onResetProgress={onResetProgress}
                   onRunStage={onRunStage}
+                  onSaveArtifact={onSaveArtifact}
                   pipeline={pipeline}
                 />
               ) : tab === "costs" ? (

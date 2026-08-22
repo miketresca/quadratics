@@ -35,7 +35,11 @@ describe("game asset manifest", () => {
     ]);
     expect(getAsset("lesson-orb").src).toBe("/game/assets/ui/smash-ball.png");
     expect(getAsset("locked-orb").src).toBe("/game/assets/ui/locked-ball.svg");
-    expect(GAME_LESSONS.map((lesson) => lesson.id)).toEqual(["volume-cubes-lesson-1", "dynamic-lesson-locked"]);
+    expect(GAME_LESSONS.map((lesson) => lesson.id)).toEqual([
+      "volume-cubes-lesson-1",
+      "dynamic-lesson-locked",
+      "dynamic-lesson-3-locked"
+    ]);
   });
 
   it("ships real audio cues for character select and core actions", () => {

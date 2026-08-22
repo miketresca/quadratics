@@ -25,8 +25,9 @@ describe("GameShell", () => {
       root.render(<GameShell initialLoginError={null} initialUser={null} />);
     });
 
-    expect(container.textContent).toContain("Worksheet POV Lab");
-    expect(container.textContent).toContain("Press Space to resume seated look mode");
+    expect(container.textContent).toContain("Press Space To Start");
+    expect(container.textContent).toContain("Space");
+    expect(container.textContent).toContain("Esc");
     expect(container.textContent).not.toContain("API keys");
     expect(container.textContent).not.toContain("Quadratics Game Lab");
 

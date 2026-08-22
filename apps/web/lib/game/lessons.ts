@@ -94,6 +94,16 @@ export const GAME_LESSONS: GameLesson[] = [
     kind: "future_dynamic",
     orbAssetId: "locked-orb",
     logSummary: volumeLogs
+  },
+  {
+    id: "dynamic-lesson-3-locked",
+    slug: "future-challenge",
+    title: "Future Challenge",
+    subtitle: "Locked for a later worksheet",
+    status: "locked",
+    kind: "future_dynamic",
+    orbAssetId: "locked-orb",
+    logSummary: volumeLogs
   }
 ];
 

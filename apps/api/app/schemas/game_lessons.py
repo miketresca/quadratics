@@ -76,6 +76,11 @@ class GameLessonArtifactApprovalRequest(ApiModel):
     notes: str | None = None
 
 
+class GameLessonArtifactPayloadUpdateRequest(ApiModel):
+    payload: dict[str, Any]
+    notes: str | None = None
+
+
 class GameLessonArtifactApproval(ApiModel):
     id: str
     artifact_id: str
