@@ -6,6 +6,7 @@ import {
   checkWorksheetAnswers,
   nextWorksheetAnswerForKey,
   nextWorksheetFillTargetId,
+  worksheetSectionAnswerStatus,
   worksheetActionAtCanvasPoint
 } from "../components/game/game-worksheet-renderer";
 import {DEFAULT_WORKSHEET_PLAYBACK} from "../components/game/game-runtime-storage";
@@ -121,6 +122,35 @@ describe("worksheet answer checking", () => {
     expect(answerResults.fill_numeric?.correct).toBe(true);
     expect(areWorksheetAnswersCorrect(numericRun, {...playback, answerResults})).toBe(true);
   });
+
+  it("does not mark blank answers wrong when checking current work", () => {
+    const playback = {
+      ...DEFAULT_WORKSHEET_PLAYBACK,
+      answers: {
+        fill_do_now_array_equation: "3 x 4 = 12",
+        fill_do_now_array_total: " "
+      }
+    };
+
+    const answerResults = checkWorksheetAnswers(staleLessonOneRun, playback);
+
+    expect(answerResults.fill_do_now_array_equation?.correct).toBe(true);
+    expect(answerResults.fill_do_now_array_total).toBeUndefined();
+    expect(answerResults.fill_do_now_fact_3x4).toBeUndefined();
+  });
+
+  it("accepts asterisks as multiplication in equation answers", () => {
+    const playback = {
+      ...DEFAULT_WORKSHEET_PLAYBACK,
+      answers: {
+        fill_do_now_array_equation: "3*4=12"
+      }
+    };
+
+    const answerResults = checkWorksheetAnswers(staleLessonOneRun, playback);
+
+    expect(answerResults.fill_do_now_array_equation?.correct).toBe(true);
+  });
 });
 
 describe("worksheet input constraints", () => {
@@ -194,5 +224,43 @@ describe("Lesson 1 Do Now input targets", () => {
 
       expect(nextTargetId).toBe(targetOrder[index + 1] ?? null);
     }
+  });
+
+  it("keeps Check Answers clickable after a previous submission", () => {
+    const action = worksheetActionAtCanvasPoint(920, 1480, staleLessonOneRun, {
+      ...DEFAULT_WORKSHEET_PLAYBACK,
+      submittedAt: 123
+    });
+
+    expect(action?.type).toBe("submit_answers");
+  });
+
+  it("reports blank, incorrect, and complete Do Now tab states", () => {
+    expect(worksheetSectionAnswerStatus(staleLessonOneRun, DEFAULT_WORKSHEET_PLAYBACK, "do_now")).toBe("blank");
+
+    const incorrectPlayback = {
+      ...DEFAULT_WORKSHEET_PLAYBACK,
+      answers: {fill_do_now_array_equation: "3 x 4 = 11"},
+      submittedAt: 123
+    };
+    const incorrectResults = checkWorksheetAnswers(staleLessonOneRun, incorrectPlayback);
+    expect(worksheetSectionAnswerStatus(staleLessonOneRun, {...incorrectPlayback, answerResults: incorrectResults}, "do_now")).toBe("incorrect");
+
+    const completePlayback = {
+      ...DEFAULT_WORKSHEET_PLAYBACK,
+      answers: {
+        fill_do_now_array_equation: "3 x 4 = 12",
+        fill_do_now_array_total: "12",
+        fill_do_now_fact_3x4: "12",
+        fill_do_now_fact_4x2: "8",
+        fill_do_now_fact_2x5: "10",
+        fill_do_now_fact_5x6: "30",
+        fill_do_now_fact_4x7: "28",
+        fill_do_now_area: "10"
+      },
+      submittedAt: 123
+    };
+    const completeResults = checkWorksheetAnswers(staleLessonOneRun, completePlayback);
+    expect(worksheetSectionAnswerStatus(staleLessonOneRun, {...completePlayback, answerResults: completeResults}, "do_now")).toBe("complete");
   });
 });

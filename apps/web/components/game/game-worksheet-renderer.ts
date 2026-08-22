@@ -300,7 +300,6 @@ function drawGeneratedWorksheet(
   const sections = worksheetSectionsForRun(run);
   const fillTargets = worksheetFillTargetsForRun(run);
   const complete = artifactForStage(run, "interactive_bundle")?.status === "completed";
-  const completedSections = new Set(playback.completedSectionIds);
   const allSectionsComplete = areAllWorksheetSectionsComplete(run, playback);
 
   const status = artifactForStage(run, "interactive_bundle")?.status ?? "waiting";
@@ -313,15 +312,17 @@ function drawGeneratedWorksheet(
     if (!rect) {
       continue;
     }
-    const completed = completedSections.has(section.id);
+    const answerStatus = worksheetSectionAnswerStatus(run, playback, section.id);
+    const completed = answerStatus === "complete";
+    const incorrect = answerStatus === "incorrect";
     const selected = activeSection?.id === section.id;
-    context.fillStyle = selected ? "#ecfdf5" : completed ? "#f0fdf4" : "#fffdf8";
-    context.strokeStyle = selected ? "#0f766e" : completed ? "#2f9d65" : "#d8c9ad";
-    context.lineWidth = selected || completed ? 5 : 2;
+    context.fillStyle = incorrect ? "#fef2f2" : selected ? "#ecfdf5" : completed ? "#f0fdf4" : "#fffdf8";
+    context.strokeStyle = incorrect ? "#dc2626" : selected ? "#0f766e" : completed ? "#2f9d65" : "#d8c9ad";
+    context.lineWidth = selected || completed || incorrect ? 5 : 2;
     roundRect(context, rect.x, rect.y, rect.width, rect.height, 12);
     context.fill();
     context.stroke();
-    context.fillStyle = selected ? "#064e3b" : completed ? "#166534" : "#334155";
+    context.fillStyle = incorrect ? "#991b1b" : selected ? "#064e3b" : completed ? "#166534" : "#334155";
     context.font = "900 22px ui-rounded, system-ui, sans-serif";
     context.fillText(sectionTitleForDisplay(section), rect.x + 22, rect.y + 36);
     context.fillStyle = "#64748b";
@@ -334,6 +335,15 @@ function drawGeneratedWorksheet(
       context.moveTo(rect.x + rect.width - 42, rect.y + 30);
       context.lineTo(rect.x + rect.width - 27, rect.y + 46);
       context.lineTo(rect.x + rect.width - 10, rect.y + 20);
+      context.stroke();
+    } else if (incorrect) {
+      context.strokeStyle = "#dc2626";
+      context.lineWidth = 6;
+      context.beginPath();
+      context.moveTo(rect.x + rect.width - 42, rect.y + 22);
+      context.lineTo(rect.x + rect.width - 14, rect.y + 50);
+      context.moveTo(rect.x + rect.width - 14, rect.y + 22);
+      context.lineTo(rect.x + rect.width - 42, rect.y + 50);
       context.stroke();
     }
   }
@@ -374,16 +384,16 @@ function drawGeneratedWorksheet(
     }
   }
 
-  const readyToCheck = complete && isWorksheetReadyToSubmit(run, playback);
-  const allAnswersCorrect = readyToCheck && areWorksheetAnswersCorrect(run, playback);
-  if (complete && !playback.submittedAt) {
-    context.fillStyle = readyToCheck ? "#e0f2fe" : "#f8fafc";
-    context.strokeStyle = readyToCheck ? "#0284c7" : "#cbd5e1";
+  const doNowCheckable = complete && activeSection?.id === "do_now";
+  const allAnswersCorrect = areWorksheetAnswersCorrect(run, playback);
+  if (doNowCheckable) {
+    context.fillStyle = "#e0f2fe";
+    context.strokeStyle = "#0284c7";
     context.lineWidth = 4;
     roundRect(context, WORKSHEET_COMPLETE_RECT.x, WORKSHEET_COMPLETE_RECT.y, WORKSHEET_COMPLETE_RECT.width, WORKSHEET_COMPLETE_RECT.height, 18);
     context.fill();
     context.stroke();
-    context.fillStyle = readyToCheck ? "#075985" : "#64748b";
+    context.fillStyle = "#075985";
     context.font = "900 23px ui-monospace, SFMono-Regular, Menlo, monospace";
     context.fillText("CHECK ANSWERS", WORKSHEET_COMPLETE_RECT.x + 44, WORKSHEET_COMPLETE_RECT.y + 46);
   } else if (complete && allSectionsComplete && allAnswersCorrect) {
@@ -880,16 +890,21 @@ function worksheetDisplayAnswer(targetId: string, answer: string) {
 
 export function checkWorksheetAnswers(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
   return Object.fromEntries(
-    worksheetEditableTargetsForRun(run).map((target) => {
+    worksheetEditableTargetsForRun(run).flatMap((target) => {
       const answer = playback.answers[target.id] ?? "";
+      if (answer.trim().length === 0) {
+        return [];
+      }
       const correct = isAnswerCorrect(answer, target);
       return [
-        target.id,
-        {
-          correct,
-          expectedText: target.expectedText ?? null,
-          explanation: correct ? null : explanationForTarget(target)
-        }
+        [
+          target.id,
+          {
+            correct,
+            expectedText: target.expectedText ?? null,
+            explanation: correct ? null : explanationForTarget(target)
+          }
+        ]
       ];
     })
   );
@@ -902,11 +917,28 @@ export function isWorksheetReadyToSubmit(run: GameWorksheetRunSnapshot, playback
 
 export function areWorksheetAnswersCorrect(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
   const targets = worksheetEditableTargetsForRun(run);
-  return targets.length > 0 && targets.every((target) => playback.answerResults[target.id]?.correct === true);
+  return targets.length > 0 && targets.every((target) => (playback.answers[target.id] ?? "").trim().length > 0 && playback.answerResults[target.id]?.correct === true);
 }
 
 function worksheetEditableTargetsForRun(run: GameWorksheetRunSnapshot) {
   return worksheetFillTargetsForRun(run).filter((target) => !isReadOnlyTarget(target));
+}
+
+export function isWorksheetSectionCorrect(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, sectionId: string) {
+  const targets = worksheetEditableTargetsForRun(run).filter((target) => target.sectionId === sectionId);
+  return targets.length > 0 && targets.every((target) => (playback.answers[target.id] ?? "").trim().length > 0 && playback.answerResults[target.id]?.correct === true);
+}
+
+export function worksheetSectionAnswerStatus(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, sectionId: string) {
+  const targets = worksheetEditableTargetsForRun(run).filter((target) => target.sectionId === sectionId);
+  if (targets.length === 0 || !playback.submittedAt) {
+    return "blank";
+  }
+  const filledTargets = targets.filter((target) => (playback.answers[target.id] ?? "").trim().length > 0);
+  if (filledTargets.some((target) => playback.answerResults[target.id]?.correct === false)) {
+    return "incorrect";
+  }
+  return isWorksheetSectionCorrect(run, playback, sectionId) ? "complete" : "blank";
 }
 
 function isReadOnlyTarget(target: WorksheetFillTarget) {
@@ -996,6 +1028,7 @@ function normalizeAnswer(value: string) {
   return value
     .toLowerCase()
     .replaceAll("×", "x")
+    .replaceAll("*", "x")
     .replaceAll(/[^a-z0-9]+/g, " ")
     .trim()
     .replaceAll(/\s+/g, " ");
@@ -1196,7 +1229,9 @@ export function worksheetActionAtCanvasPoint(
   if (fillTarget) {
     return {target: fillTarget, type: "fill_target"};
   }
-  if (!playback.submittedAt && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
+  const sections = worksheetSectionsForRun(run);
+  const activeSection = activeWorksheetSection(sections, playback);
+  if (activeSection?.id === "do_now" && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
     return {type: "submit_answers"};
   }
   if (
@@ -1206,8 +1241,6 @@ export function worksheetActionAtCanvasPoint(
   ) {
     return {type: "complete_lesson"};
   }
-  const sections = worksheetSectionsForRun(run);
-  const activeSection = activeWorksheetSection(sections, playback);
   if (activeSection && pointInRect(x, y, SECTION_AUDIO_RECT)) {
     return {section: activeSection, type: "section_audio"};
   }
