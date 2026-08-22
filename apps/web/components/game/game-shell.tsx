@@ -282,7 +282,8 @@ export function GameShell({
   const gamePipelineRequestRef = useRef(0);
   const gameLessonInstructorIdRef = useRef<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<GameLessonId | null>(null);
-  const [lockedMessage, setLockedMessage] = useState(false);
+  const [lockedMessage, setLockedMessage] = useState<string | null>(null);
+  const [pointedCoordinates, setPointedCoordinates] = useState("-- --");
   const [started, setStarted] = useState(false);
   const [worksheetFocused, setWorksheetFocused] = useState(false);
   const [focusedMode, setFocusedMode] = useState<FocusMode>("room");
@@ -326,6 +327,11 @@ export function GameShell({
   phoneRewardPendingRef.current = phoneRewardPending;
   phoneScreenModeRef.current = phoneScreenMode;
   selectedLessonIdRef.current = selectedLessonId;
+
+  function updatePointedCoordinates(point: Vector3 | null) {
+    const next = point ? `${Math.round(point.x * 100)} ${Math.round(point.z * 100)}` : "-- --";
+    setPointedCoordinates((current) => (current === next ? current : next));
+  }
 
   useEffect(() => {
     if (!user) {
@@ -901,13 +907,14 @@ export function GameShell({
 
   function startGameLesson(choiceId: GameLessonId, texture: Texture | null) {
     if (!userRef.current) {
-      setLockedMessage(true);
+      const message = "Login on the laptop to start this lesson.";
+      setLockedMessage(message);
       selectedLessonIdRef.current = null;
       setSelectedLessonId(null);
-      setGamePipelineError("Login on the laptop to start this lesson.");
+      setGamePipelineError(message);
       laptopScreenRef.current?.setTab("pipeline");
       laptopScreenRef.current?.setPipelineState({
-        error: "Login on the laptop to start this lesson.",
+        error: message,
         loading: false,
         loadingStage: null,
         run: gameRunRef.current
@@ -915,7 +922,24 @@ export function GameShell({
       refreshPaperTexture(texture, null, choiceId, gameRunRef.current, worksheetPlaybackRef.current);
       return;
     }
-    setLockedMessage(false);
+    if (choiceId === GAME_LESSON_TEMPLATE_ID && !isGameLessonPublished(gameRunRef.current)) {
+      const message = "Publish the Lesson 1 pipeline before opening the worksheet.";
+      setLockedMessage(message);
+      setGamePipelineError(message);
+      laptopScreenRef.current?.setTab("pipeline");
+      laptopScreenRef.current?.setPipelineState({
+        error: message,
+        loading: false,
+        loadingStage: null,
+        run: gameRunRef.current
+      });
+      changeLaptopTab("pipeline");
+      void prepareGameLessonRun().catch(() => {
+        // The laptop pipeline tab carries the actionable error for the user.
+      });
+      return;
+    }
+    setLockedMessage(null);
     selectedLessonIdRef.current = choiceId;
     setSelectedLessonId(choiceId);
     refreshPaperTexture(texture, choiceId, choiceId, gameRunRef.current, worksheetPlaybackRef.current);
@@ -1051,7 +1075,7 @@ export function GameShell({
           }
         }, 520);
       }
-      setLockedMessage(false);
+      setLockedMessage(null);
       if (mode !== "paper") {
         hoveredChoiceId = null;
         refreshPaperTexture(paperTexture, selectedLessonIdRef.current, null, gameRunRef.current, worksheetPlaybackRef.current);
@@ -1388,6 +1412,17 @@ export function GameShell({
         } else {
           setTarget(null);
         }
+        const coordinateTargets: Object3D[] = [];
+        const selectedLaptop = sceneTunables.laptop;
+        const selectedClock = sceneTunables.clock;
+        const selectedMap = sceneTunables.map;
+        const selectedPhone = sceneTunables.phone;
+        if (paperMesh) coordinateTargets.push(paperMesh);
+        if (selectedLaptop) coordinateTargets.push(selectedLaptop);
+        if (selectedClock) coordinateTargets.push(selectedClock);
+        if (selectedMap) coordinateTargets.push(selectedMap);
+        if (selectedPhone) coordinateTargets.push(selectedPhone);
+        updatePointedCoordinates(raycaster.intersectObjects(coordinateTargets, true)[0]?.point ?? null);
         const [hit] = raycaster.intersectObject(paperMesh);
         if (!hit || !hit.uv || focusModeRef.current !== "paper") {
           hoveredChoiceId = null;
@@ -1496,15 +1531,15 @@ export function GameShell({
         if (selectedLessonIdRef.current === GAME_LESSON_TEMPLATE_ID && gameRunRef.current?.templateId === GAME_LESSON_TEMPLATE_ID) {
           const action = worksheetActionAtCanvasPoint(canvasX, canvasY, gameRunRef.current, worksheetPlaybackRef.current);
           if (action?.type === "section") {
-            setLockedMessage(false);
+            setLockedMessage(null);
             startWorksheetSectionPlayback(gameRunRef.current, action.section.id);
             changeLaptopTab("pipeline");
           } else if (action?.type === "next_page") {
-            setLockedMessage(false);
+            setLockedMessage(null);
             clearSectionPlayback();
             setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeSectionId: null, activeSectionStartedAt: null, currentPageId: action.pageId});
           } else if (action?.type === "complete_lesson") {
-            setLockedMessage(false);
+            setLockedMessage(null);
             clearSectionPlayback();
             const nextPlayback = {...worksheetPlaybackRef.current, lessonCompletedAt: Date.now()};
             setWorksheetPlaybackSnapshot(nextPlayback);
@@ -1522,7 +1557,7 @@ export function GameShell({
           return;
         }
         if (choice.locked) {
-          setLockedMessage(true);
+          setLockedMessage("Lesson 2 is locked while the generated worksheet pipeline is being designed.");
           selectedLessonIdRef.current = null;
           setSelectedLessonId(null);
           refreshPaperTexture(paperTexture, null, choice.id, gameRunRef.current, worksheetPlaybackRef.current);
@@ -1760,21 +1795,21 @@ export function GameShell({
       {!started ? (
         <div className="absolute inset-0 z-30 grid place-items-center bg-zinc-950/72 backdrop-blur-[2px]">
           <div className="rounded border border-white/15 bg-zinc-950/45 px-8 py-5 text-center shadow-2xl">
-            <p className="font-mono text-sm uppercase tracking-[0.28em] text-zinc-100">Press Space</p>
-            <p className="mt-2 text-sm text-zinc-400">Start seated look mode</p>
+            <p className="font-mono text-sm uppercase tracking-[0.28em] text-zinc-100">Press Space To Start</p>
           </div>
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute left-5 top-5 rounded border border-amber-200/20 bg-black/25 px-4 py-3 backdrop-blur-sm">
-        <p className="font-mono text-[11px] uppercase tracking-wide text-amber-100/80">Worksheet POV Lab</p>
-        <p className="mt-1 text-xs text-amber-50/70">
-          {worksheetFocused
-            ? "Click a checkbox to choose a lesson. Press Escape to look around."
-              : pointerLocked
-              ? "Look around with the mouse. Center an object and click to focus. Space pauses."
-              : "Press Space to resume seated look mode."}
-        </p>
+      <div className="pointer-events-none absolute left-5 top-5 rounded border border-cyan-200/20 bg-black/30 px-3 py-2 font-mono text-xs tracking-wide text-cyan-100/85 shadow-xl backdrop-blur-sm">
+        {pointedCoordinates}
+      </div>
+
+      <div className="pointer-events-none absolute right-5 top-5 flex items-center gap-2 rounded border border-white/10 bg-black/30 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-zinc-300/80 shadow-xl backdrop-blur-sm">
+        <span className="rounded border border-zinc-500/50 bg-zinc-900/70 px-2 py-1 text-zinc-100">Space</span>
+        <span>pause</span>
+        <span className="mx-1 text-zinc-600">/</span>
+        <span className="rounded border border-zinc-500/50 bg-zinc-900/70 px-2 py-1 text-zinc-100">Esc</span>
+        <span>back</span>
       </div>
 
       {focusedMode === "room" ? (
@@ -1784,12 +1819,6 @@ export function GameShell({
           <span className={`absolute left-0 top-1/2 h-px w-2.5 -translate-y-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
           <span className={`absolute right-0 top-1/2 h-px w-2.5 -translate-y-1/2 ${interactiveTarget ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.75)]" : "bg-amber-50/80 shadow-[0_0_10px_rgba(255,244,210,0.45)]"}`} />
           <span className={`absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border ${interactiveTarget ? "border-emerald-300 bg-emerald-300/25" : "border-amber-50/70 bg-black/20"}`} />
-        </div>
-      ) : null}
-
-      {pointerLocked && !worksheetFocused ? (
-        <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2 rounded border border-white/10 bg-zinc-950/45 px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-zinc-300/75 backdrop-blur-sm">
-          Space pauses / Esc leaves object focus
         </div>
       ) : null}
 
@@ -1803,7 +1832,7 @@ export function GameShell({
 
       {lockedMessage ? (
         <div className="pointer-events-none absolute bottom-6 left-1/2 w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 rounded border border-amber-300/40 bg-[#211307]/85 px-4 py-3 text-sm text-amber-50 shadow-2xl backdrop-blur-md">
-          {user ? "Lesson 2 is locked while the generated worksheet pipeline is being designed." : "Login on the laptop to start this lesson."}
+          {lockedMessage}
         </div>
       ) : null}
 
@@ -2294,6 +2323,37 @@ function GamePipelineStageCard({
       {artifact?.staleReason ? <p className="mt-3 text-xs leading-5 text-amber-100/70">Stale: {artifact.staleReason}</p> : null}
       {artifact?.errorMessage ? <p className="mt-3 text-xs leading-5 text-red-100/80">{artifact.errorMessage}</p> : null}
       <GamePipelineStagePreview artifact={artifact} stage={stage} />
+      <GamePipelineStageIo artifact={artifact} />
+    </div>
+  );
+}
+
+function GamePipelineStageIo({artifact}: {artifact: GameLessonArtifact | null}) {
+  const stageInput = artifact?.configMetadata.stageInput;
+  const stageOutput = artifact?.configMetadata.stageOutput ?? artifact?.payload;
+  if (!artifact || (typeof stageInput === "undefined" && typeof stageOutput === "undefined")) {
+    return null;
+  }
+  return (
+    <details className="mt-4 rounded border border-white/10 bg-black/20">
+      <summary className="cursor-pointer px-3 py-2 font-mono text-[10px] uppercase tracking-wide text-zinc-400 hover:text-emerald-200">
+        Input / Output
+      </summary>
+      <div className="grid gap-3 border-t border-white/10 p-3 lg:grid-cols-2">
+        <GamePipelineJsonPanel label="Input" value={stageInput ?? null} />
+        <GamePipelineJsonPanel label="Output" value={stageOutput ?? null} />
+      </div>
+    </details>
+  );
+}
+
+function GamePipelineJsonPanel({label, value}: {label: string; value: unknown}) {
+  return (
+    <div className="min-w-0 rounded border border-white/10 bg-zinc-950/70 p-3">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-zinc-500">{label}</p>
+      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-zinc-300">
+        {JSON.stringify(value, null, 2)}
+      </pre>
     </div>
   );
 }
@@ -2553,6 +2613,11 @@ function FocusedCostsPanel({costs, pipeline}: {costs: LaptopCostState; pipeline:
 
 function artifactForStage(run: GameWorksheetRunSnapshot | null, stage: GameLessonStage): GameLessonArtifact | null {
   return run?.artifacts.find((artifact) => artifact.stage === stage && artifact.isCurrent) ?? null;
+}
+
+function isGameLessonPublished(run: GameWorksheetRunSnapshot | null) {
+  const artifact = artifactForStage(run, "lesson_publish");
+  return artifact?.status === "completed" || artifact?.status === "approved";
 }
 
 function pipelineDependencyMessage(run: GameWorksheetRunSnapshot | null, stage: GameLessonStage) {

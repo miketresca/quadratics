@@ -249,6 +249,7 @@ class InMemoryGameLessonRepository:
         now = _now()
         current = self._current_artifact(run.id, stage)
         next_version = self._next_artifact_version(run.id, stage)
+        payload = self._payload_for_stage(run, stage)
         if current:
             current.is_current = False
             current.updated_at = now
@@ -259,11 +260,16 @@ class InMemoryGameLessonRepository:
             version=next_version,
             status=_status_for_stage(stage),
             is_current=True,
-            payload=self._payload_for_stage(run, stage),
+            payload=payload,
             storage_refs=[],
             error_message=None,
             stale_reason=None,
-            config_metadata={"provider": "deterministic", "source": "game_lesson_repository"},
+            config_metadata={
+                "provider": "deterministic",
+                "source": "game_lesson_repository",
+                "stageInput": self._stage_input_for_stage(run, stage),
+                "stageOutput": payload,
+            },
             created_at=now,
             updated_at=now,
         )
@@ -340,6 +346,46 @@ class InMemoryGameLessonRepository:
                 template_payload,
                 interactive_bundle,
             )
+        return {"stage": stage}
+
+    def _stage_input_for_stage(self, run: _StoredRun, stage: str) -> dict[str, Any]:
+        template_payload = self._template(run.template_id).payload
+        if stage == "template":
+            return {"templateId": run.template_id, "template": template_payload}
+        if stage == "section_script":
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "template": template_payload,
+            }
+        if stage == "speech_markup":
+            section_script = self._current_artifact(run.id, "section_script")
+            return {"sectionScript": section_script.payload if section_script else None}
+        if stage == "narration":
+            speech_markup = self._current_artifact(run.id, "speech_markup")
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "speechMarkup": speech_markup.payload if speech_markup else None,
+            }
+        if stage == "handwriting":
+            narration = self._current_artifact(run.id, "narration")
+            return {
+                "template": template_payload,
+                "narration": narration.payload if narration else None,
+            }
+        if stage == "interactive_bundle":
+            narration = self._current_artifact(run.id, "narration")
+            handwriting = self._current_artifact(run.id, "handwriting")
+            return {
+                "template": template_payload,
+                "narration": narration.payload if narration else None,
+                "handwriting": handwriting.payload if handwriting else None,
+            }
+        if stage == "lesson_publish":
+            interactive_bundle = self._current_artifact(run.id, "interactive_bundle")
+            return {
+                "template": template_payload,
+                "interactiveBundle": interactive_bundle.payload if interactive_bundle else None,
+            }
         return {"stage": stage}
 
     def _assert_upstream_ready(self, run_id: str, stage: str) -> None:
@@ -674,6 +720,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         current = await self._current_artifact(run.id, stage)
         next_version = await self._next_artifact_version(run.id, stage)
         generated = await self._generated_stage_from_storage(run, stage)
+        generated = await self._with_stage_io_from_storage(run, stage, generated)
         async with httpx.AsyncClient() as client:
             if current:
                 current_response = await client.patch(
@@ -790,6 +837,22 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             },
         )
 
+    async def _with_stage_io_from_storage(
+        self,
+        run: _StoredRun,
+        stage: str,
+        generated: GameLessonProviderResult,
+    ) -> GameLessonProviderResult:
+        config_metadata = dict(generated.config_metadata)
+        config_metadata.setdefault("stageInput", await self._stage_input_for_storage(run, stage))
+        config_metadata.setdefault("stageOutput", generated.payload)
+        return GameLessonProviderResult(
+            payload=generated.payload,
+            config_metadata=config_metadata,
+            usage_records=generated.usage_records,
+            storage_refs=generated.storage_refs,
+        )
+
     async def _record_usage(
         self,
         run: _StoredRun,
@@ -843,6 +906,46 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
                 template.payload,
                 interactive_bundle,
             )
+        return {"stage": stage}
+
+    async def _stage_input_for_storage(self, run: _StoredRun, stage: str) -> dict[str, Any]:
+        template = await self._get_template(run.template_id)
+        if stage == "template":
+            return {"templateId": run.template_id, "template": template.payload}
+        if stage == "section_script":
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "template": template.payload,
+            }
+        if stage == "speech_markup":
+            section_script = await self._current_artifact(run.id, "section_script")
+            return {"sectionScript": section_script.payload if section_script else None}
+        if stage == "narration":
+            speech_markup = await self._current_artifact(run.id, "speech_markup")
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "speechMarkup": speech_markup.payload if speech_markup else None,
+            }
+        if stage == "handwriting":
+            narration = await self._current_artifact(run.id, "narration")
+            return {
+                "template": template.payload,
+                "narration": narration.payload if narration else None,
+            }
+        if stage == "interactive_bundle":
+            narration = await self._current_artifact(run.id, "narration")
+            handwriting = await self._current_artifact(run.id, "handwriting")
+            return {
+                "template": template.payload,
+                "narration": narration.payload if narration else None,
+                "handwriting": handwriting.payload if handwriting else None,
+            }
+        if stage == "lesson_publish":
+            interactive_bundle = await self._current_artifact(run.id, "interactive_bundle")
+            return {
+                "template": template.payload,
+                "interactiveBundle": interactive_bundle.payload if interactive_bundle else None,
+            }
         return {"stage": stage}
 
     async def _assert_upstream_ready(self, run_id: str, stage: str) -> None:  # type: ignore[override]
