@@ -1,6 +1,6 @@
 "use client";
 
-import type {CurrentUser, GameLessonId, GameProgress, GameWorksheetPlaybackProgress, Instructor} from "@quadratics/types";
+import type {CurrentUser, GameLessonId, GameProgress, Instructor} from "@quadratics/types";
 import {useEffect, useRef, useState, type FormEvent} from "react";
 import type {Group, Mesh, Object3D, PerspectiveCamera, Scene, Texture, Vector3, WebGLRenderer} from "three";
 import type {CSS3DRenderer} from "three/examples/jsm/renderers/CSS3DRenderer.js";
@@ -45,6 +45,23 @@ import {
   stagePalette,
   statusColor
 } from "./game-pipeline-utils";
+import {
+  DEFAULT_WORKSHEET_PLAYBACK,
+  clampMusicVolume,
+  formatPomodoroClock,
+  readMusicState,
+  readPhoneRewardState,
+  readPomodoroState,
+  readWorksheetPlaybackState,
+  toApiWorksheetPlayback,
+  worksheetPlaybackFromApi,
+  writeMusicState,
+  writePhoneRewardState,
+  writePomodoroState,
+  writeWorksheetPlaybackState,
+  type PomodoroState,
+  type WorksheetPlaybackState
+} from "./game-runtime-storage";
 
 type LessonChoice = {
   id: GameLessonId;
@@ -104,18 +121,7 @@ type InteractiveWorksheetBundle = {
   pages?: Array<{id: string; pageNumber?: number}>;
   sections?: WorksheetSection[];
 };
-type WorksheetPlaybackState = {
-  activeSectionId: string | null;
-  activeSectionStartedAt: number | null;
-  completedSectionIds: string[];
-  currentPageId: string | null;
-  lessonCompletedAt: number | null;
-};
 type PhoneScreenMode = "off" | "quote" | "reward" | "rickroll";
-type PomodoroState = {
-  endsAt: number | null;
-  minutes: number;
-};
 
 type VisitorLocation = {
   city: string | null;
@@ -151,19 +157,8 @@ const DESK_RIG_Z = -1.18;
 const SEATED_CAMERA_Z = 5.45 + DESK_RIG_Z;
 const WORKSHEET_CANVAS_WIDTH = 1200;
 const WORKSHEET_CANVAS_HEIGHT = 1600;
-const DEFAULT_WORKSHEET_PLAYBACK: WorksheetPlaybackState = {
-  activeSectionId: null,
-  activeSectionStartedAt: null,
-  completedSectionIds: [],
-  currentPageId: null,
-  lessonCompletedAt: null
-};
 const WORKSHEET_NEXT_PAGE_RECT = {height: 74, width: 312, x: 792, y: 1402};
 const WORKSHEET_COMPLETE_RECT = {height: 74, width: 348, x: 756, y: 1402};
-const POMODORO_STORAGE_KEY = "quadratics.game.pomodoro.v1";
-const MUSIC_STORAGE_KEY = "quadratics.game.music.v1";
-const WORKSHEET_PLAYBACK_STORAGE_PREFIX = "quadratics.game.worksheet-playback.v1";
-const PHONE_REWARD_STORAGE_PREFIX = "quadratics.game.phone-reward.v1";
 const ALARM_SOUND_URL = "/game/assets/audio/alarm_sound.wav";
 const PHONE_VIBRATION_SOUND_URL = "/game/assets/audio/mobile-phone-vibration.mp3";
 const ROOM = {
@@ -369,7 +364,7 @@ export function GameShell({
     await supabase.auth.signOut();
     gamePipelineRequestRef.current += 1;
     clearSectionPlayback();
-    window.localStorage.removeItem(POMODORO_STORAGE_KEY);
+    writePomodoroState({endsAt: null, minutes: 25});
     setPhoneRewardSnapshot(false, {persist: false});
     setPomodoro({endsAt: null, minutes: 25});
     setUser(null);
@@ -1965,139 +1960,6 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-function readPomodoroState(): PomodoroState {
-  if (typeof window === "undefined") {
-    return {endsAt: null, minutes: 25};
-  }
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(POMODORO_STORAGE_KEY) ?? "null") as Partial<PomodoroState> | null;
-    const minutes = typeof parsed?.minutes === "number" && [5, 10, 15, 20, 25].includes(parsed.minutes) ? parsed.minutes : 25;
-    const endsAt = typeof parsed?.endsAt === "number" && parsed.endsAt > Date.now() ? parsed.endsAt : null;
-    return {endsAt, minutes};
-  } catch {
-    return {endsAt: null, minutes: 25};
-  }
-}
-
-function writePomodoroState(state: PomodoroState) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(POMODORO_STORAGE_KEY, JSON.stringify(state));
-}
-
-function clampMusicVolume(volume: number) {
-  if (!Number.isFinite(volume)) {
-    return 60;
-  }
-  return Math.max(0, Math.min(100, Math.round(volume)));
-}
-
-function readMusicState(): MusicState {
-  if (typeof window === "undefined") {
-    return {muted: false, selectedMusicId: "lofi", volume: 60};
-  }
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(MUSIC_STORAGE_KEY) ?? "null") as Partial<MusicState> | null;
-    const storedMusicId = parsed?.selectedMusicId;
-    let selectedMusicId: MusicOptionId = "lofi";
-    if (storedMusicId && MUSIC_OPTIONS.some((option) => option.id === storedMusicId)) {
-      selectedMusicId = storedMusicId;
-    }
-    return {muted: parsed?.muted === true, selectedMusicId, volume: clampMusicVolume(Number(parsed?.volume ?? 60))};
-  } catch {
-    return {muted: false, selectedMusicId: "lofi", volume: 60};
-  }
-}
-
-function writeMusicState(state: MusicState) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(MUSIC_STORAGE_KEY, JSON.stringify(state));
-}
-
-function readWorksheetPlaybackState(runId: string): WorksheetPlaybackState {
-  if (typeof window === "undefined") {
-    return DEFAULT_WORKSHEET_PLAYBACK;
-  }
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(worksheetPlaybackStorageKey(runId)) ?? "null") as Partial<WorksheetPlaybackState> | null;
-    const completedSectionIds = Array.isArray(parsed?.completedSectionIds)
-      ? parsed.completedSectionIds.filter((sectionId): sectionId is string => typeof sectionId === "string")
-      : [];
-    const activeSectionId = typeof parsed?.activeSectionId === "string" ? parsed.activeSectionId : null;
-    const activeSectionStartedAt = typeof parsed?.activeSectionStartedAt === "number" ? parsed.activeSectionStartedAt : null;
-    const currentPageId = typeof parsed?.currentPageId === "string" ? parsed.currentPageId : null;
-    const lessonCompletedAt = typeof parsed?.lessonCompletedAt === "number" ? parsed.lessonCompletedAt : null;
-    return {activeSectionId, activeSectionStartedAt, completedSectionIds: [...new Set(completedSectionIds)], currentPageId, lessonCompletedAt};
-  } catch {
-    return DEFAULT_WORKSHEET_PLAYBACK;
-  }
-}
-
-function writeWorksheetPlaybackState(runId: string, state: WorksheetPlaybackState) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  window.localStorage.setItem(worksheetPlaybackStorageKey(runId), JSON.stringify(state));
-}
-
-function toApiWorksheetPlayback(state: WorksheetPlaybackState): GameWorksheetPlaybackProgress {
-  return {
-    completedSectionIds: state.completedSectionIds,
-    currentPageId: state.currentPageId,
-    lessonCompletedAt: state.lessonCompletedAt
-  };
-}
-
-function worksheetPlaybackFromApi(progress: GameWorksheetPlaybackProgress | null | undefined): WorksheetPlaybackState {
-  if (!progress) {
-    return DEFAULT_WORKSHEET_PLAYBACK;
-  }
-  return {
-    activeSectionId: null,
-    activeSectionStartedAt: null,
-    completedSectionIds: Array.isArray(progress.completedSectionIds) ? [...new Set(progress.completedSectionIds)] : [],
-    currentPageId: typeof progress.currentPageId === "string" ? progress.currentPageId : null,
-    lessonCompletedAt: typeof progress.lessonCompletedAt === "number" ? progress.lessonCompletedAt : null
-  };
-}
-
-function worksheetPlaybackStorageKey(runId: string) {
-  return `${WORKSHEET_PLAYBACK_STORAGE_PREFIX}.${runId}`;
-}
-
-function readPhoneRewardState(userId: string) {
-  if (typeof window === "undefined") {
-    return false;
-  }
-  return window.localStorage.getItem(phoneRewardStorageKey(userId)) === "pending";
-}
-
-function writePhoneRewardState(userId: string, pending: boolean) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const key = phoneRewardStorageKey(userId);
-  if (pending) {
-    window.localStorage.setItem(key, "pending");
-  } else {
-    window.localStorage.removeItem(key);
-  }
-}
-
-function phoneRewardStorageKey(userId: string) {
-  return `${PHONE_REWARD_STORAGE_PREFIX}.${userId}`;
-}
-
-function formatPomodoroClock(ms: number) {
-  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
 async function loadVisitorLocation(): Promise<VisitorLocation | null> {
