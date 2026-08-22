@@ -11,6 +11,7 @@ This repository builds an internal, artifact-backed video generation pipeline fo
 - [docs/domain-model.md](docs/domain-model.md) - shared vocabulary and artifact concepts
 - [docs/video-pipeline.md](docs/video-pipeline.md) - generation stages, reruns, storage, rendering, and account-scoped reuse behavior
 - [docs/auth-and-usage.md](docs/auth-and-usage.md) - auth, ownership, provider keys, and Supabase expectations
+- [docs/to-do.md](docs/to-do.md) - living backlog for current work; update it when planning, completing, or removing tasks
 - [docs/decisions](docs/decisions) - accepted architectural decisions
 - [docs/solutions](docs/solutions) - durable notes from solved issues
 
@@ -21,6 +22,8 @@ Scoped guides:
 - [apps/video/AGENTS.md](apps/video/AGENTS.md) for Motion Canvas rendering and video composition
 
 ## Product Boundaries
+
+Before starting feature work, check [docs/to-do.md](docs/to-do.md). If the user gives a new list of tasks or a plan changes scope, update that file. When an item is completed, remove it rather than leaving a stale checked-off entry.
 
 This app supports quadratic equations only. Do not broaden the math scope without an explicit task.
 

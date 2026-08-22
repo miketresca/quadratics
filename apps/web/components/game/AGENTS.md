@@ -2,6 +2,8 @@
 
 This directory owns the worksheet POV lab and 3D desktop experience. Treat `game-shell.tsx` as the orchestration boundary, not the default home for every new behavior.
 
+Before changing game behavior, check `docs/to-do.md` from the repository root. Add newly requested game tasks there, and remove completed items in the same change that finishes them.
+
 ## Architecture
 
 - Keep substantial scene object creation, runtime interaction, worksheet playback, laptop UI, phone, clock, map, audio, and pipeline behavior in dedicated modules.
