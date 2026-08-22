@@ -16,7 +16,7 @@ export type GameLesson = {
   title: string;
   subtitle: string;
   status: "unlocked" | "locked";
-  kind: "pdf_placeholder" | "future_dynamic";
+  kind: "built_in_template" | "future_dynamic";
   pdfUrl?: string;
   orbAssetId: "lesson-orb" | "locked-orb";
   logSummary: PublicGameLogStageSummary[];
@@ -56,18 +56,18 @@ const volumeLogs: PublicGameLogStageSummary[] = [
     outputs: "User-scoped progress rows protected by the API and RLS."
   },
   {
-    id: "pdf_placeholder",
-    label: "PDF_PLACEHOLDER",
+    id: "built_in_template",
+    label: "BUILT_IN_TEMPLATE",
     status: "ready",
-    summary: "Displays the provided worksheet PDF as the playable lesson placeholder.",
-    inputs: "Public copied PDF from the task lesson file.",
-    outputs: "Embedded worksheet with fallback open-PDF control."
+    summary: "Renders the predefined Lesson 1 worksheet from structured section templates.",
+    inputs: "Built-in lesson content, answer keys, and reusable worksheet layouts.",
+    outputs: "Interactive Do Now, Vocabulary, and Guided Example paper sections."
   },
   {
     id: "future_pipeline_locked",
     label: "FUTURE_PIPELINE_LOCKED",
     status: "locked",
-    summary: "Reserves the dynamic generated worksheet/video pipeline for a later sprint.",
+    summary: "Reserves generated authoring and additional built-in lessons for later work.",
     inputs: "Locked orb interaction only.",
     outputs: "Coming-soon message; no provider or generation request."
   }
@@ -78,9 +78,9 @@ export const GAME_LESSONS: GameLesson[] = [
     id: "volume-cubes-lesson-1",
     slug: "volume-cubes",
     title: "Volume with Whole-Number Cubes",
-    subtitle: "Playable PDF placeholder",
+    subtitle: "Built-in worksheet lesson",
     status: "unlocked",
-    kind: "pdf_placeholder",
+    kind: "built_in_template",
     pdfUrl: "/game/lessons/volume-cubes/task-lesson.pdf",
     orbAssetId: "lesson-orb",
     logSummary: volumeLogs

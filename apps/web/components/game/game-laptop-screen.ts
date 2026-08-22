@@ -414,7 +414,7 @@ function renderLaptopPipeline({
         : "Click Lesson 1 on the paper to create the signed-in worksheet run."
     }</div>
     <div style="display:inline-flex;margin-top:10px;border:1px solid rgba(52,211,153,.24);background:rgba(6,78,59,.22);border-radius:8px;padding:7px 10px;color:rgba(209,250,229,.82);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase">Voice / ${GAME_LESSON_DEFAULT_INSTRUCTOR_LABEL}</div>
-    <a href="/game/lessons/volume-cubes/task-lesson.pdf" target="_blank" rel="noreferrer" style="display:inline-flex;margin-top:10px;border:1px solid rgba(103,232,249,.32);background:rgba(8,47,73,.22);border-radius:8px;padding:7px 10px;color:#cffafe;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;text-decoration:none">Open template PDF</a>
+    <a href="/game/lessons/volume-cubes/task-lesson.pdf" target="_blank" rel="noreferrer" style="display:inline-flex;margin-top:10px;border:1px solid rgba(103,232,249,.32);background:rgba(8,47,73,.22);border-radius:8px;padding:7px 10px;color:#cffafe;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;text-decoration:none">Open reference PDF</a>
   `;
   const actions = document.createElement("div");
   actions.style.display = "grid";

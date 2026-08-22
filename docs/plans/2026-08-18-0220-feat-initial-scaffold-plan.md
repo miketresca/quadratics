@@ -260,7 +260,7 @@ erDiagram
 - `credit_ledger` should include an optional `idempotency_key` column with a uniqueness constraint that prevents duplicate one-time grants such as `initial_credit_grant:{user_id}`.
 - Profile creation and default credit insertion should run in one transaction or equivalent idempotent upsert flow.
 - Email addresses and stored equation history are user data. The API must not log bearer tokens, service-role keys, or raw request bodies by default.
-- Account and data deletion workflows are deferred, but `docs/auth-and-usage.md` must state that retention and deletion need a follow-up decision before production launch.
+- Account and data deletion workflows are deferred, but `docs/reference/auth-and-usage.md` must state that retention and deletion need a follow-up decision before production launch.
 
 ### UI State Contract
 
@@ -520,7 +520,7 @@ erDiagram
 - **Goal:** Create durable project context for humans and future coding agents.
 - **Requirements:** R3, R14, R29, R31
 - **Dependencies:** U1 through U10
-- **Files:** `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/domain-model.md`, `docs/video-pipeline.md`, `docs/auth-and-usage.md`, `docs/decisions/001-deterministic-math-engine.md`, `docs/decisions/002-motion-canvas-renderer.md`, `docs/decisions/003-provider-adapters.md`, `docs/decisions/004-supabase-auth.md`, `docs/decisions/005-credit-ledger.md`
+- **Files:** `README.md`, `AGENTS.md`, `docs/reference/architecture.md`, `docs/reference/domain-model.md`, `docs/reference/video-pipeline.md`, `docs/reference/auth-and-usage.md`, `docs/decisions/001-deterministic-math-engine.md`, `docs/decisions/002-motion-canvas-renderer.md`, `docs/decisions/003-provider-adapters.md`, `docs/decisions/004-supabase-auth.md`, `docs/decisions/005-credit-ledger.md`
 - **Approach:**
   1. Document the architecture flow from web auth to deterministic math to lesson data to future media.
   2. Define equation, method, lesson, teaching step, math line, instructor, generation job, and credit transaction.

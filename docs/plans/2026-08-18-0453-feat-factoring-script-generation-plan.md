@@ -246,7 +246,7 @@ It should instruct the model to:
 ### U6. Documentation Updates
 
 - **Goal:** Preserve context for future audio and animation work.
-- **Files:** `docs/domain-model.md`, `docs/video-pipeline.md`, `docs/architecture.md`, `AGENTS.md`, `README.md`
+- **Files:** `docs/reference/domain-model.md`, `docs/reference/video-pipeline.md`, `docs/reference/architecture.md`, `AGENTS.md`, `README.md`
 - **Steps:**
   1. Add `Script` and `ScriptSegment` to the domain model.
   2. Update the video pipeline to show `Lesson -> Script -> narration audio/timestamps -> Motion Canvas`.

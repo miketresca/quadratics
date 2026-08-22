@@ -135,10 +135,10 @@ The next product step is making every stage inspectable and independently rerunn
 
 - `AGENTS.md`
 - `README.md`
-- `docs/architecture.md`
-- `docs/auth-and-usage.md`
-- `docs/domain-model.md`
-- `docs/video-pipeline.md`
+- `docs/reference/architecture.md`
+- `docs/reference/auth-and-usage.md`
+- `docs/reference/domain-model.md`
+- `docs/reference/video-pipeline.md`
 - `docs/decisions/002-motion-canvas-renderer.md`
 - `docs/decisions/003-provider-adapters.md`
 - `docs/decisions/005-credit-ledger.md`
@@ -338,7 +338,7 @@ Each cue needs stable IDs, lesson/script references, a trigger phrase with occur
 
 ### Documentation Plan
 
-Update `docs/video-pipeline.md`, `docs/domain-model.md`, `docs/architecture.md`, `docs/auth-and-usage.md`, `README.md`, and a new developer fixture guide so future work remembers why artifacts, alignment, stale state, and non-avatar video semantics were introduced.
+Update `docs/reference/video-pipeline.md`, `docs/reference/domain-model.md`, `docs/reference/architecture.md`, `docs/reference/auth-and-usage.md`, `README.md`, and a new developer fixture guide so future work remembers why artifacts, alignment, stale state, and non-avatar video semantics were introduced.
 
 ---
 
@@ -436,7 +436,7 @@ Update `docs/video-pipeline.md`, `docs/domain-model.md`, `docs/architecture.md`,
 - **Goal:** Add a first-class development path for rendering a representative generation without live OpenAI or ElevenLabs calls.
 - **Requirements:** R27, R28, AE14.
 - **Dependencies:** U1, U3, U4.
-- **Files:** `fixtures/golden/x2-plus-5x-plus-6/lesson.json`, `fixtures/golden/x2-plus-5x-plus-6/script.json`, `fixtures/golden/x2-plus-5x-plus-6/speech-markup.json`, `fixtures/golden/x2-plus-5x-plus-6/narration.json`, `fixtures/golden/x2-plus-5x-plus-6/audio/README.md`, `apps/video/src/data/golden.ts`, `package.json`, `apps/video/package.json`, `docs/video-pipeline.md`, `apps/api/tests/test_golden_fixture.py`, `packages/types/tests/golden-fixture-contract.test.ts`.
+- **Files:** `fixtures/golden/x2-plus-5x-plus-6/lesson.json`, `fixtures/golden/x2-plus-5x-plus-6/script.json`, `fixtures/golden/x2-plus-5x-plus-6/speech-markup.json`, `fixtures/golden/x2-plus-5x-plus-6/narration.json`, `fixtures/golden/x2-plus-5x-plus-6/audio/README.md`, `apps/video/src/data/golden.ts`, `package.json`, `apps/video/package.json`, `docs/reference/video-pipeline.md`, `apps/api/tests/test_golden_fixture.py`, `packages/types/tests/golden-fixture-contract.test.ts`.
 - **Approach:** Commit stable JSON fixtures for equation `x^2 + 5x + 6 = 0` covering lesson, script, speech markup, provider-shaped ElevenLabs alignment, segment offsets, and placeholder media metadata. Provide root scripts for fixture validation and render-from-fixture. If a real licensed chalk/narration sample is unavailable, include documented expected local asset paths and deterministic placeholder generation in dev.
 - **Patterns to follow:** Existing fixture tests in `packages/types/tests/fixtures`; README command documentation style.
 - **Test scenarios:**
@@ -503,7 +503,7 @@ Update `docs/video-pipeline.md`, `docs/domain-model.md`, `docs/architecture.md`,
 - **Goal:** Add reusable chalk-writing visual primitives and synchronized chalk-writing sound effects mixed under narration.
 - **Requirements:** R19, R20, AE9, AE14.
 - **Dependencies:** U8.
-- **Files:** `apps/video/src/components/ChalkWrite.tsx`, `apps/video/src/actions/writeText.ts`, `apps/video/src/actions/writeMath.ts`, `apps/video/src/audio/chalkEffects.ts`, `apps/video/src/audio/narration.ts`, `apps/video/public/audio/README.md`, `apps/video/tests/chalk-write.test.ts`, `apps/video/tests/audio-cues.test.ts`, `docs/video-pipeline.md`.
+- **Files:** `apps/video/src/components/ChalkWrite.tsx`, `apps/video/src/actions/writeText.ts`, `apps/video/src/actions/writeMath.ts`, `apps/video/src/audio/chalkEffects.ts`, `apps/video/src/audio/narration.ts`, `apps/video/public/audio/README.md`, `apps/video/tests/chalk-write.test.ts`, `apps/video/tests/audio-cues.test.ts`, `docs/reference/video-pipeline.md`.
 - **Approach:** Implement a reusable progressive reveal primitive for text/math and an audio cue layer for chalk writes. Use render-input SFX spans from the resolved timeline. Keep chalk SFX asset use license-safe: include only safe assets or document local asset placement. Narration remains the primary audio track and SFX volume defaults must sit underneath it.
 - **Patterns to follow:** Board style tokens in `apps/video/src/styles/board.ts`; Motion Canvas docs for media/audio and FFmpeg export.
 - **Test scenarios:**
@@ -575,9 +575,9 @@ Update `docs/video-pipeline.md`, `docs/domain-model.md`, `docs/architecture.md`,
 - **Goal:** Document the new pipeline and remove deprecated transient artifacts/functions that conflict with the persisted architecture once migration is complete.
 - **Requirements:** R27, R28, R34, R37, R38, R39, R40.
 - **Dependencies:** U1-U12.
-- **Files:** `docs/video-pipeline.md`, `docs/domain-model.md`, `docs/architecture.md`, `docs/auth-and-usage.md`, `README.md`, `AGENTS.md`, `apps/api/app/api/routes/equations.py`, `apps/web/components/lesson-result.tsx`, `apps/web/lib/narration.ts`, `apps/video/src/data/sample-step.ts`, `docs/solutions/developer-experience/manual-provider-pipeline-controls.md`.
+- **Files:** `docs/reference/video-pipeline.md`, `docs/reference/domain-model.md`, `docs/reference/architecture.md`, `docs/reference/auth-and-usage.md`, `README.md`, `AGENTS.md`, `apps/api/app/api/routes/equations.py`, `apps/web/components/lesson-result.tsx`, `apps/web/lib/narration.ts`, `apps/video/src/data/sample-step.ts`, `docs/solutions/developer-experience/manual-provider-pipeline-controls.md`.
 - **Approach:** Update docs to explain the artifact graph, stage lifecycle, stale semantics, cache/force behavior, private storage paths, golden fixture commands, Motion Canvas renderer contract, chalk SFX asset expectations, and output-mode semantics. Remove or deprecate base64-first payloads, sample-only video data, and any client-only merge helpers made obsolete by server-side artifacts, but only after compatibility paths and tests prove they are unused.
-- **Patterns to follow:** Current concise docs style in `README.md`, `docs/video-pipeline.md`, and ADRs.
+- **Patterns to follow:** Current concise docs style in `README.md`, `docs/reference/video-pipeline.md`, and ADRs.
 - **Test scenarios:**
   - Docs name the exact no-provider fixture workflow.
   - Docs state that "Audio only" skips avatar only.

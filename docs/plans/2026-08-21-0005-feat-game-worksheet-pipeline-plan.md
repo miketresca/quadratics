@@ -170,7 +170,7 @@ The task asks for a 2-5 minute instructional video that teaches "Volume with Who
 
 - `misc/task/task_document.pdf` - task requirements and evaluation framing.
 - `misc/task/task_lesson.pdf` - Lesson 1 worksheet content and page structure.
-- `README.md`, `docs/architecture.md`, `docs/video-pipeline.md`, `docs/auth-and-usage.md` - current product and architecture constraints.
+- `README.md`, `docs/reference/architecture.md`, `docs/reference/video-pipeline.md`, `docs/reference/auth-and-usage.md` - current product and architecture constraints.
 - `apps/api/app/api/routes/generations.py`, `apps/api/app/services/artifacts`, `apps/api/app/services/usage/costs.py`, `apps/api/app/api/routes/instructors.py` - existing patterns for authenticated artifact stages, usage events, and instructor voices.
 - `apps/web/components/game/game-shell.tsx` - current `/game` room, focus, laptop, music, timer, and interaction surface.
 - `assets/alarm_sound.wav`, `assets/mobile-phone-vibration.mp3` - user-provided game audio assets.
@@ -367,7 +367,7 @@ Build the backend contracts before the high-polish playback. The important depen
   3. Include deterministic answer data for every fillable item visible in pages 1-2.
   4. Include section summaries and LLM context strings that describe each region without letting the LLM infer geometry.
   5. Add test fixtures that assert every region is within page bounds, has a stable ID, belongs to a section, and has a valid role.
-- **Patterns to follow:** Existing deterministic math-source discipline in `docs/video-pipeline.md` and existing schema tests in `apps/api/tests`.
+- **Patterns to follow:** Existing deterministic math-source discipline in `docs/reference/video-pipeline.md` and existing schema tests in `apps/api/tests`.
 - **Test scenarios:**
   - The template exposes exactly two pages for Lesson 1.
   - All regions have normalized coordinates between 0 and 1 and positive width and height.
@@ -642,10 +642,10 @@ Build the backend contracts before the high-polish playback. The important depen
 - **Dependencies:** U1-U11.
 - **Files:**
   - `README.md`
-  - `docs/architecture.md`
-  - `docs/domain-model.md`
-  - `docs/auth-and-usage.md`
-  - `docs/video-pipeline.md`
+  - `docs/reference/architecture.md`
+  - `docs/reference/domain-model.md`
+  - `docs/reference/auth-and-usage.md`
+  - `docs/reference/video-pipeline.md`
   - `apps/web/AGENTS.md`
   - `apps/web/tests/e2e/game-lesson-pipeline.spec.ts`
   - `apps/web/tests/e2e/game-visual-regression.spec.ts`

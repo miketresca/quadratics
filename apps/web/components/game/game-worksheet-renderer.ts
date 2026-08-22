@@ -58,21 +58,21 @@ const DO_NOW_LAYOUT = {
     },
     equation: {
       label: {x: 244, y: 674},
-      line: {height: 24, width: 250, x: 354, y: 650}
+      line: {height: 42, width: 250, x: 354, y: 632}
     },
     total: {
       label: {x: 244, y: 734},
-      line: {height: 24, width: 54, x: 338, y: 710},
+      line: {height: 42, width: 54, x: 338, y: 692},
       suffix: {x: 406, y: 734}
     }
   },
   problem2: {
     facts: [
-      {id: "fill_do_now_fact_3x4", label: "3 x 4 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 836}},
-      {id: "fill_do_now_fact_4x2", label: "4 x 2 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 886}},
-      {id: "fill_do_now_fact_2x5", label: "2 x 5 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 936}},
-      {id: "fill_do_now_fact_5x6", label: "5 x 6 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 986}},
-      {id: "fill_do_now_fact_4x7", label: "4 x 7 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 1036}}
+      {id: "fill_do_now_fact_3x4", label: "3 x 4 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 860}},
+      {id: "fill_do_now_fact_4x2", label: "4 x 2 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 910}},
+      {id: "fill_do_now_fact_2x5", label: "2 x 5 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 960}},
+      {id: "fill_do_now_fact_5x6", label: "5 x 6 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 1010}},
+      {id: "fill_do_now_fact_4x7", label: "4 x 7 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 1060}}
     ],
     number: {x: 188, y: 812},
     title: {x: 230, y: 812}
@@ -80,7 +80,7 @@ const DO_NOW_LAYOUT = {
   problem3: {
     area: {
       label: {x: 244, y: 1320},
-      line: {height: 26, width: 62, x: 330, y: 1294},
+      line: {height: 44, width: 62, x: 330, y: 1276},
       suffix: {x: 410, y: 1320}
     },
     grid: {columns: 5, rows: 2, size: 34, x: 244, y: 1206},
@@ -89,20 +89,153 @@ const DO_NOW_LAYOUT = {
     title: {x: 230, y: 1142}
   }
 } as const;
+const GUIDED_EXAMPLE_LAYOUT = {
+  columns: {
+    cubesPerLayer: {label: "Cubes per layer", x: 454, width: 148},
+    layers: {label: "Number of layers", x: 674, width: 158},
+    shape: {label: "Shape", x: 166, width: 236},
+    volume: {label: "Volume (cubic units)", x: 888, width: 172}
+  },
+  headerY: 530,
+  rowHeight: 178,
+  rowStartY: 574,
+  rows: [
+    {
+      cubes: {count: 6, layers: 1, x: 248, y: 624},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 621},
+        layers: {height: 42, width: 92, x: 703, y: 621},
+        volume: {height: 42, width: 108, x: 904, y: 621}
+      }
+    },
+    {
+      cubes: {count: 4, layers: 3, x: 226, y: 818},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 799},
+        layers: {height: 42, width: 92, x: 703, y: 799},
+        volume: {height: 42, width: 108, x: 904, y: 799}
+      }
+    },
+    {
+      cubes: {count: 6, layers: 2, x: 236, y: 982},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 977},
+        layers: {height: 42, width: 92, x: 703, y: 977},
+        volume: {height: 42, width: 108, x: 904, y: 977}
+      }
+    },
+    {
+      cubes: {count: 10, layers: 2, x: 236, y: 1146},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 1155},
+        layers: {height: 42, width: 92, x: 703, y: 1155},
+        volume: {height: 42, width: 108, x: 904, y: 1155}
+      }
+    }
+  ],
+  table: {height: 790, width: 894, x: 166, y: 474}
+} as const;
 const CUSTOM_FILL_TARGET_RECTS: Record<string, WorksheetRect> = {
-  fill_guided_row_1_layer: {height: 48, width: 128, x: 504, y: 592},
-  fill_guided_row_1_layers: {height: 48, width: 128, x: 690, y: 592},
-  fill_guided_row_1_volume: {height: 48, width: 150, x: 870, y: 592},
-  fill_guided_row_2_layer: {height: 48, width: 128, x: 504, y: 746},
-  fill_guided_row_2_layers: {height: 48, width: 128, x: 690, y: 746},
-  fill_guided_row_2_volume: {height: 48, width: 150, x: 870, y: 746},
-  fill_guided_row_3_layer: {height: 48, width: 128, x: 504, y: 900},
-  fill_guided_row_3_layers: {height: 48, width: 128, x: 690, y: 900},
-  fill_guided_row_3_volume: {height: 48, width: 150, x: 870, y: 900},
-  fill_guided_row_4_layer: {height: 48, width: 128, x: 504, y: 1054},
-  fill_guided_row_4_layers: {height: 48, width: 128, x: 690, y: 1054},
-  fill_guided_row_4_volume: {height: 48, width: 150, x: 870, y: 1054}
+  fill_guided_row_1_layer: GUIDED_EXAMPLE_LAYOUT.rows[0].inputs.cubesPerLayer,
+  fill_guided_row_1_layers: GUIDED_EXAMPLE_LAYOUT.rows[0].inputs.layers,
+  fill_guided_row_1_volume: GUIDED_EXAMPLE_LAYOUT.rows[0].inputs.volume,
+  fill_guided_row_2_layer: GUIDED_EXAMPLE_LAYOUT.rows[1].inputs.cubesPerLayer,
+  fill_guided_row_2_layers: GUIDED_EXAMPLE_LAYOUT.rows[1].inputs.layers,
+  fill_guided_row_2_volume: GUIDED_EXAMPLE_LAYOUT.rows[1].inputs.volume,
+  fill_guided_row_3_layer: GUIDED_EXAMPLE_LAYOUT.rows[2].inputs.cubesPerLayer,
+  fill_guided_row_3_layers: GUIDED_EXAMPLE_LAYOUT.rows[2].inputs.layers,
+  fill_guided_row_3_volume: GUIDED_EXAMPLE_LAYOUT.rows[2].inputs.volume,
+  fill_guided_row_4_layer: GUIDED_EXAMPLE_LAYOUT.rows[3].inputs.cubesPerLayer,
+  fill_guided_row_4_layers: GUIDED_EXAMPLE_LAYOUT.rows[3].inputs.layers,
+  fill_guided_row_4_volume: GUIDED_EXAMPLE_LAYOUT.rows[3].inputs.volume
 };
+const LESSON_ONE_DO_NOW_TARGETS: Array<Omit<WorksheetFillTarget, "rect">> = [
+  {
+    expectedText: "3 x 4 = 12",
+    id: "fill_do_now_array_equation",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_count_layers",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "12",
+    id: "fill_do_now_array_total",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_count_layers",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "12",
+    id: "fill_do_now_fact_3x4",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "8",
+    id: "fill_do_now_fact_4x2",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "10",
+    id: "fill_do_now_fact_2x5",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "30",
+    id: "fill_do_now_fact_5x6",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "28",
+    id: "fill_do_now_fact_4x7",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "10",
+    id: "fill_do_now_area",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_meaning",
+    sectionId: "do_now"
+  }
+];
+const LESSON_ONE_GUIDED_TARGETS: Array<Omit<WorksheetFillTarget, "rect">> = [
+  ["fill_guided_row_1_layer", "6"],
+  ["fill_guided_row_1_layers", "1"],
+  ["fill_guided_row_1_volume", "6"],
+  ["fill_guided_row_2_layer", "4"],
+  ["fill_guided_row_2_layers", "3"],
+  ["fill_guided_row_2_volume", "12"],
+  ["fill_guided_row_3_layer", "6"],
+  ["fill_guided_row_3_layers", "2"],
+  ["fill_guided_row_3_volume", "12"],
+  ["fill_guided_row_4_layer", "10"],
+  ["fill_guided_row_4_layers", "2"],
+  ["fill_guided_row_4_volume", "20"]
+].map(([id, expectedText]) => ({
+  expectedText,
+  id,
+  inputMode: "student_text",
+  pageId: "page_1",
+  questionId: "guided_volume_table",
+  sectionId: "guided_practice"
+}));
 
 export function createWorksheetTexture(
   THREE: typeof import("three"),
@@ -234,7 +367,6 @@ function drawGeneratedWorksheet(
   const sections = worksheetSectionsForRun(run);
   const fillTargets = worksheetFillTargetsForRun(run);
   const complete = artifactForStage(run, "interactive_bundle")?.status === "completed";
-  const completedSections = new Set(playback.completedSectionIds);
   const allSectionsComplete = areAllWorksheetSectionsComplete(run, playback);
 
   const status = artifactForStage(run, "interactive_bundle")?.status ?? "waiting";
@@ -247,15 +379,17 @@ function drawGeneratedWorksheet(
     if (!rect) {
       continue;
     }
-    const completed = completedSections.has(section.id);
+    const answerStatus = worksheetSectionAnswerStatus(run, playback, section.id);
+    const completed = answerStatus === "complete";
+    const incorrect = answerStatus === "incorrect";
     const selected = activeSection?.id === section.id;
-    context.fillStyle = selected ? "#ecfdf5" : completed ? "#f0fdf4" : "#fffdf8";
-    context.strokeStyle = selected ? "#0f766e" : completed ? "#2f9d65" : "#d8c9ad";
-    context.lineWidth = selected || completed ? 5 : 2;
+    context.fillStyle = incorrect ? "#fef2f2" : selected ? "#ecfdf5" : completed ? "#f0fdf4" : "#fffdf8";
+    context.strokeStyle = incorrect ? "#dc2626" : selected ? "#0f766e" : completed ? "#2f9d65" : "#d8c9ad";
+    context.lineWidth = selected || completed || incorrect ? 5 : 2;
     roundRect(context, rect.x, rect.y, rect.width, rect.height, 12);
     context.fill();
     context.stroke();
-    context.fillStyle = selected ? "#064e3b" : completed ? "#166534" : "#334155";
+    context.fillStyle = incorrect ? "#991b1b" : selected ? "#064e3b" : completed ? "#166534" : "#334155";
     context.font = "900 22px ui-rounded, system-ui, sans-serif";
     context.fillText(sectionTitleForDisplay(section), rect.x + 22, rect.y + 36);
     context.fillStyle = "#64748b";
@@ -268,6 +402,15 @@ function drawGeneratedWorksheet(
       context.moveTo(rect.x + rect.width - 42, rect.y + 30);
       context.lineTo(rect.x + rect.width - 27, rect.y + 46);
       context.lineTo(rect.x + rect.width - 10, rect.y + 20);
+      context.stroke();
+    } else if (incorrect) {
+      context.strokeStyle = "#dc2626";
+      context.lineWidth = 6;
+      context.beginPath();
+      context.moveTo(rect.x + rect.width - 42, rect.y + 22);
+      context.lineTo(rect.x + rect.width - 14, rect.y + 50);
+      context.moveTo(rect.x + rect.width - 14, rect.y + 22);
+      context.lineTo(rect.x + rect.width - 42, rect.y + 50);
       context.stroke();
     }
   }
@@ -287,7 +430,7 @@ function drawGeneratedWorksheet(
     if (readOnly) {
       continue;
     }
-    if (target.sectionId === "do_now") {
+    if (target.sectionId === "do_now" || target.sectionId === "guided_practice") {
       drawWorksheetLineInput(context, box, answerText, activeInput, result);
       continue;
     }
@@ -308,16 +451,16 @@ function drawGeneratedWorksheet(
     }
   }
 
-  const readyToCheck = complete && isWorksheetReadyToSubmit(run, playback);
-  const allAnswersCorrect = readyToCheck && areWorksheetAnswersCorrect(run, playback);
-  if (complete && !playback.submittedAt) {
-    context.fillStyle = readyToCheck ? "#e0f2fe" : "#f8fafc";
-    context.strokeStyle = readyToCheck ? "#0284c7" : "#cbd5e1";
+  const doNowCheckable = complete && activeSection?.id === "do_now";
+  const allAnswersCorrect = areWorksheetAnswersCorrect(run, playback);
+  if (doNowCheckable) {
+    context.fillStyle = "#e0f2fe";
+    context.strokeStyle = "#0284c7";
     context.lineWidth = 4;
     roundRect(context, WORKSHEET_COMPLETE_RECT.x, WORKSHEET_COMPLETE_RECT.y, WORKSHEET_COMPLETE_RECT.width, WORKSHEET_COMPLETE_RECT.height, 18);
     context.fill();
     context.stroke();
-    context.fillStyle = readyToCheck ? "#075985" : "#64748b";
+    context.fillStyle = "#075985";
     context.font = "900 23px ui-monospace, SFMono-Regular, Menlo, monospace";
     context.fillText("CHECK ANSWERS", WORKSHEET_COMPLETE_RECT.x + 44, WORKSHEET_COMPLETE_RECT.y + 46);
   } else if (complete && allSectionsComplete && allAnswersCorrect) {
@@ -453,53 +596,66 @@ function drawVocabularySection(context: CanvasRenderingContext2D) {
   drawVocabularyCard(
     context,
     168,
-    390,
+    500,
     "Volume",
     "The amount of space a solid figure takes up, measured in cubic units.",
     "A box packed with 12 one-inch cubes has a volume of 12 cubic units."
   );
-  drawStackedCubes(context, 810, 426, 6, 2);
+  drawFlatCubeArray(context, 776, 552, 4, 3, 44);
   drawVocabularyCard(
     context,
     168,
-    720,
+    854,
     "Unit Cube",
     "A cube that is 1 unit long, 1 unit wide, and 1 unit tall.",
     "Unit cubes are the building blocks we count to measure volume."
   );
-  drawSingleCube(context, 850, 768, 118);
+  drawSingleCube(context, 850, 906, 118);
 }
 
 function drawGuidedPracticeSection(context: CanvasRenderingContext2D) {
   drawSectionTitle(context, "Guided Example", "Use one clear rule: cubes in a layer times number of layers.");
-  const tableX = 166;
-  const tableY = 450;
-  const rowHeight = 154;
-  const columns = [tableX, 430, 660, 846, 1060];
-  context.fillStyle = "#e0f2fe";
-  context.strokeStyle = "#93c5fd";
-  context.lineWidth = 3;
-  roundRect(context, tableX, tableY, 894, rowHeight * 4 + 72, 18);
+  const {columns, headerY, rowHeight, rowStartY, rows, table} = GUIDED_EXAMPLE_LAYOUT;
+  context.fillStyle = "rgba(255, 250, 240, 0.38)";
+  context.strokeStyle = "#d8c9ad";
+  context.lineWidth = 2.5;
+  roundRect(context, table.x, table.y, table.width, table.height, 16);
   context.fill();
   context.stroke();
-  context.fillStyle = "#0f172a";
+
+  context.fillStyle = "#24313f";
   context.font = "900 18px ui-rounded, system-ui, sans-serif";
-  context.fillText("Shape", columns[0] + 22, tableY + 44);
-  context.fillText("Cubes / layer", columns[1] + 28, tableY + 44);
-  context.fillText("Layers", columns[2] + 40, tableY + 44);
-  context.fillText("Volume", columns[3] + 54, tableY + 44);
-  for (let row = 0; row < 4; row += 1) {
-    const y = tableY + 72 + row * rowHeight;
-    context.strokeStyle = "#bfdbfe";
+  drawCenteredText(context, columns.shape.label, columns.shape.x + columns.shape.width / 2, headerY);
+  drawCenteredText(context, columns.cubesPerLayer.label, columns.cubesPerLayer.x + columns.cubesPerLayer.width / 2, headerY);
+  drawCenteredText(context, columns.layers.label, columns.layers.x + columns.layers.width / 2, headerY);
+  drawCenteredWrappedText(context, columns.volume.label, columns.volume.x + columns.volume.width / 2, headerY - 12, columns.volume.width, 21, 2);
+
+  context.strokeStyle = "#d8c9ad";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(table.x, rowStartY);
+  context.lineTo(table.x + table.width, rowStartY);
+  context.stroke();
+  for (let index = 1; index < rows.length; index += 1) {
+    const y = rowStartY + index * rowHeight;
+    context.strokeStyle = "#e1d5c2";
     context.lineWidth = 2;
     context.beginPath();
-    context.moveTo(tableX, y);
-    context.lineTo(tableX + 894, y);
+    context.moveTo(table.x, y);
+    context.lineTo(table.x + table.width, y);
     context.stroke();
-    drawStackedCubes(context, columns[0] + 40, y + 28, row === 1 ? 4 : row === 3 ? 10 : 6, row === 0 ? 1 : 2);
-    context.fillStyle = "#475569";
-    context.font = "800 19px ui-rounded, system-ui, sans-serif";
-    context.fillText(row === 0 ? "one layer" : row === 1 ? "3 layers" : row === 2 ? "2 layers" : "2 long layers", columns[0] + 118, y + 78);
+  }
+  for (const column of [columns.cubesPerLayer, columns.layers, columns.volume]) {
+    context.strokeStyle = "#eadfcb";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(column.x - 32, table.y);
+    context.lineTo(column.x - 32, table.y + table.height);
+    context.stroke();
+  }
+
+  for (const row of rows) {
+    drawStackedCubes(context, row.cubes.x, row.cubes.y, row.cubes.count, row.cubes.layers);
   }
 }
 
@@ -510,6 +666,34 @@ function drawSectionTitle(context: CanvasRenderingContext2D, title: string, subt
   context.fillStyle = "#64748b";
   context.font = "21px ui-rounded, system-ui, sans-serif";
   context.fillText(subtitle, SECTION_VIEWPORT_RECT.x + 46, SECTION_VIEWPORT_RECT.y + 102);
+}
+
+function drawCenteredText(context: CanvasRenderingContext2D, text: string, centerX: number, y: number) {
+  context.fillText(text, centerX - context.measureText(text).width / 2, y);
+}
+
+function drawCenteredWrappedText(context: CanvasRenderingContext2D, text: string, centerX: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
+  const words = text.split(" ");
+  let line = "";
+  let currentY = y;
+  let lineCount = 0;
+  for (const word of words) {
+    const nextLine = line ? `${line} ${word}` : word;
+    if (line && context.measureText(nextLine).width > maxWidth) {
+      drawCenteredText(context, line, centerX, currentY);
+      currentY += lineHeight;
+      line = word;
+      lineCount += 1;
+      if (lineCount >= maxLines - 1) {
+        break;
+      }
+    } else {
+      line = nextLine;
+    }
+  }
+  if (line && lineCount < maxLines) {
+    drawCenteredText(context, line, centerX, currentY);
+  }
 }
 
 function drawPromptNumber(context: CanvasRenderingContext2D, value: number, x: number, y: number) {
@@ -567,6 +751,59 @@ function drawGrid(context: CanvasRenderingContext2D, x: number, y: number, colum
       context.strokeRect(x + column * size, y + row * size, size, size);
     }
   }
+}
+
+function drawFlatCubeArray(context: CanvasRenderingContext2D, x: number, y: number, columns: number, rows: number, size: number) {
+  const halfWidth = size * 0.5;
+  const halfHeight = size * 0.3;
+  const depth = size * 0.48;
+
+  context.strokeStyle = "#334155";
+  context.lineWidth = 2.2;
+  for (let row = rows - 1; row >= 0; row -= 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const centerX = x + (column - row) * halfWidth;
+      const centerY = y + (column + row) * halfHeight;
+      const bottom = {x: centerX, y: centerY + halfHeight};
+      if (row === rows - 1) {
+        context.fillStyle = "#ded6c6";
+        drawPolygon(context, [bottom, {x: bottom.x + halfWidth, y: bottom.y - halfHeight}, {x: bottom.x + halfWidth, y: bottom.y + depth - halfHeight}, {x: bottom.x, y: bottom.y + depth}]);
+        context.fill();
+        context.stroke();
+      }
+      if (column === 0) {
+        context.fillStyle = "#efe7d8";
+        drawPolygon(context, [bottom, {x: bottom.x - halfWidth, y: bottom.y - halfHeight}, {x: bottom.x - halfWidth, y: bottom.y + depth - halfHeight}, {x: bottom.x, y: bottom.y + depth}]);
+        context.fill();
+        context.stroke();
+      }
+    }
+  }
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const centerX = x + (column - row) * halfWidth;
+      const centerY = y + (column + row) * halfHeight;
+      context.fillStyle = "#f8fafc";
+      drawPolygon(context, [
+        {x: centerX, y: centerY - halfHeight},
+        {x: centerX + halfWidth, y: centerY},
+        {x: centerX, y: centerY + halfHeight},
+        {x: centerX - halfWidth, y: centerY}
+      ]);
+      context.fill();
+      context.stroke();
+    }
+  }
+}
+
+function drawPolygon(context: CanvasRenderingContext2D, points: Array<{x: number; y: number}>) {
+  context.beginPath();
+  context.moveTo(points[0].x, points[0].y);
+  for (const point of points.slice(1)) {
+    context.lineTo(point.x, point.y);
+  }
+  context.closePath();
 }
 
 function drawVocabularyCard(context: CanvasRenderingContext2D, x: number, y: number, title: string, definition: string, example: string) {
@@ -688,7 +925,13 @@ function worksheetSectionsForRun(run: GameWorksheetRunSnapshot): WorksheetSectio
 function worksheetFillTargetsForRun(run: GameWorksheetRunSnapshot): WorksheetFillTarget[] {
   const bundle = interactiveBundleForRun(run);
   const template = templatePayloadForRun(run);
-  return bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
+  const sourceTargets = bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
+  if (run.templateId !== GAME_LESSON_TEMPLATE_ID) {
+    return sourceTargets;
+  }
+  const doNowTargets = lessonOneDoNowFillTargets();
+  const guidedTargets = lessonOneGuidedFillTargets();
+  return [...doNowTargets, ...guidedTargets, ...sourceTargets.filter((target) => target.sectionId !== "do_now" && target.sectionId !== "guided_practice")];
 }
 
 export function worksheetNarrationForSection(run: GameWorksheetRunSnapshot, sectionId: string): WorksheetNarrationSection | null {
@@ -775,12 +1018,26 @@ export function worksheetPenPointForActiveInput(run: GameWorksheetRunSnapshot, p
   };
 }
 
+export function nextWorksheetFillTargetId(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  const activeFillTargetId = playback.activeFillTargetId;
+  if (!activeFillTargetId) {
+    return null;
+  }
+  const activeSection = activeWorksheetSection(worksheetSectionsForRun(run), playback);
+  const editableTargets = worksheetFillTargetsForRun(run).filter((target) => !isReadOnlyTarget(target) && (!activeSection || target.sectionId === activeSection.id));
+  const activeIndex = editableTargets.findIndex((target) => target.id === activeFillTargetId);
+  return activeIndex >= 0 ? editableTargets[activeIndex + 1]?.id ?? null : null;
+}
+
 export function nextWorksheetAnswerForKey(targetId: string, currentAnswer: string, key: string) {
   const nextAnswer = `${currentAnswer}${key}`;
   if (targetId === "fill_do_now_array_equation") {
     return /^[0-9*xX= ]$/.test(key) ? nextAnswer.slice(0, 12) : currentAnswer;
   }
   if (targetId.startsWith("fill_do_now_")) {
+    return /^[0-9]$/.test(key) ? nextAnswer.slice(0, 2) : currentAnswer;
+  }
+  if (targetId.startsWith("fill_guided_")) {
     return /^[0-9]$/.test(key) ? nextAnswer.slice(0, 2) : currentAnswer;
   }
   return nextAnswer.slice(0, 96);
@@ -793,21 +1050,29 @@ function worksheetDisplayAnswer(targetId: string, answer: string) {
   if (targetId.startsWith("fill_do_now_")) {
     return answer.replaceAll(/[^0-9]/g, "").slice(0, 2);
   }
+  if (targetId.startsWith("fill_guided_")) {
+    return answer.replaceAll(/[^0-9]/g, "").slice(0, 2);
+  }
   return answer;
 }
 
 export function checkWorksheetAnswers(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
   return Object.fromEntries(
-    worksheetEditableTargetsForRun(run).map((target) => {
+    worksheetEditableTargetsForRun(run).flatMap((target) => {
       const answer = playback.answers[target.id] ?? "";
+      if (answer.trim().length === 0) {
+        return [];
+      }
       const correct = isAnswerCorrect(answer, target);
       return [
-        target.id,
-        {
-          correct,
-          expectedText: target.expectedText ?? null,
-          explanation: correct ? null : explanationForTarget(target)
-        }
+        [
+          target.id,
+          {
+            correct,
+            expectedText: target.expectedText ?? null,
+            explanation: correct ? null : explanationForTarget(target)
+          }
+        ]
       ];
     })
   );
@@ -820,11 +1085,28 @@ export function isWorksheetReadyToSubmit(run: GameWorksheetRunSnapshot, playback
 
 export function areWorksheetAnswersCorrect(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
   const targets = worksheetEditableTargetsForRun(run);
-  return targets.length > 0 && targets.every((target) => playback.answerResults[target.id]?.correct === true);
+  return targets.length > 0 && targets.every((target) => (playback.answers[target.id] ?? "").trim().length > 0 && playback.answerResults[target.id]?.correct === true);
 }
 
 function worksheetEditableTargetsForRun(run: GameWorksheetRunSnapshot) {
   return worksheetFillTargetsForRun(run).filter((target) => !isReadOnlyTarget(target));
+}
+
+export function isWorksheetSectionCorrect(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, sectionId: string) {
+  const targets = worksheetEditableTargetsForRun(run).filter((target) => target.sectionId === sectionId);
+  return targets.length > 0 && targets.every((target) => (playback.answers[target.id] ?? "").trim().length > 0 && playback.answerResults[target.id]?.correct === true);
+}
+
+export function worksheetSectionAnswerStatus(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState, sectionId: string) {
+  const targets = worksheetEditableTargetsForRun(run).filter((target) => target.sectionId === sectionId);
+  if (targets.length === 0 || !playback.submittedAt) {
+    return "blank";
+  }
+  const filledTargets = targets.filter((target) => (playback.answers[target.id] ?? "").trim().length > 0);
+  if (filledTargets.some((target) => playback.answerResults[target.id]?.correct === false)) {
+    return "incorrect";
+  }
+  return isWorksheetSectionCorrect(run, playback, sectionId) ? "complete" : "blank";
 }
 
 function isReadOnlyTarget(target: WorksheetFillTarget) {
@@ -877,6 +1159,20 @@ function doNowFillTargetRect(targetId: string): WorksheetRect | null {
   return fact?.line ?? null;
 }
 
+function lessonOneDoNowFillTargets(): WorksheetFillTarget[] {
+  return LESSON_ONE_DO_NOW_TARGETS.map((target) => ({
+    ...target,
+    rect: doNowFillTargetRect(target.id) ?? {height: 0, width: 0, x: 0, y: 0}
+  }));
+}
+
+function lessonOneGuidedFillTargets(): WorksheetFillTarget[] {
+  return LESSON_ONE_GUIDED_TARGETS.map((target) => ({
+    ...target,
+    rect: CUSTOM_FILL_TARGET_RECTS[target.id] ?? {height: 0, width: 0, x: 0, y: 0}
+  }));
+}
+
 function isAnswerCorrect(answer: string, target: WorksheetFillTarget) {
   const normalizedAnswer = normalizeAnswer(answer);
   const normalizedExpected = normalizeAnswer(target.expectedText ?? "");
@@ -907,6 +1203,7 @@ function normalizeAnswer(value: string) {
   return value
     .toLowerCase()
     .replaceAll("×", "x")
+    .replaceAll("*", "x")
     .replaceAll(/[^a-z0-9]+/g, " ")
     .trim()
     .replaceAll(/\s+/g, " ");
@@ -1107,7 +1404,9 @@ export function worksheetActionAtCanvasPoint(
   if (fillTarget) {
     return {target: fillTarget, type: "fill_target"};
   }
-  if (!playback.submittedAt && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
+  const sections = worksheetSectionsForRun(run);
+  const activeSection = activeWorksheetSection(sections, playback);
+  if (activeSection?.id === "do_now" && pointInRect(x, y, WORKSHEET_COMPLETE_RECT)) {
     return {type: "submit_answers"};
   }
   if (
@@ -1117,8 +1416,6 @@ export function worksheetActionAtCanvasPoint(
   ) {
     return {type: "complete_lesson"};
   }
-  const sections = worksheetSectionsForRun(run);
-  const activeSection = activeWorksheetSection(sections, playback);
   if (activeSection && pointInRect(x, y, SECTION_AUDIO_RECT)) {
     return {section: activeSection, type: "section_audio"};
   }

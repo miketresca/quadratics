@@ -91,7 +91,8 @@ import {
   checkWorksheetAnswers,
   choiceAtCanvasPoint,
   createWorksheetTexture,
-  isWorksheetReadyToSubmit,
+  isWorksheetSectionCorrect,
+  nextWorksheetFillTargetId,
   nextWorksheetAnswerForKey,
   refreshPaperTexture,
   sectionPlaybackDurationMs,
@@ -1474,10 +1475,6 @@ export function GameShell({
               submittedAt: null
             });
           } else if (action?.type === "submit_answers") {
-            if (!isWorksheetReadyToSubmit(gameRunRef.current, worksheetPlaybackRef.current)) {
-              setLockedMessage("Fill in every answer box before checking your work.");
-              return;
-            }
             const checkedPlayback = {
               ...worksheetPlaybackRef.current,
               activeFillTargetId: null,
@@ -1485,7 +1482,11 @@ export function GameShell({
               submittedAt: Date.now()
             };
             setWorksheetPlaybackSnapshot(checkedPlayback);
-            setLockedMessage(areWorksheetAnswersCorrect(gameRunRef.current, checkedPlayback) ? "All answers are correct. Continue the lesson." : "Some answers need another look.");
+            setLockedMessage(
+              isWorksheetSectionCorrect(gameRunRef.current, checkedPlayback, "do_now")
+                ? "Do Now answers are correct."
+                : "Checked filled answers. Review any highlighted lines."
+            );
           } else if (action?.type === "section") {
             setLockedMessage(null);
             selectWorksheetSection(action.section.id);
@@ -1553,6 +1554,12 @@ export function GameShell({
             return;
           }
           if (event.key === "Enter") {
+            event.preventDefault();
+            const nextFillTargetId = gameRunRef.current ? nextWorksheetFillTargetId(gameRunRef.current, worksheetPlaybackRef.current) : null;
+            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeFillTargetId: nextFillTargetId});
+            return;
+          }
+          if (event.key === "Escape") {
             event.preventDefault();
             setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeFillTargetId: null});
             return;

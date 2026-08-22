@@ -2,7 +2,7 @@
 
 This directory owns the worksheet POV lab and 3D desktop experience. Treat `game-shell.tsx` as the orchestration boundary, not the default home for every new behavior.
 
-Before changing game behavior, check `docs/to-do.md` from the repository root. Add newly requested game tasks there, and remove completed items in the same change that finishes them.
+Before changing game behavior, check `docs/backlog/to-do.md` from the repository root. Add newly requested game tasks there, and remove completed items in the same change that finishes them.
 
 ## Architecture
 
@@ -38,6 +38,8 @@ Before changing game behavior, check `docs/to-do.md` from the repository root. A
 - For laptop changes, start in `game-laptop-panels.tsx`, `game-laptop-screen.ts`, and `game-pipeline-panel.tsx`.
 - For paper/pen/worksheet changes, start in `game-worksheet-props.ts`, `game-worksheet-renderer.ts`, and `game-runtime-storage.ts`.
 - For phone, clock, coffee, and visitor map changes, start in their matching `game-*.ts` object modules.
+- The worksheet lesson direction is three predefined built-in lessons first. Keep `Do Now`, `Vocabulary`, and `Guided Example` as reusable section templates keyed by stable semantic IDs; do not reintroduce PDF-rendered page layouts as the source of truth.
+- Plan laptop changes around future `student` and `teacher` modes. Student mode should stay lesson-support focused; teacher mode should preserve the pipeline/artifact/cost/debug controls currently on the laptop.
 
 ## Browser QA
 

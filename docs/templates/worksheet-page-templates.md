@@ -16,7 +16,7 @@ Section tabs are navigation, not playback controls. A tab click must not start n
 
 ## Data Ownership
 
-Concrete lesson content and answer keys belong in the API lesson template, not inside the renderer. For the current first lesson, that source is:
+Concrete lesson content and answer keys should belong in structured built-in lesson templates, not ad hoc canvas drawing code. For the current first lesson, the API template source is:
 
 ```text
 apps/api/app/services/game_lessons/templates/volume_cubes_lesson_1.py
@@ -30,7 +30,9 @@ The template owns stable IDs for:
 - expected answers
 - narration and handwriting action metadata
 
-The browser renderer may hard-code visual placement for a known template, but it should key those placements by stable fill target ID. That keeps evals, answer checking, progress persistence, and future generated stages tied to semantic lesson data rather than canvas coordinates.
+The browser renderer currently hard-codes visual placement for Lesson 1 while the page system is being shaped. That placement must key by stable fill target ID. Keep answer checking, progress persistence, and future evals tied to semantic lesson data rather than canvas coordinates.
+
+Do not keep expected answers duplicated in the renderer long term. If a renderer-side fallback is needed during template migration, track it as temporary and reconcile it before enabling validation for that section.
 
 ## Layout Architecture
 
@@ -79,6 +81,14 @@ Do Now input validation is per fill target. The equation line accepts only digit
 
 Do not place decorative badges, audio controls, or labels on top of worksheet content. Number markers sit in the margin beside each problem, and controls live above the content area.
 
-## Future Sections
+## Vocabulary Template
 
-Vocabulary and Guided Example should follow the same page-template approach next. They should use the structured template payload for facts and answers, then render a custom visual page suited to the 3D paper camera instead of copying PDF fonts, colors, or crops.
+Vocabulary uses the same page shell and renders term cards for the active lesson. The base template is acceptable for now, but term illustrations should move to managed image assets later so authors can upload or swap images per vocabulary term without editing renderer code.
+
+## Guided Example Template
+
+Guided Example uses a table layout with four columns: `Shape`, `Cubes per layer`, `Number of layers`, and `Volume (cubic units)`. The shape column is visual only. Every non-shape cell should expose a centered worksheet line input keyed by stable fill target ID.
+
+## Built-In Lesson Direction
+
+The first production direction is three predefined lessons. New lessons should reuse these page templates and change only lesson title/topic, section content, diagrams, fill target IDs, answer keys, and explanation metadata. Generated or teacher-authored lessons can come later after the built-in templates are stable.

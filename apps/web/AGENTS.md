@@ -8,11 +8,11 @@ The web app owns the authenticated product shell, equation input, manual pipelin
 - `components` - equation form, lesson result, pipeline logs, controls, and shared UI
 - `lib` - API client, Supabase client/server helpers, auth helpers, and view-state utilities
 - `tests` - Vitest tests for frontend behavior
-- `../../docs/to-do.md` - living backlog; update it when web/game tasks are added or completed
+- `../../docs/backlog/to-do.md` - living backlog; update it when web/game tasks are added or completed
 
 ## Product UI Rules
 
-Before implementing UI or game work, skim `docs/to-do.md` so active backlog items are not lost. Keep that file concise and remove completed items as part of the same branch that finishes them.
+Before implementing UI or game work, skim `docs/backlog/to-do.md` so active backlog items are not lost. Keep that file concise and remove completed items as part of the same branch that finishes them.
 
 Preserve the dark developer-tool aesthetic. The logs are part of the product story: they should show how the video was produced, not just whether a request succeeded.
 

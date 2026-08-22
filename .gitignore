@@ -10,6 +10,7 @@ build/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.uv-cache/
 .venv/
 *.pyc
 *.tsbuildinfo
@@ -20,8 +21,17 @@ infra/supabase/.temp/
 
 # Local demo prep artifacts
 demo_yap.m4a
-docs/local-demo-plan.md
 sound_effects/
 assets/sound_effects/
 assets/screens/
 assets/sprites/
+assets/*.gif
+assets/*.glb
+assets/*.mp3
+assets/*.mp4
+assets/*.wav
+assets/*.zip
+apps/video/vite.config.ts.timestamp-*.mjs
+apps/web/public/game/lessons/volume-cubes/pages/
+misc/progress/
+misc/task/
