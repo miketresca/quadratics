@@ -12,6 +12,7 @@ This repository builds an internal, artifact-backed video generation pipeline fo
 - [docs/video-pipeline.md](docs/video-pipeline.md) - generation stages, reruns, storage, rendering, and account-scoped reuse behavior
 - [docs/auth-and-usage.md](docs/auth-and-usage.md) - auth, ownership, provider keys, and Supabase expectations
 - [docs/to-do.md](docs/to-do.md) - living backlog for current work; update it when planning, completing, or removing tasks
+- [docs/handoffs](docs/handoffs) - resumable session notes for interrupted or long-running work
 - [docs/decisions](docs/decisions) - accepted architectural decisions
 - [docs/solutions](docs/solutions) - durable notes from solved issues
 

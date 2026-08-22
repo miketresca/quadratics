@@ -22,7 +22,7 @@ This note captures cleanup findings from the `building-lesson-1-a-z` worksheet-t
 
 5. Local artifacts should stay out of source.
 
-   The repo now ignores generated worksheet page PNGs, Motion Canvas timestamp temp files, local progress videos, local task PDFs, and loose raw assets under `assets/`. Curated runtime assets should live under intentional public paths with README context.
+   The repo now ignores generated worksheet page PNGs, Motion Canvas timestamp temp files, local progress videos, local task PDFs, and loose raw assets under `assets/`. Curated runtime assets should live under intentional public paths with README context. Resumable handoff notes are not local artifacts; keep them in `docs/handoffs/` when they are useful for future agents.
 
 ## Recommended Cleanup Sequence
 
