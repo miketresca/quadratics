@@ -8,8 +8,10 @@ This file is the living project backlog. Keep it current: add newly planned work
 
 2. Polish the Lesson 1 interactive worksheet experience. Preserve the typed answer fields and section/page progression, then tighten worksheet fidelity against the source PDF, improve pen-writing playback, and make the final completion UX feel intentional.
 
-3. Finish the phone reward and Easter egg infrastructure. Completing Lesson 1 should trigger the vibration/Rickroll reward flow, the mug egg should show progress, and Supabase should persist account-specific Easter egg state.
+3. Replace the generated Vocabulary term illustrations with managed image assets. The base Vocabulary page template is acceptable for now, but the Volume image should later render from uploaded/curated term images that can be swapped manually per vocabulary term.
 
-4. Continue `game-shell.tsx` cleanup only as needed. Keep new game behavior modular, documented, and placed in focused modules so agents do not need to load the whole scene to make small changes.
+4. Finish the phone reward and Easter egg infrastructure. Completing Lesson 1 should trigger the vibration/Rickroll reward flow, the mug egg should show progress, and Supabase should persist account-specific Easter egg state.
 
-5. Before merging future feature branches, update relevant docs, run browser QA on the root game scene, validate signed-in/provider paths, and preserve the route split: `/` is the worksheet POV lab and `/v1` is the original quadratics app.
+5. Continue `game-shell.tsx` cleanup only as needed. Keep new game behavior modular, documented, and placed in focused modules so agents do not need to load the whole scene to make small changes.
+
+6. Before merging future feature branches, update relevant docs, run browser QA on the root game scene, validate signed-in/provider paths, and preserve the route split: `/` is the worksheet POV lab and `/v1` is the original quadratics app.
