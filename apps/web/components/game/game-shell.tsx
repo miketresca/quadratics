@@ -92,6 +92,7 @@ import {
   choiceAtCanvasPoint,
   createWorksheetTexture,
   isWorksheetReadyToSubmit,
+  nextWorksheetFillTargetId,
   nextWorksheetAnswerForKey,
   refreshPaperTexture,
   sectionPlaybackDurationMs,
@@ -1553,6 +1554,12 @@ export function GameShell({
             return;
           }
           if (event.key === "Enter") {
+            event.preventDefault();
+            const nextFillTargetId = gameRunRef.current ? nextWorksheetFillTargetId(gameRunRef.current, worksheetPlaybackRef.current) : null;
+            setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeFillTargetId: nextFillTargetId});
+            return;
+          }
+          if (event.key === "Escape") {
             event.preventDefault();
             setWorksheetPlaybackSnapshot({...worksheetPlaybackRef.current, activeFillTargetId: null});
             return;

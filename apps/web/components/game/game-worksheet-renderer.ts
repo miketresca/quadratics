@@ -58,21 +58,21 @@ const DO_NOW_LAYOUT = {
     },
     equation: {
       label: {x: 244, y: 674},
-      line: {height: 24, width: 250, x: 354, y: 650}
+      line: {height: 42, width: 250, x: 354, y: 632}
     },
     total: {
       label: {x: 244, y: 734},
-      line: {height: 24, width: 54, x: 338, y: 710},
+      line: {height: 42, width: 54, x: 338, y: 692},
       suffix: {x: 406, y: 734}
     }
   },
   problem2: {
     facts: [
-      {id: "fill_do_now_fact_3x4", label: "3 x 4 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 836}},
-      {id: "fill_do_now_fact_4x2", label: "4 x 2 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 886}},
-      {id: "fill_do_now_fact_2x5", label: "2 x 5 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 936}},
-      {id: "fill_do_now_fact_5x6", label: "5 x 6 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 986}},
-      {id: "fill_do_now_fact_4x7", label: "4 x 7 =", labelX: 244, line: {height: 24, width: 44, x: 340, y: 1036}}
+      {id: "fill_do_now_fact_3x4", label: "3 x 4 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 860}},
+      {id: "fill_do_now_fact_4x2", label: "4 x 2 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 910}},
+      {id: "fill_do_now_fact_2x5", label: "2 x 5 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 960}},
+      {id: "fill_do_now_fact_5x6", label: "5 x 6 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 1010}},
+      {id: "fill_do_now_fact_4x7", label: "4 x 7 =", labelX: 244, line: {height: 42, width: 44, x: 340, y: 1060}}
     ],
     number: {x: 188, y: 812},
     title: {x: 230, y: 812}
@@ -80,7 +80,7 @@ const DO_NOW_LAYOUT = {
   problem3: {
     area: {
       label: {x: 244, y: 1320},
-      line: {height: 26, width: 62, x: 330, y: 1294},
+      line: {height: 44, width: 62, x: 330, y: 1276},
       suffix: {x: 410, y: 1320}
     },
     grid: {columns: 5, rows: 2, size: 34, x: 244, y: 1206},
@@ -103,6 +103,72 @@ const CUSTOM_FILL_TARGET_RECTS: Record<string, WorksheetRect> = {
   fill_guided_row_4_layers: {height: 48, width: 128, x: 690, y: 1054},
   fill_guided_row_4_volume: {height: 48, width: 150, x: 870, y: 1054}
 };
+const LESSON_ONE_DO_NOW_TARGETS: Array<Omit<WorksheetFillTarget, "rect">> = [
+  {
+    expectedText: "3 x 4 = 12",
+    id: "fill_do_now_array_equation",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_count_layers",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "12",
+    id: "fill_do_now_array_total",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_count_layers",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "12",
+    id: "fill_do_now_fact_3x4",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "8",
+    id: "fill_do_now_fact_4x2",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "10",
+    id: "fill_do_now_fact_2x5",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "30",
+    id: "fill_do_now_fact_5x6",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "28",
+    id: "fill_do_now_fact_4x7",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_dimensions",
+    sectionId: "do_now"
+  },
+  {
+    expectedText: "10",
+    id: "fill_do_now_area",
+    inputMode: "student_text",
+    pageId: "page_1",
+    questionId: "do_now_meaning",
+    sectionId: "do_now"
+  }
+];
 
 export function createWorksheetTexture(
   THREE: typeof import("three"),
@@ -688,7 +754,12 @@ function worksheetSectionsForRun(run: GameWorksheetRunSnapshot): WorksheetSectio
 function worksheetFillTargetsForRun(run: GameWorksheetRunSnapshot): WorksheetFillTarget[] {
   const bundle = interactiveBundleForRun(run);
   const template = templatePayloadForRun(run);
-  return bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
+  const sourceTargets = bundle?.fillTargets?.length ? bundle.fillTargets : worksheetFillTargetsFromPayload(template);
+  if (run.templateId !== GAME_LESSON_TEMPLATE_ID) {
+    return sourceTargets;
+  }
+  const doNowTargets = lessonOneDoNowFillTargets();
+  return [...doNowTargets, ...sourceTargets.filter((target) => target.sectionId !== "do_now")];
 }
 
 export function worksheetNarrationForSection(run: GameWorksheetRunSnapshot, sectionId: string): WorksheetNarrationSection | null {
@@ -773,6 +844,17 @@ export function worksheetPenPointForActiveInput(run: GameWorksheetRunSnapshot, p
     x: Math.min(box.x + box.width - 18, box.x + 18 + answer.length * characterAdvance),
     y: worksheetLineY(box) - 6
   };
+}
+
+export function nextWorksheetFillTargetId(run: GameWorksheetRunSnapshot, playback: WorksheetPlaybackState) {
+  const activeFillTargetId = playback.activeFillTargetId;
+  if (!activeFillTargetId) {
+    return null;
+  }
+  const activeSection = activeWorksheetSection(worksheetSectionsForRun(run), playback);
+  const editableTargets = worksheetFillTargetsForRun(run).filter((target) => !isReadOnlyTarget(target) && (!activeSection || target.sectionId === activeSection.id));
+  const activeIndex = editableTargets.findIndex((target) => target.id === activeFillTargetId);
+  return activeIndex >= 0 ? editableTargets[activeIndex + 1]?.id ?? null : null;
 }
 
 export function nextWorksheetAnswerForKey(targetId: string, currentAnswer: string, key: string) {
@@ -875,6 +957,13 @@ function doNowFillTargetRect(targetId: string): WorksheetRect | null {
   }
   const fact = DO_NOW_LAYOUT.problem2.facts.find((candidate) => candidate.id === targetId);
   return fact?.line ?? null;
+}
+
+function lessonOneDoNowFillTargets(): WorksheetFillTarget[] {
+  return LESSON_ONE_DO_NOW_TARGETS.map((target) => ({
+    ...target,
+    rect: doNowFillTargetRect(target.id) ?? {height: 0, width: 0, x: 0, y: 0}
+  }));
 }
 
 function isAnswerCorrect(answer: string, target: WorksheetFillTarget) {
