@@ -313,18 +313,18 @@ describe("Lesson 1 Do Now input targets", () => {
 describe("Guided Example input targets", () => {
   it("keeps each table answer line clickable", () => {
     const expectedTargets = [
-      ["fill_guided_row_1_layer", 528, 647],
-      ["fill_guided_row_1_layers", 750, 647],
-      ["fill_guided_row_1_volume", 974, 647],
-      ["fill_guided_row_2_layer", 528, 825],
-      ["fill_guided_row_2_layers", 750, 825],
-      ["fill_guided_row_2_volume", 974, 825],
-      ["fill_guided_row_3_layer", 528, 1003],
-      ["fill_guided_row_3_layers", 750, 1003],
-      ["fill_guided_row_3_volume", 974, 1003],
-      ["fill_guided_row_4_layer", 528, 1181],
-      ["fill_guided_row_4_layers", 750, 1181],
-      ["fill_guided_row_4_volume", 974, 1181]
+      ["fill_guided_row_1_layer", 532, 642],
+      ["fill_guided_row_1_layers", 749, 642],
+      ["fill_guided_row_1_volume", 958, 642],
+      ["fill_guided_row_2_layer", 532, 820],
+      ["fill_guided_row_2_layers", 749, 820],
+      ["fill_guided_row_2_volume", 958, 820],
+      ["fill_guided_row_3_layer", 532, 998],
+      ["fill_guided_row_3_layers", 749, 998],
+      ["fill_guided_row_3_volume", 958, 998],
+      ["fill_guided_row_4_layer", 532, 1176],
+      ["fill_guided_row_4_layers", 749, 1176],
+      ["fill_guided_row_4_volume", 958, 1176]
     ] as const;
 
     for (const [targetId, x, y] of expectedTargets) {

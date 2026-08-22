@@ -101,35 +101,35 @@ const GUIDED_EXAMPLE_LAYOUT = {
   rowStartY: 574,
   rows: [
     {
-      cubes: {count: 6, layers: 1, x: 206, y: 606},
+      cubes: {count: 6, layers: 1, x: 248, y: 624},
       inputs: {
-        cubesPerLayer: {height: 42, width: 92, x: 482, y: 626},
-        layers: {height: 42, width: 92, x: 704, y: 626},
-        volume: {height: 42, width: 108, x: 920, y: 626}
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 621},
+        layers: {height: 42, width: 92, x: 703, y: 621},
+        volume: {height: 42, width: 108, x: 904, y: 621}
       }
     },
     {
-      cubes: {count: 4, layers: 3, x: 206, y: 774},
+      cubes: {count: 4, layers: 3, x: 226, y: 818},
       inputs: {
-        cubesPerLayer: {height: 42, width: 92, x: 482, y: 804},
-        layers: {height: 42, width: 92, x: 704, y: 804},
-        volume: {height: 42, width: 108, x: 920, y: 804}
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 799},
+        layers: {height: 42, width: 92, x: 703, y: 799},
+        volume: {height: 42, width: 108, x: 904, y: 799}
       }
     },
     {
-      cubes: {count: 6, layers: 2, x: 206, y: 956},
+      cubes: {count: 6, layers: 2, x: 236, y: 982},
       inputs: {
-        cubesPerLayer: {height: 42, width: 92, x: 482, y: 982},
-        layers: {height: 42, width: 92, x: 704, y: 982},
-        volume: {height: 42, width: 108, x: 920, y: 982}
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 977},
+        layers: {height: 42, width: 92, x: 703, y: 977},
+        volume: {height: 42, width: 108, x: 904, y: 977}
       }
     },
     {
-      cubes: {count: 10, layers: 2, x: 206, y: 1112},
+      cubes: {count: 10, layers: 2, x: 236, y: 1146},
       inputs: {
-        cubesPerLayer: {height: 42, width: 92, x: 482, y: 1160},
-        layers: {height: 42, width: 92, x: 704, y: 1160},
-        volume: {height: 42, width: 108, x: 920, y: 1160}
+        cubesPerLayer: {height: 42, width: 92, x: 486, y: 1155},
+        layers: {height: 42, width: 92, x: 703, y: 1155},
+        volume: {height: 42, width: 108, x: 904, y: 1155}
       }
     }
   ],
@@ -604,10 +604,10 @@ function drawGuidedPracticeSection(context: CanvasRenderingContext2D) {
 
   context.fillStyle = "#24313f";
   context.font = "900 18px ui-rounded, system-ui, sans-serif";
-  context.fillText(columns.shape.label, columns.shape.x + 22, headerY);
-  context.fillText(columns.cubesPerLayer.label, columns.cubesPerLayer.x, headerY);
-  context.fillText(columns.layers.label, columns.layers.x, headerY);
-  wrapWorksheetText(context, columns.volume.label, columns.volume.x, headerY - 16, columns.volume.width, 21, 2);
+  drawCenteredText(context, columns.shape.label, columns.shape.x + columns.shape.width / 2, headerY);
+  drawCenteredText(context, columns.cubesPerLayer.label, columns.cubesPerLayer.x + columns.cubesPerLayer.width / 2, headerY);
+  drawCenteredText(context, columns.layers.label, columns.layers.x + columns.layers.width / 2, headerY);
+  drawCenteredWrappedText(context, columns.volume.label, columns.volume.x + columns.volume.width / 2, headerY - 16, columns.volume.width, 21, 2);
 
   context.strokeStyle = "#d8c9ad";
   context.lineWidth = 2;
@@ -645,6 +645,34 @@ function drawSectionTitle(context: CanvasRenderingContext2D, title: string, subt
   context.fillStyle = "#64748b";
   context.font = "21px ui-rounded, system-ui, sans-serif";
   context.fillText(subtitle, SECTION_VIEWPORT_RECT.x + 46, SECTION_VIEWPORT_RECT.y + 102);
+}
+
+function drawCenteredText(context: CanvasRenderingContext2D, text: string, centerX: number, y: number) {
+  context.fillText(text, centerX - context.measureText(text).width / 2, y);
+}
+
+function drawCenteredWrappedText(context: CanvasRenderingContext2D, text: string, centerX: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
+  const words = text.split(" ");
+  let line = "";
+  let currentY = y;
+  let lineCount = 0;
+  for (const word of words) {
+    const nextLine = line ? `${line} ${word}` : word;
+    if (line && context.measureText(nextLine).width > maxWidth) {
+      drawCenteredText(context, line, centerX, currentY);
+      currentY += lineHeight;
+      line = word;
+      lineCount += 1;
+      if (lineCount >= maxLines - 1) {
+        break;
+      }
+    } else {
+      line = nextLine;
+    }
+  }
+  if (line && lineCount < maxLines) {
+    drawCenteredText(context, line, centerX, currentY);
+  }
 }
 
 function drawPromptNumber(context: CanvasRenderingContext2D, value: number, x: number, y: number) {
