@@ -102,6 +102,12 @@ async def test_openai_game_lesson_provider_generates_section_script_with_usage()
         ("output_tokens", 25),
     ]
     assert client.responses.calls[0]["text"]["format"]["name"] == "game_lesson_section_script"
+    system_prompt = client.responses.calls[0]["input"][0]["content"]
+    assert "fixed worksheet boxes" in system_prompt
+    assert "For vocabulary sections" in system_prompt
+    assert "sixth graders" in system_prompt
+    assert result.config_metadata["stageInput"]["input"] == client.responses.calls[0]["input"]
+    assert result.config_metadata["stageOutput"] == result.payload
 
 
 @pytest.mark.asyncio
@@ -143,6 +149,8 @@ async def test_openai_game_lesson_provider_generates_speech_markup_with_usage():
     assert result.payload["promptMetadata"]["provider"] == "openai"
     assert result.usage_records[0].metadata == {"stage": "speech_markup"}
     assert client.responses.calls[0]["text"]["format"]["name"] == "game_lesson_speech_markup"
+    assert result.config_metadata["stageInput"]["input"] == client.responses.calls[0]["input"]
+    assert result.config_metadata["stageOutput"] == result.payload
 
 
 @pytest.mark.asyncio
@@ -178,6 +186,15 @@ async def test_elevenlabs_game_lesson_provider_stores_section_audio_with_usage()
     assert result.storage_refs[0]["contentType"] == "audio/mpeg"
     assert result.usage_records[0].unit_type == "credits"
     assert result.usage_records[0].quantity == len("Count the cubes carefully.")
+    assert result.config_metadata["stageInput"]["sections"] == [
+        {
+            "modelId": "eleven_multilingual_v2",
+            "sectionId": "do_now",
+            "text": "Count the cubes carefully.",
+            "voiceId": "voice-123",
+        }
+    ]
+    assert result.config_metadata["stageOutput"]["sections"][0]["sectionId"] == "do_now"
 
 
 @pytest.mark.asyncio

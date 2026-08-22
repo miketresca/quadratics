@@ -21,11 +21,11 @@ The project exists to make educational video generation inspectable and repeatab
 - Global Supabase-backed instructors with voice IDs, avatar IDs, and reference images
 - Provider usage cost logging for signed-in users
 - Account-scoped generation reuse so repeated equations reopen saved artifacts instead of spending provider credits again
-- `/game` prototype route with a full-screen POV study-room scene, in-world laptop/login surface, worksheet selection, timer, visitor map, phone focus gag, Lo-Fi player, and one PDF-backed placeholder lesson
+- Root worksheet POV lab with a full-screen study-room scene, in-world laptop/login surface, worksheet selection, timer, visitor map, phone focus gag, Lo-Fi player, and one PDF-backed placeholder lesson
 
 ## Repository Structure
 
-- `apps/web` - Next.js App Router application, shared auth shell, equation input, lesson preview, pipeline logs, and `/game` prototype UI
+- `apps/web` - Next.js App Router application, root worksheet POV lab, `/v1` quadratic equation workflow, shared auth shell, lesson preview, and pipeline logs
 - `apps/api` - FastAPI service, deterministic math, lesson/script/narration/animation orchestration, game progress persistence, provider adapters, Supabase repositories, and render boundary
 - `apps/video` - Motion Canvas renderer and command-line render adapter
 - `packages/types` - Shared TypeScript contracts for lessons, scripts, artifacts, animation plans, and timelines
@@ -142,13 +142,13 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 For avatar generation, the API downloads the completed narration audio from private storage, uploads it to HeyGen as an audio asset, and then creates the avatar video with `audio_asset_id`. This avoids giving HeyGen private Supabase signed URLs directly.
 
-## Game Prototype
+## Worksheet POV Lab
 
-The `/game` route is an isolated prototype for the worksheet lesson direction. It intentionally drops the standard app header and fills the viewport with a seated POV study-room scene. Press Space to enter or pause seated look mode. Escape exits focused surfaces. The player can look around the desk, focus the worksheet, laptop, clock, wall map, or phone, and use those surfaces as the scene UI.
+The root `/` route is the worksheet lesson direction. It intentionally drops the standard app header and fills the viewport with a seated POV study-room scene. Press Space to enter or pause seated look mode. Escape exits focused surfaces. The player can look around the desk, focus the worksheet, laptop, clock, wall map, or phone, and use those surfaces as the scene UI.
 
 The laptop owns the in-world login and signed-in browser shell. The signed-in browser has Demo, Music, and Settings tabs; the Lo-Fi Girl player is kept as one persistent embedded player so entering or leaving laptop focus does not start duplicate audio. The clock exposes a local Pomodoro timer. The wall map uses Vercel request geolocation headers for the current visitor pin and seeded demo pins for recorded visits. The phone is a small focus-distraction easter egg that shows a blocked-session quote only while focused.
 
-The game prototype does not call OpenAI, ElevenLabs, HeyGen, Motion Canvas, or storage generation APIs. It is a UI/composition shell for future worksheet-video work. The current implementation uses Three.js because the scene needs one controlled 3D canvas, pointer-lock camera movement, raycast-driven focus targets, CSS3D laptop media, and deterministic generated textures that can later become worksheet regions and timestamped handwriting.
+The POV lab now hosts the game lesson pipeline on the in-world laptop. The previous quadratic generator remains available at `/v1` for the original equation-to-video workflow.
 
 ## Local Development
 
@@ -172,7 +172,8 @@ Useful commands:
 - `pnpm video:dev` - Run the Motion Canvas editor at `http://localhost:9000`
 - `pnpm video:fixture` - Validate/load the golden fixture without OpenAI or ElevenLabs calls
 - `pnpm --filter @quadratics/video render` - Render from `QUADRATICS_RENDER_INPUT_PATH` to `QUADRATICS_RENDER_OUTPUT_PATH`
-- `/game` - Open the full-screen worksheet POV prototype
+- `/` - Open the full-screen worksheet POV lab
+- `/v1` - Open the original quadratic equation workflow
 - `pnpm sb:link` - Link `infra/supabase` to the configured Supabase project
 - `pnpm sb:push:dry` - Preview Supabase migration changes
 - `pnpm sb:push` - Push Supabase migrations

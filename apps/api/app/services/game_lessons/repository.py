@@ -248,7 +248,8 @@ class InMemoryGameLessonRepository:
     def _create_artifact(self, run: _StoredRun, stage: str) -> _StoredArtifact:
         now = _now()
         current = self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = self._next_artifact_version(run.id, stage)
+        payload = self._payload_for_stage(run, stage)
         if current:
             current.is_current = False
             current.updated_at = now
@@ -259,11 +260,16 @@ class InMemoryGameLessonRepository:
             version=next_version,
             status=_status_for_stage(stage),
             is_current=True,
-            payload=self._payload_for_stage(run, stage),
+            payload=payload,
             storage_refs=[],
             error_message=None,
             stale_reason=None,
-            config_metadata={"provider": "deterministic", "source": "game_lesson_repository"},
+            config_metadata={
+                "provider": "deterministic",
+                "source": "game_lesson_repository",
+                "stageInput": self._stage_input_for_stage(run, stage),
+                "stageOutput": payload,
+            },
             created_at=now,
             updated_at=now,
         )
@@ -278,7 +284,13 @@ class InMemoryGameLessonRepository:
     ) -> _StoredArtifact:
         now = _now()
         current = self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = self._next_artifact_version(run.id, stage)
+        payload = {
+            "summary": f"{stage} failed",
+            "provider": error.provider,
+            "stage": error.stage,
+            "upstreamStatusCode": error.upstream_status_code,
+        }
         if current:
             current.is_current = False
             current.updated_at = now
@@ -289,12 +301,7 @@ class InMemoryGameLessonRepository:
             version=next_version,
             status="failed",
             is_current=True,
-            payload={
-                "summary": f"{stage} failed",
-                "provider": error.provider,
-                "stage": error.stage,
-                "upstreamStatusCode": error.upstream_status_code,
-            },
+            payload=payload,
             storage_refs=[],
             error_message=str(error),
             stale_reason=None,
@@ -302,6 +309,8 @@ class InMemoryGameLessonRepository:
                 "provider": error.provider,
                 "source": "game_lesson_repository",
                 "upstreamStatusCode": error.upstream_status_code,
+                "stageInput": self._stage_input_for_stage(run, stage),
+                "stageOutput": payload,
             },
             created_at=now,
             updated_at=now,
@@ -340,6 +349,46 @@ class InMemoryGameLessonRepository:
                 template_payload,
                 interactive_bundle,
             )
+        return {"stage": stage}
+
+    def _stage_input_for_stage(self, run: _StoredRun, stage: str) -> dict[str, Any]:
+        template_payload = self._template(run.template_id).payload
+        if stage == "template":
+            return {"templateId": run.template_id, "template": template_payload}
+        if stage == "section_script":
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "template": template_payload,
+            }
+        if stage == "speech_markup":
+            section_script = self._current_artifact(run.id, "section_script")
+            return {"sectionScript": section_script.payload if section_script else None}
+        if stage == "narration":
+            speech_markup = self._current_artifact(run.id, "speech_markup")
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "speechMarkup": speech_markup.payload if speech_markup else None,
+            }
+        if stage == "handwriting":
+            narration = self._current_artifact(run.id, "narration")
+            return {
+                "template": template_payload,
+                "narration": narration.payload if narration else None,
+            }
+        if stage == "interactive_bundle":
+            narration = self._current_artifact(run.id, "narration")
+            handwriting = self._current_artifact(run.id, "handwriting")
+            return {
+                "template": template_payload,
+                "narration": narration.payload if narration else None,
+                "handwriting": handwriting.payload if handwriting else None,
+            }
+        if stage == "lesson_publish":
+            interactive_bundle = self._current_artifact(run.id, "interactive_bundle")
+            return {
+                "template": template_payload,
+                "interactiveBundle": interactive_bundle.payload if interactive_bundle else None,
+            }
         return {"stage": stage}
 
     def _assert_upstream_ready(self, run_id: str, stage: str) -> None:
@@ -393,6 +442,14 @@ class InMemoryGameLessonRepository:
             if artifact.run_id == run_id and artifact.stage == stage and artifact.is_current
         ]
         return max(candidates, key=lambda artifact: artifact.version) if candidates else None
+
+    def _next_artifact_version(self, run_id: str, stage: str) -> int:
+        versions = [
+            artifact.version
+            for artifact in self._artifacts.values()
+            if artifact.run_id == run_id and artifact.stage == stage
+        ]
+        return (max(versions) + 1) if versions else 1
 
     def _validate_stage(self, stage: str) -> None:
         if stage not in STAGE_ORDER:
@@ -630,6 +687,23 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         rows = response.json()
         return _artifact_from_row(rows[0]) if rows else None
 
+    async def _next_artifact_version(self, run_id: str, stage: str) -> int:  # type: ignore[override]
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self._base_url}/rest/v1/game_lesson_artifacts",
+                headers=self._headers,
+                params={
+                    "run_id": f"eq.{run_id}",
+                    "stage": f"eq.{stage}",
+                    "select": "version",
+                    "order": "version.desc",
+                    "limit": "1",
+                },
+            )
+        _raise_for_storage_error(response)
+        rows = response.json()
+        return int(rows[0]["version"]) + 1 if rows else 1
+
     async def _get_artifact_for_user(self, user_id: str, artifact_id: str) -> _StoredArtifact:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -647,8 +721,9 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
 
     async def _create_artifact(self, run: _StoredRun, stage: str) -> _StoredArtifact:  # type: ignore[override]
         current = await self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = await self._next_artifact_version(run.id, stage)
         generated = await self._generated_stage_from_storage(run, stage)
+        generated = await self._with_stage_io_from_storage(run, stage, generated)
         async with httpx.AsyncClient() as client:
             if current:
                 current_response = await client.patch(
@@ -688,7 +763,7 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
         error: GameLessonProviderRuntimeError,
     ) -> _StoredArtifact:
         current = await self._current_artifact(run.id, stage)
-        next_version = (current.version + 1) if current else 1
+        next_version = await self._next_artifact_version(run.id, stage)
         payload = {
             "summary": f"{stage} failed",
             "provider": error.provider,
@@ -699,6 +774,8 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             "provider": error.provider,
             "source": "game_lesson_repository",
             "upstreamStatusCode": error.upstream_status_code,
+            "stageInput": await self._stage_input_for_storage(run, stage),
+            "stageOutput": payload,
         }
         async with httpx.AsyncClient() as client:
             if current:
@@ -765,6 +842,22 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             },
         )
 
+    async def _with_stage_io_from_storage(
+        self,
+        run: _StoredRun,
+        stage: str,
+        generated: GameLessonProviderResult,
+    ) -> GameLessonProviderResult:
+        config_metadata = dict(generated.config_metadata)
+        config_metadata.setdefault("stageInput", await self._stage_input_for_storage(run, stage))
+        config_metadata.setdefault("stageOutput", generated.payload)
+        return GameLessonProviderResult(
+            payload=generated.payload,
+            config_metadata=config_metadata,
+            usage_records=generated.usage_records,
+            storage_refs=generated.storage_refs,
+        )
+
     async def _record_usage(
         self,
         run: _StoredRun,
@@ -818,6 +911,46 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
                 template.payload,
                 interactive_bundle,
             )
+        return {"stage": stage}
+
+    async def _stage_input_for_storage(self, run: _StoredRun, stage: str) -> dict[str, Any]:
+        template = await self._get_template(run.template_id)
+        if stage == "template":
+            return {"templateId": run.template_id, "template": template.payload}
+        if stage == "section_script":
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "template": template.payload,
+            }
+        if stage == "speech_markup":
+            section_script = await self._current_artifact(run.id, "section_script")
+            return {"sectionScript": section_script.payload if section_script else None}
+        if stage == "narration":
+            speech_markup = await self._current_artifact(run.id, "speech_markup")
+            return {
+                "selectedInstructorId": run.selected_instructor_id,
+                "speechMarkup": speech_markup.payload if speech_markup else None,
+            }
+        if stage == "handwriting":
+            narration = await self._current_artifact(run.id, "narration")
+            return {
+                "template": template.payload,
+                "narration": narration.payload if narration else None,
+            }
+        if stage == "interactive_bundle":
+            narration = await self._current_artifact(run.id, "narration")
+            handwriting = await self._current_artifact(run.id, "handwriting")
+            return {
+                "template": template.payload,
+                "narration": narration.payload if narration else None,
+                "handwriting": handwriting.payload if handwriting else None,
+            }
+        if stage == "lesson_publish":
+            interactive_bundle = await self._current_artifact(run.id, "interactive_bundle")
+            return {
+                "template": template.payload,
+                "interactiveBundle": interactive_bundle.payload if interactive_bundle else None,
+            }
         return {"stage": stage}
 
     async def _assert_upstream_ready(self, run_id: str, stage: str) -> None:  # type: ignore[override]
@@ -1152,23 +1285,26 @@ def _lesson_publish_payload(
 def _section_narration(section_id: str, title: str, answers: list[str]) -> str:
     if section_id == "do_now":
         return (
-            "Start with the Do Now. We are not using a formula yet. We are counting "
-            "cubes in an organized way: "
-            f"{' '.join(answers)} This helps us see volume before naming the rule."
+            "Begin with the Do Now. Read each prompt carefully and type short answers "
+            "into the boxes. Think about counting one layer first, then using the "
+            "number of layers to find the total cubes."
         )
     if section_id == "vocabulary":
         return (
-            "Now connect the picture to vocabulary. "
-            f"{' '.join(answers)} The important idea is that volume counts how many "
-            "same-size cubes fit inside the shape."
+            "Volume means the amount of space inside a three-dimensional shape. "
+            "Cubic units are the little cubes we use to measure that space. In real "
+            "life, this is how we reason about boxes, storage bins, and packing space."
         )
     if section_id == "guided_practice":
         return (
-            "For guided practice, use length times width times height on each row. "
-            f"{' '.join(answers)} Each answer is written in cubic units because we "
-            "are counting unit cubes."
+            "For Guided Practice, use each row's length, width, and height fields to "
+            "find volume. Type the final volume in cubic units, and check that the "
+            "number makes sense for the size of the prism."
         )
-    return f"In {title}, explain the worksheet answers clearly: {' '.join(answers)}"
+    return (
+        f"In {title}, give clear directions for the fixed worksheet boxes and keep the "
+        "language short enough for a sixth grader."
+    )
 
 
 def _speech_ready_text(narration: str) -> str:
@@ -1306,4 +1442,10 @@ def _now() -> str:
 def _raise_for_storage_error(response: httpx.Response) -> None:
     if response.is_success:
         return
-    raise GameLessonStorageError(f"Game lesson storage request failed: {response.status_code}")
+    body = response.text.strip()
+    if len(body) > 500:
+        body = f"{body[:500]}..."
+    detail = f": {body}" if body else ""
+    raise GameLessonStorageError(
+        f"Game lesson storage request failed: {response.status_code}{detail}"
+    )

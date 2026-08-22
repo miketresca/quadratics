@@ -215,34 +215,44 @@ class OpenAIGameLessonStageProvider:
         template_payload: dict[str, Any],
         selected_instructor_id: str | None,
     ) -> GameLessonProviderResult:
+        request_input = [
+            {
+                "role": "system",
+                "content": (
+                    "Write concise narration for an interactive sixth-grade worksheet lesson. "
+                    "Use only the supplied worksheet template, regions, questions, answers, "
+                    "and fill targets as source material. Do not invent new math, new answers, "
+                    "new sections, or new worksheet IDs. Split narration by the existing major "
+                    "sections. This script is only for section directions and read-only concept "
+                    "support; a later pipeline pass will generate problem-by-problem explanations "
+                    "for missed answers. Students type into fixed worksheet boxes, so do not tell "
+                    "them to show freehand work, draw, or circle answers. For answer sections, ask "
+                    "them to fill in the boxes. For vocabulary sections, give two or three short "
+                    "sentences of extra concept insight, with a simple real-world connection when "
+                    "useful, and do not ask for student input. Keep language clear for "
+                    "sixth graders. "
+                    "The complete lesson should target about three minutes or less."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "selectedInstructorId": selected_instructor_id,
+                        "studentAudience": template_payload.get("studentAudience"),
+                        "sections": template_payload.get("sections", []),
+                        "questions": template_payload.get("questions", []),
+                        "fillTargets": template_payload.get("fillTargets", []),
+                        "guardrails": template_payload.get("guardrails", []),
+                    }
+                ),
+            },
+        ]
+        text_config = {"format": {"type": "json_schema", **SECTION_SCRIPT_SCHEMA}}
         response = await self.client.responses.create(
             model=self.model,
-            input=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Write concise narration for an interactive sixth-grade worksheet lesson. "
-                        "Use only the supplied worksheet template, regions, questions, answers, "
-                        "and fill targets as source material. Do not invent new math, new answers, "
-                        "new sections, or new worksheet IDs. Split narration by the existing major "
-                        "sections. The complete lesson should target about three minutes or less."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {
-                            "selectedInstructorId": selected_instructor_id,
-                            "studentAudience": template_payload.get("studentAudience"),
-                            "sections": template_payload.get("sections", []),
-                            "questions": template_payload.get("questions", []),
-                            "fillTargets": template_payload.get("fillTargets", []),
-                            "guardrails": template_payload.get("guardrails", []),
-                        }
-                    ),
-                },
-            ],
-            text={"format": {"type": "json_schema", **SECTION_SCRIPT_SCHEMA}},
+            input=request_input,
+            text=text_config,
         )
         payload = json.loads(_response_text(response))
         usage = _response_usage(response)
@@ -254,7 +264,16 @@ class OpenAIGameLessonStageProvider:
         )
         return GameLessonProviderResult(
             payload=payload,
-            config_metadata=_config_metadata("openai", self.model, usage),
+            config_metadata={
+                **_config_metadata("openai", self.model, usage),
+                "stageInput": {
+                    "provider": "openai",
+                    "model": self.model,
+                    "input": request_input,
+                    "text": text_config,
+                },
+                "stageOutput": payload,
+            },
             usage_records=self._usage_records("section_script", usage),
         )
 
@@ -263,22 +282,24 @@ class OpenAIGameLessonStageProvider:
         *,
         section_script_payload: dict[str, Any],
     ) -> GameLessonProviderResult:
+        request_input = [
+            {
+                "role": "system",
+                "content": (
+                    "Convert interactive worksheet narration into ElevenLabs-friendly speech. "
+                    "Keep the same section IDs, order, meaning, and approximate duration. "
+                    "Write conversational spoken text, avoid raw math symbols when words are "
+                    "clearer, and use SSML break tags sparingly. Do not add examples or new "
+                    "answers."
+                ),
+            },
+            {"role": "user", "content": json.dumps(section_script_payload)},
+        ]
+        text_config = {"format": {"type": "json_schema", **SPEECH_MARKUP_SCHEMA}}
         response = await self.client.responses.create(
             model=self.model,
-            input=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Convert interactive worksheet narration into ElevenLabs-friendly speech. "
-                        "Keep the same section IDs, order, meaning, and approximate duration. "
-                        "Write conversational spoken text, avoid raw math symbols when words are "
-                        "clearer, and use SSML break tags sparingly. Do not add examples or new "
-                        "answers."
-                    ),
-                },
-                {"role": "user", "content": json.dumps(section_script_payload)},
-            ],
-            text={"format": {"type": "json_schema", **SPEECH_MARKUP_SCHEMA}},
+            input=request_input,
+            text=text_config,
         )
         payload = json.loads(_response_text(response))
         usage = _response_usage(response)
@@ -290,7 +311,16 @@ class OpenAIGameLessonStageProvider:
         )
         return GameLessonProviderResult(
             payload=payload,
-            config_metadata=_config_metadata("openai", self.model, usage),
+            config_metadata={
+                **_config_metadata("openai", self.model, usage),
+                "stageInput": {
+                    "provider": "openai",
+                    "model": self.model,
+                    "input": request_input,
+                    "text": text_config,
+                },
+                "stageOutput": payload,
+            },
             usage_records=self._usage_records("speech_markup", usage),
         )
 
@@ -354,6 +384,7 @@ class ElevenLabsGameLessonNarrationProvider:
             )
 
         sections: list[dict[str, Any]] = []
+        requested_sections: list[dict[str, Any]] = []
         storage_refs: list[dict[str, Any]] = []
         usage_records: list[GameLessonUsageRecord] = []
         elapsed_seconds = 0.0
@@ -364,6 +395,14 @@ class ElevenLabsGameLessonNarrationProvider:
             speech_text = str(section.get("speechText", "")).strip()
             if not speech_text:
                 continue
+            requested_sections.append(
+                {
+                    "sectionId": section_id,
+                    "text": speech_text,
+                    "voiceId": voice_id,
+                    "modelId": self._model_id,
+                }
+            )
             try:
                 result = await self._provider.generate(
                     NarrationRequest(
@@ -474,6 +513,21 @@ class ElevenLabsGameLessonNarrationProvider:
                 "model": self._model_id,
                 "source": "game_lesson_narration_provider",
                 "voiceId": voice_id,
+                "stageInput": {
+                    "provider": "elevenlabs",
+                    "model": self._model_id,
+                    "selectedInstructorId": selected_instructor_id,
+                    "voiceId": voice_id,
+                    "sections": requested_sections,
+                },
+                "stageOutput": {
+                    "provider": "elevenlabs",
+                    "model": self._model_id,
+                    "selectedInstructorId": selected_instructor_id,
+                    "voiceId": voice_id,
+                    "durationSeconds": round(elapsed_seconds, 2),
+                    "sections": sections,
+                },
             },
             usage_records=usage_records,
             storage_refs=storage_refs,

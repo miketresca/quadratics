@@ -24,13 +24,13 @@ User
 
 The LLM is not part of the mathematical truth path. SymPy validates equations, extracts coefficients, and computes exact roots. LLM-assisted script generation can happen only after the deterministic lesson model exists. The animation planner may choose semantic visual actions, but deterministic code validates references and resolves timestamps.
 
-FastAPI protects API routes with Supabase bearer-token verification. Next.js renders the root `/` app shell and never exposes service-role credentials; authenticated actions still require Supabase session context.
+FastAPI protects API routes with Supabase bearer-token verification. Next.js renders the root `/` worksheet POV lab and the legacy `/v1` quadratic workflow without exposing service-role credentials; authenticated actions still require Supabase session context.
 
-## Game Route Boundary
+## Worksheet POV Boundary
 
-The `/game` route is a separate product surface inside the same Next.js app. It does not import the quadratic equation form, lesson result, or pipeline log components for core rendering.
+The root `/` route is the current product surface inside the same Next.js app. The original quadratic equation workflow is preserved at `/v1`. The POV lab does not import the quadratic equation form, lesson result, or pipeline log components for core rendering.
 
-The current game prototype is a full-screen POV study-room scene rather than a normal app page. Three.js owns the room, desk, lighting, window/city/rain backdrop, pointer-lock camera, and raycast focus targets. The worksheet texture acts as the in-world lesson menu: Lesson 1 opens the copied PDF placeholder, and Lesson 2 is a locked future worksheet-generation path.
+The current game prototype is a full-screen POV study-room scene rather than a normal app page. Three.js owns the room, desk, lighting, window/city/rain backdrop, pointer-lock camera, and raycast focus targets. The worksheet texture acts as the in-world lesson menu: Lesson 1 is backed by the game lesson pipeline, and Lesson 2 is a locked future worksheet-generation path.
 
 The game scene also has in-world utility surfaces:
 
@@ -41,7 +41,7 @@ The game scene also has in-world utility surfaces:
 
 The laptop has both a CSS3D in-scene surface and a React focus overlay. The React overlay owns reliable form and tab interaction while the CSS3D player remains the single audio/video owner, which prevents duplicate music when focus changes.
 
-The game prototype is intentionally a UI/composition shell. It does not run paid providers, storage generation, or Motion Canvas stages. Future worksheet generation should use a game/worksheet artifact namespace rather than overloading the quadratic generation pipeline before the contracts are proven.
+The POV lab has its own game/worksheet artifact namespace and laptop pipeline. It should not overload the original quadratic generation pipeline.
 
 ## Pipeline Boundary
 

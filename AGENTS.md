@@ -59,7 +59,7 @@ New code should include concise, useful comments where they help a future reader
 
 ## Authentication And Security
 
-The root `/` app shell may render publicly, but equation submission, generation access, provider key management, and user-owned data require authentication. API authorization is mandatory. Never trust frontend-only authorization.
+The root `/` worksheet POV lab may render publicly, and the original quadratic workflow lives at `/v1`, but equation submission, game lesson generation, provider key management, and user-owned data require authentication. API authorization is mandatory. Never trust frontend-only authorization.
 
 Never expose Supabase service-role credentials client-side. User-owned records must be protected by API authorization and Supabase RLS. Do not log bearer tokens, service-role keys, provider keys, or raw provider request bodies by default.
 

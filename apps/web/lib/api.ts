@@ -136,6 +136,7 @@ export type GameLessonArtifact = {
   staleReason: string | null;
   providerName: string | null;
   modelName: string | null;
+  configMetadata: Record<string, unknown>;
   createdAt: string;
   completedAt: string | null;
 };
@@ -245,6 +246,7 @@ function normalizeGameLessonRun(snapshot: ApiGameWorksheetRunSnapshot): GameWork
       staleReason: artifact.staleReason,
       providerName: typeof artifact.configMetadata.provider === "string" ? artifact.configMetadata.provider : null,
       modelName: typeof artifact.configMetadata.model === "string" ? artifact.configMetadata.model : null,
+      configMetadata: artifact.configMetadata,
       createdAt: artifact.createdAt,
       completedAt: artifact.status === "completed" || artifact.status === "approved" ? artifact.updatedAt : null
     }))
