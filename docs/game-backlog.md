@@ -22,7 +22,7 @@ This note preserves deferred game work while the current branch focuses on `Game
 
 - Replace the top-left helper panel with a Minecraft-style coordinate label for the currently pointed scene object.
 - Add a minimal top-right controls box for Space = pause and Escape = back.
-- Move the current `/game` experience to `/` and move the original quadratics app to `/v1`.
+- Keep the worksheet POV lab mounted at `/` and the original quadratics app mounted at `/v1`; do not reintroduce `/game` or `/app` page routes.
 
 ## Quality And Architecture
 

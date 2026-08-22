@@ -2,7 +2,7 @@
 
 Supabase Auth owns password authentication. The product UI asks for a username and password, not an email address. The Next.js server action maps username `alice` to the internal Supabase Auth email `alice@quadratics.xyz`, then signs in with Supabase email/password auth. Operators can manually create accounts in Supabase by creating email/password users with that internal email format.
 
-The root `/` UI shell is public so visitors can see the tool. Equation submission still requires an authenticated session, and API endpoints under `/api/v1` require API authorization. `/login` and the legacy `/app` route are not standalone product surfaces; they redirect to `/`, where the account menu contains the login form.
+The root `/` UI shell is the public worksheet POV lab so visitors can see the current product direction. The original quadratic equation workflow lives at `/v1`. Equation submission, game lesson generation, provider key management, and user-owned data still require an authenticated session, and API endpoints under `/api/v1` require API authorization. `/login` is a compatibility route for auth actions, not a standalone product surface.
 
 Generation ownership belongs to the authenticated user. API routes must verify the bearer token and load only that user's generation jobs, artifacts, and media references. Browser clients must never receive Supabase service-role credentials.
 

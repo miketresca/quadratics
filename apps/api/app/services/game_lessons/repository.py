@@ -285,6 +285,12 @@ class InMemoryGameLessonRepository:
         now = _now()
         current = self._current_artifact(run.id, stage)
         next_version = self._next_artifact_version(run.id, stage)
+        payload = {
+            "summary": f"{stage} failed",
+            "provider": error.provider,
+            "stage": error.stage,
+            "upstreamStatusCode": error.upstream_status_code,
+        }
         if current:
             current.is_current = False
             current.updated_at = now
@@ -295,12 +301,7 @@ class InMemoryGameLessonRepository:
             version=next_version,
             status="failed",
             is_current=True,
-            payload={
-                "summary": f"{stage} failed",
-                "provider": error.provider,
-                "stage": error.stage,
-                "upstreamStatusCode": error.upstream_status_code,
-            },
+            payload=payload,
             storage_refs=[],
             error_message=str(error),
             stale_reason=None,
@@ -308,6 +309,8 @@ class InMemoryGameLessonRepository:
                 "provider": error.provider,
                 "source": "game_lesson_repository",
                 "upstreamStatusCode": error.upstream_status_code,
+                "stageInput": self._stage_input_for_stage(run, stage),
+                "stageOutput": payload,
             },
             created_at=now,
             updated_at=now,
@@ -771,6 +774,8 @@ class SupabaseGameLessonRepository(InMemoryGameLessonRepository):
             "provider": error.provider,
             "source": "game_lesson_repository",
             "upstreamStatusCode": error.upstream_status_code,
+            "stageInput": await self._stage_input_for_storage(run, stage),
+            "stageOutput": payload,
         }
         async with httpx.AsyncClient() as client:
             if current:
@@ -1280,23 +1285,26 @@ def _lesson_publish_payload(
 def _section_narration(section_id: str, title: str, answers: list[str]) -> str:
     if section_id == "do_now":
         return (
-            "Start with the Do Now. We are not using a formula yet. We are counting "
-            "cubes in an organized way: "
-            f"{' '.join(answers)} This helps us see volume before naming the rule."
+            "Begin with the Do Now. Read each prompt carefully and type short answers "
+            "into the boxes. Think about counting one layer first, then using the "
+            "number of layers to find the total cubes."
         )
     if section_id == "vocabulary":
         return (
-            "Now connect the picture to vocabulary. "
-            f"{' '.join(answers)} The important idea is that volume counts how many "
-            "same-size cubes fit inside the shape."
+            "Volume means the amount of space inside a three-dimensional shape. "
+            "Cubic units are the little cubes we use to measure that space. In real "
+            "life, this is how we reason about boxes, storage bins, and packing space."
         )
     if section_id == "guided_practice":
         return (
-            "For guided practice, use length times width times height on each row. "
-            f"{' '.join(answers)} Each answer is written in cubic units because we "
-            "are counting unit cubes."
+            "For Guided Practice, use each row's length, width, and height fields to "
+            "find volume. Type the final volume in cubic units, and check that the "
+            "number makes sense for the size of the prism."
         )
-    return f"In {title}, explain the worksheet answers clearly: {' '.join(answers)}"
+    return (
+        f"In {title}, give clear directions for the fixed worksheet boxes and keep the "
+        "language short enough for a sixth grader."
+    )
 
 
 def _speech_ready_text(narration: str) -> str:
