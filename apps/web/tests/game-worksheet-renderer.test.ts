@@ -98,6 +98,42 @@ const staleLessonOneRun: GameWorksheetRunSnapshot = {
   templateId: "volume-cubes-lesson-1"
 };
 
+const guidedRun: GameWorksheetRunSnapshot = {
+  ...numericRun,
+  artifacts: [
+    {
+      ...numericRun.artifacts[0],
+      payload: {
+        fillTargets: [
+          "fill_guided_row_1_layer",
+          "fill_guided_row_1_layers",
+          "fill_guided_row_1_volume",
+          "fill_guided_row_2_layer",
+          "fill_guided_row_2_layers",
+          "fill_guided_row_2_volume",
+          "fill_guided_row_3_layer",
+          "fill_guided_row_3_layers",
+          "fill_guided_row_3_volume",
+          "fill_guided_row_4_layer",
+          "fill_guided_row_4_layers",
+          "fill_guided_row_4_volume"
+        ].map((id) => ({
+          expectedText: "12",
+          id,
+          inputMode: "student_text",
+          pageId: "page_1",
+          questionId: "guided_volume_table",
+          rect: {height: 0.034, width: 0.12, x: 0.2, y: 0.2},
+          sectionId: "guided_practice"
+        })),
+        sections: [{id: "guided_practice", pageId: "page_1", title: "Guided Practice"}]
+      }
+    }
+  ],
+  id: "run_guided",
+  templateId: "guided-test-template"
+};
+
 describe("worksheet answer checking", () => {
   it("rejects partial numeric answers", () => {
     const playback = {
@@ -169,6 +205,15 @@ describe("worksheet input constraints", () => {
     let answer = "";
     for (const key of "1a234") {
       answer = nextWorksheetAnswerForKey("fill_do_now_fact_3x4", answer, key);
+    }
+
+    expect(answer).toBe("12");
+  });
+
+  it("limits Guided Example table lines to two numeric characters", () => {
+    let answer = "";
+    for (const key of "1a234") {
+      answer = nextWorksheetAnswerForKey("fill_guided_row_1_volume", answer, key);
     }
 
     expect(answer).toBe("12");
@@ -262,5 +307,36 @@ describe("Lesson 1 Do Now input targets", () => {
     };
     const completeResults = checkWorksheetAnswers(staleLessonOneRun, completePlayback);
     expect(worksheetSectionAnswerStatus(staleLessonOneRun, {...completePlayback, answerResults: completeResults}, "do_now")).toBe("complete");
+  });
+});
+
+describe("Guided Example input targets", () => {
+  it("keeps each table answer line clickable", () => {
+    const expectedTargets = [
+      ["fill_guided_row_1_layer", 528, 647],
+      ["fill_guided_row_1_layers", 750, 647],
+      ["fill_guided_row_1_volume", 974, 647],
+      ["fill_guided_row_2_layer", 528, 825],
+      ["fill_guided_row_2_layers", 750, 825],
+      ["fill_guided_row_2_volume", 974, 825],
+      ["fill_guided_row_3_layer", 528, 1003],
+      ["fill_guided_row_3_layers", 750, 1003],
+      ["fill_guided_row_3_volume", 974, 1003],
+      ["fill_guided_row_4_layer", 528, 1181],
+      ["fill_guided_row_4_layers", 750, 1181],
+      ["fill_guided_row_4_volume", 974, 1181]
+    ] as const;
+
+    for (const [targetId, x, y] of expectedTargets) {
+      const action = worksheetActionAtCanvasPoint(x, y, guidedRun, {
+        ...DEFAULT_WORKSHEET_PLAYBACK,
+        activeSectionId: "guided_practice"
+      });
+
+      expect(action?.type).toBe("fill_target");
+      if (action?.type === "fill_target") {
+        expect(action.target.id).toBe(targetId);
+      }
+    }
   });
 });

@@ -89,19 +89,65 @@ const DO_NOW_LAYOUT = {
     title: {x: 230, y: 1142}
   }
 } as const;
+const GUIDED_EXAMPLE_LAYOUT = {
+  columns: {
+    cubesPerLayer: {label: "Cubes per layer", x: 454, width: 148},
+    layers: {label: "Number of layers", x: 674, width: 158},
+    shape: {label: "Shape", x: 166, width: 236},
+    volume: {label: "Volume (cubic units)", x: 888, width: 172}
+  },
+  headerY: 500,
+  rowHeight: 178,
+  rowStartY: 574,
+  rows: [
+    {
+      cubes: {count: 6, layers: 1, x: 206, y: 606},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 482, y: 626},
+        layers: {height: 42, width: 92, x: 704, y: 626},
+        volume: {height: 42, width: 108, x: 920, y: 626}
+      }
+    },
+    {
+      cubes: {count: 4, layers: 3, x: 206, y: 774},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 482, y: 804},
+        layers: {height: 42, width: 92, x: 704, y: 804},
+        volume: {height: 42, width: 108, x: 920, y: 804}
+      }
+    },
+    {
+      cubes: {count: 6, layers: 2, x: 206, y: 956},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 482, y: 982},
+        layers: {height: 42, width: 92, x: 704, y: 982},
+        volume: {height: 42, width: 108, x: 920, y: 982}
+      }
+    },
+    {
+      cubes: {count: 10, layers: 2, x: 206, y: 1112},
+      inputs: {
+        cubesPerLayer: {height: 42, width: 92, x: 482, y: 1160},
+        layers: {height: 42, width: 92, x: 704, y: 1160},
+        volume: {height: 42, width: 108, x: 920, y: 1160}
+      }
+    }
+  ],
+  table: {height: 790, width: 894, x: 166, y: 474}
+} as const;
 const CUSTOM_FILL_TARGET_RECTS: Record<string, WorksheetRect> = {
-  fill_guided_row_1_layer: {height: 48, width: 128, x: 504, y: 592},
-  fill_guided_row_1_layers: {height: 48, width: 128, x: 690, y: 592},
-  fill_guided_row_1_volume: {height: 48, width: 150, x: 870, y: 592},
-  fill_guided_row_2_layer: {height: 48, width: 128, x: 504, y: 746},
-  fill_guided_row_2_layers: {height: 48, width: 128, x: 690, y: 746},
-  fill_guided_row_2_volume: {height: 48, width: 150, x: 870, y: 746},
-  fill_guided_row_3_layer: {height: 48, width: 128, x: 504, y: 900},
-  fill_guided_row_3_layers: {height: 48, width: 128, x: 690, y: 900},
-  fill_guided_row_3_volume: {height: 48, width: 150, x: 870, y: 900},
-  fill_guided_row_4_layer: {height: 48, width: 128, x: 504, y: 1054},
-  fill_guided_row_4_layers: {height: 48, width: 128, x: 690, y: 1054},
-  fill_guided_row_4_volume: {height: 48, width: 150, x: 870, y: 1054}
+  fill_guided_row_1_layer: GUIDED_EXAMPLE_LAYOUT.rows[0].inputs.cubesPerLayer,
+  fill_guided_row_1_layers: GUIDED_EXAMPLE_LAYOUT.rows[0].inputs.layers,
+  fill_guided_row_1_volume: GUIDED_EXAMPLE_LAYOUT.rows[0].inputs.volume,
+  fill_guided_row_2_layer: GUIDED_EXAMPLE_LAYOUT.rows[1].inputs.cubesPerLayer,
+  fill_guided_row_2_layers: GUIDED_EXAMPLE_LAYOUT.rows[1].inputs.layers,
+  fill_guided_row_2_volume: GUIDED_EXAMPLE_LAYOUT.rows[1].inputs.volume,
+  fill_guided_row_3_layer: GUIDED_EXAMPLE_LAYOUT.rows[2].inputs.cubesPerLayer,
+  fill_guided_row_3_layers: GUIDED_EXAMPLE_LAYOUT.rows[2].inputs.layers,
+  fill_guided_row_3_volume: GUIDED_EXAMPLE_LAYOUT.rows[2].inputs.volume,
+  fill_guided_row_4_layer: GUIDED_EXAMPLE_LAYOUT.rows[3].inputs.cubesPerLayer,
+  fill_guided_row_4_layers: GUIDED_EXAMPLE_LAYOUT.rows[3].inputs.layers,
+  fill_guided_row_4_volume: GUIDED_EXAMPLE_LAYOUT.rows[3].inputs.volume
 };
 const LESSON_ONE_DO_NOW_TARGETS: Array<Omit<WorksheetFillTarget, "rect">> = [
   {
@@ -363,7 +409,7 @@ function drawGeneratedWorksheet(
     if (readOnly) {
       continue;
     }
-    if (target.sectionId === "do_now") {
+    if (target.sectionId === "do_now" || target.sectionId === "guided_practice") {
       drawWorksheetLineInput(context, box, answerText, activeInput, result);
       continue;
     }
@@ -548,34 +594,47 @@ function drawVocabularySection(context: CanvasRenderingContext2D) {
 
 function drawGuidedPracticeSection(context: CanvasRenderingContext2D) {
   drawSectionTitle(context, "Guided Example", "Use one clear rule: cubes in a layer times number of layers.");
-  const tableX = 166;
-  const tableY = 450;
-  const rowHeight = 154;
-  const columns = [tableX, 430, 660, 846, 1060];
-  context.fillStyle = "#e0f2fe";
-  context.strokeStyle = "#93c5fd";
-  context.lineWidth = 3;
-  roundRect(context, tableX, tableY, 894, rowHeight * 4 + 72, 18);
+  const {columns, headerY, rowHeight, rowStartY, rows, table} = GUIDED_EXAMPLE_LAYOUT;
+  context.fillStyle = "rgba(255, 250, 240, 0.38)";
+  context.strokeStyle = "#d8c9ad";
+  context.lineWidth = 2.5;
+  roundRect(context, table.x, table.y, table.width, table.height, 16);
   context.fill();
   context.stroke();
-  context.fillStyle = "#0f172a";
+
+  context.fillStyle = "#24313f";
   context.font = "900 18px ui-rounded, system-ui, sans-serif";
-  context.fillText("Shape", columns[0] + 22, tableY + 44);
-  context.fillText("Cubes / layer", columns[1] + 28, tableY + 44);
-  context.fillText("Layers", columns[2] + 40, tableY + 44);
-  context.fillText("Volume", columns[3] + 54, tableY + 44);
-  for (let row = 0; row < 4; row += 1) {
-    const y = tableY + 72 + row * rowHeight;
-    context.strokeStyle = "#bfdbfe";
+  context.fillText(columns.shape.label, columns.shape.x + 22, headerY);
+  context.fillText(columns.cubesPerLayer.label, columns.cubesPerLayer.x, headerY);
+  context.fillText(columns.layers.label, columns.layers.x, headerY);
+  wrapWorksheetText(context, columns.volume.label, columns.volume.x, headerY - 16, columns.volume.width, 21, 2);
+
+  context.strokeStyle = "#d8c9ad";
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(table.x, rowStartY);
+  context.lineTo(table.x + table.width, rowStartY);
+  context.stroke();
+  for (let index = 1; index < rows.length; index += 1) {
+    const y = rowStartY + index * rowHeight;
+    context.strokeStyle = "#e1d5c2";
     context.lineWidth = 2;
     context.beginPath();
-    context.moveTo(tableX, y);
-    context.lineTo(tableX + 894, y);
+    context.moveTo(table.x, y);
+    context.lineTo(table.x + table.width, y);
     context.stroke();
-    drawStackedCubes(context, columns[0] + 40, y + 28, row === 1 ? 4 : row === 3 ? 10 : 6, row === 0 ? 1 : 2);
-    context.fillStyle = "#475569";
-    context.font = "800 19px ui-rounded, system-ui, sans-serif";
-    context.fillText(row === 0 ? "one layer" : row === 1 ? "3 layers" : row === 2 ? "2 layers" : "2 long layers", columns[0] + 118, y + 78);
+  }
+  for (const column of [columns.cubesPerLayer, columns.layers, columns.volume]) {
+    context.strokeStyle = "#eadfcb";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(column.x - 32, table.y);
+    context.lineTo(column.x - 32, table.y + table.height);
+    context.stroke();
+  }
+
+  for (const row of rows) {
+    drawStackedCubes(context, row.cubes.x, row.cubes.y, row.cubes.count, row.cubes.layers);
   }
 }
 
@@ -928,6 +987,9 @@ export function nextWorksheetAnswerForKey(targetId: string, currentAnswer: strin
   if (targetId.startsWith("fill_do_now_")) {
     return /^[0-9]$/.test(key) ? nextAnswer.slice(0, 2) : currentAnswer;
   }
+  if (targetId.startsWith("fill_guided_")) {
+    return /^[0-9]$/.test(key) ? nextAnswer.slice(0, 2) : currentAnswer;
+  }
   return nextAnswer.slice(0, 96);
 }
 
@@ -936,6 +998,9 @@ function worksheetDisplayAnswer(targetId: string, answer: string) {
     return answer.replaceAll(/[^0-9*xX= ]/g, "").slice(0, 12);
   }
   if (targetId.startsWith("fill_do_now_")) {
+    return answer.replaceAll(/[^0-9]/g, "").slice(0, 2);
+  }
+  if (targetId.startsWith("fill_guided_")) {
     return answer.replaceAll(/[^0-9]/g, "").slice(0, 2);
   }
   return answer;
